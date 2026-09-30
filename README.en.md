@@ -122,7 +122,7 @@ The panel has five tabs; you mostly need the first. The first time, click **一�
 **Three setups** (Chinese guide):
 - Usage 1, vanilla SillyTavern on a computer: the install flow above ([details](docs/使用指南.md#用法一-原版酒馆)).
 - Usage 2, TauriTavern / phone: a computer runs the standalone proxy in phone mode; TT installs the panel and connects to it ([details](docs/使用指南.md#用法二-tauritavern-与手机)).
-- Usage 3, server / cloud: one command or Docker ([details](docs/使用指南.md#用法三-服务器与-docker); real-server testing planned for 4.4).
+- Usage 3, server / cloud: one command or Docker ([details](docs/使用指南.md#用法三-服务器与-docker); CI-tested on Linux).
 
 More in the [guide](docs/使用指南.md) and [roadmap](docs/路线图.md) (Chinese).
 
