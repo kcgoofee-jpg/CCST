@@ -13,6 +13,8 @@ import { IS_TAURI } from './capabilities.js';
 import { connectionInfo } from './connection.js';
 import { notify, ui, flushIsland, clearNotice } from './notify.js';
 import { F } from './registry.js';
+import { chatKeyOf } from './chat-key.js';
+import { quotaGate, QUOTA_MIN_GAP_MS } from './quota-gate.js';
 
 // ── Version: panel and proxy update through different channels ──
 // (SillyTavern's extension manager or 手机同步 for the panel; git pull / ZIP + a restart for the proxy),
@@ -127,7 +129,7 @@ export function startHeartbeat() {
 
 // ── Quota meter ──
 
-export const QUOTA_MIN_GAP_MS = 60000;
+export { QUOTA_MIN_GAP_MS };
 let quotaAskedAt = 0;      // last time this panel actually asked the proxy
 let quotaNotBefore = 0;    // upstream rate limit: no ask before this
 let quotaInFlight = false;
@@ -137,10 +139,14 @@ let quotaTimer = null;
  *  path calls this (Anthropic rate-limits the endpoint). `force` skips the gap for the one case where
  *  the answer really changed (backend switched); it still respects an upstream rate limit. */
 export async function refreshQuota({ force = false } = {}) {
-    if (!document.getElementById('claude_max_quota') || quotaInFlight) return;
+    if (!document.getElementById('claude_max_quota')) return;
     const now = Date.now();
-    if (now < quotaNotBefore) return;
-    if (!force && quotaAskedAt && now - quotaAskedAt < QUOTA_MIN_GAP_MS) return;
+    const gate = quotaGate({ now, phase: store.get().quota.phase, force, inFlight: quotaInFlight, askedAt: quotaAskedAt, notBefore: quotaNotBefore });
+    if (!gate.ask) {
+        // Not asking (too soon / backing off): never leave a 「正在读取」 placeholder behind.
+        if (gate.phase && store.get().quota.phase !== gate.phase) store.set({ quota: { ...store.get().quota, phase: gate.phase } });
+        return;
+    }
     quotaAskedAt = now;
     quotaInFlight = true;
     if (store.get().quota.phase !== 'ok') store.set({ quota: { phase: 'loading' } }); // keep numbers on screen while re-asking
@@ -176,7 +182,9 @@ export async function refreshStats() {
     if (!document.getElementById('claude_max_stats')) return;
     store.set({ stats: { phase: 'loading' } });
     try {
-        const res = await fetchProxy('/stats', '/v1/usage/stats');
+        // This chat's last turn only (a hash of the chat file name; 'none' = no chat open, matches nothing).
+        const chat = encodeURIComponent(chatKeyOf(SillyTavern.getContext()) ?? 'none');
+        const res = await fetchProxy(`/stats?chat=${chat}`, `/v1/usage/stats?chat=${chat}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         glancePatch({ cache: data.lastCache?.hitPct ?? null });
@@ -186,8 +194,10 @@ export async function refreshStats() {
     }
 }
 
+// The quota is NOT fetched when the panel opens (Anthropic rate-limits it, and a fresh install has
+// nothing to show): it is asked for after each reply and by the 刷新 button.
 export async function refreshStatsPage() {
-    await Promise.all([refreshQuota(), refreshStats()]);
+    await refreshStats();
     store.set({ statsAt: Date.now() });
 }
 

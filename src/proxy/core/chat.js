@@ -823,7 +823,7 @@ async function completeChat(req, res, body, settings, conn) {
         const raw = err instanceof Error ? err.message : String(err);
         const described = err?.sdkErrorText === 'served-model-guard' ? `served-model guard: ${raw}` : raw;
         recordRequest({
-            backend: billedAs, cacheTtl: env1hTtl(billedAs), model: modelInfo.requested, effort: settings.effort ?? null, placement: settings.systemPlacement, auxiliary: settings.auxiliary, purpose: settings.purpose, timing, path: lastPath, stream: wantStream, startedAt, firstTokenAt, shape, cacheDiag,
+            backend: billedAs, cacheTtl: env1hTtl(billedAs), model: modelInfo.requested, effort: settings.effort ?? null, placement: settings.systemPlacement, auxiliary: settings.auxiliary, purpose: settings.purpose, chatKey: settings.chatKey, timing, path: lastPath, stream: wantStream, startedAt, firstTokenAt, shape, cacheDiag,
             usage: usage ?? partialUsage, textChars: collectedText.length,
             error: described,
         });
@@ -854,7 +854,7 @@ async function completeChat(req, res, body, settings, conn) {
     }
 
     recordRequest({
-        backend: billedAs, cacheTtl: env1hTtl(billedAs), model: modelInfo.requested, effort: settings.effort ?? null, placement: settings.systemPlacement, auxiliary: settings.auxiliary, purpose: settings.purpose, timing, path: lastPath, stream: wantStream, startedAt, firstTokenAt, shape, cacheDiag,
+        backend: billedAs, cacheTtl: env1hTtl(billedAs), model: modelInfo.requested, effort: settings.effort ?? null, placement: settings.systemPlacement, auxiliary: settings.auxiliary, purpose: settings.purpose, chatKey: settings.chatKey, timing, path: lastPath, stream: wantStream, startedAt, firstTokenAt, shape, cacheDiag,
         usage, textChars: collectedText.length,
         finish: finishReason, clientClosed: conn.aborted, notices,
     });

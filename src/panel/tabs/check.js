@@ -6,6 +6,7 @@
 import { el, iconButton, toggleRow, group, stateLine } from '../core/dom.js';
 import { currentCharKey } from '../core/st.js';
 import { F } from '../core/registry.js';
+import { libs } from '../core/libs.js';
 
 /** Tab 体检: summary line + list first; the toggles are grouped at the bottom. */
 export function buildCheckTab(pane, settings, save) {
@@ -43,11 +44,22 @@ export function buildCheckTab(pane, settings, save) {
     leakInput.id = 'claude_max_leak';
     leakInput.placeholder = '如：植物人, 医学院';
     leakInput.value = settings.leakWords?.[currentCharKey()] ?? '';
-    leakInput.addEventListener('input', () => {
+    const leakMsg = el('small', 'cm-hint cm-ok');
+    leakMsg.id = 'claude_max_leak_msg';
+    leakMsg.setAttribute('role', 'status');
+    // Saved when the field loses focus or on Enter (not per keystroke), then said out loud and the
+    // latest reply is re-checked at once, so a hit shows up without waiting for the next reply.
+    const saveLeak = () => {
+        const words = libs.chatCheck?.parseLeakWords(leakInput.value) ?? [];
         settings.leakWords = { ...(settings.leakWords ?? {}), [currentCharKey()]: leakInput.value };
         save();
-    });
-    leakField.append(leakInput, el('small', 'cm-hint', '揭示之前不该出现的词，回复里出现就提醒。'));
+        leakMsg.textContent = libs.chatCheck ? libs.chatCheck.leakSavedText(words) : '已保存';
+        F.checkup.runCheckup();
+    };
+    leakInput.addEventListener('change', saveLeak);
+    leakInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); saveLeak(); leakInput.blur(); } });
+    leakField.append(leakInput, leakMsg,
+        el('small', 'cm-hint', '填角色卡里还不该揭开的设定词，比如「植物人」。多个词用逗号或空格隔开；回复里一出现就在体检里标出。'));
     opts.body.append(leakField);
     const muted = Object.entries(settings.checkupMuted ?? {}).filter(([, n]) => n >= 2);
     if (muted.length) {

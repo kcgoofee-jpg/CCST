@@ -9,7 +9,8 @@ import { F } from './registry.js';
 import { isReplyEvent, recovery } from './replies.js';
 import { onSettingsReady } from './inject.js';
 import { currentCharKey } from './st.js';
-import { refreshStats } from './live.js';
+import { connectionInfo } from './connection.js';
+import { refreshStats, refreshQuota } from './live.js';
 import { renderConnect, renderGlance } from '../shell.js';
 import { clearOneShotEffort } from '../tabs/reason.js';
 import { renderCacheCard } from '../tabs/status.js';
@@ -48,6 +49,9 @@ export function wireEvents({ eventSource, eventTypes }) {
         if (ev) eventSource.on(ev, () => setTimeout(() => F.models.fillMissingClaudeModels(), 300));
     }
     eventSource.on(eventTypes.MESSAGE_RECEIVED, refreshIfOpen);
+    // The quota is read after each reply (live.js keeps the 60 s gap and the backoff), not on opening.
+    // Only when this chat talks to our proxy: elsewhere the subscription's 5h window says nothing.
+    eventSource.on(eventTypes.MESSAGE_RECEIVED, onOwnReply(() => { if (connectionInfo().connected) setTimeout(() => refreshQuota(), 1500); }));
     eventSource.on(eventTypes.CHARACTER_MESSAGE_RENDERED ?? eventTypes.MESSAGE_RECEIVED, onOwnReply(() => setTimeout(() => F.notice.noticeLastTurn(), 400)));
     eventSource.on(eventTypes.CHAT_CHANGED, refreshIfOpen);
     eventSource.on(eventTypes.OAI_PRESET_CHANGED_AFTER, () => F.presets.applyPresetRecommendation());

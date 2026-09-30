@@ -3,6 +3,7 @@
 // ──────────────────────────────────────────────
 
 import { fetchProxy } from '../core/proxy.js';
+import { fnv64 } from '../core/chat-key.js';
 import { connectionInfo } from '../core/connection.js';
 import { generating } from '../core/st.js';
 import { notify } from '../core/notify.js';
@@ -16,16 +17,6 @@ import { isReplyEvent, recovery } from '../core/replies.js';
 // the pending mark set while it was being written (the stream broke), or
 // the app died before saving it (the chat ends with the player's message).
 // A reply the player stopped, edited or deleted is final: never touched.
-
-function fnv64(str) {
-    let h1 = 0x811c9dc5, h2 = 0x01000193;
-    for (let i = 0; i < str.length; i++) {
-        const c = str.charCodeAt(i);
-        h1 = Math.imul(h1 ^ c, 0x01000193) >>> 0;
-        h2 = Math.imul(h2 ^ c, 0x5bd1e995) >>> 0;
-    }
-    return h1.toString(16).padStart(8, '0') + h2.toString(16).padStart(8, '0');
-}
 
 /** Slot of the reply at chat[floor] (swipe `swipeId`): chat, floor, swipe, the player's message before it. */
 function slotFor(ctx, floor, swipeId = 0) {

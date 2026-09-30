@@ -10,6 +10,7 @@ import { libs } from './libs.js';
 import { store } from './store.js';
 import { notify } from './notify.js';
 import { F } from './registry.js';
+import { chatKeyOf } from './chat-key.js';
 
 // Opus 5.5's safeguards refuse prompts that make the model write its
 // reasoning into the reply (category reasoning_extraction). Presets that
@@ -89,6 +90,9 @@ export function buildIncludeBodyYaml(settings, quiet = false, slot = null) {
     lines.push(`  fold_tail: ${settings.foldTail}`);
     if (settings.debugDump) lines.push('  debug_dump: true');
     if (slot && !quiet) lines.push(`  reply_slot: ${slot}`);
+    // Which chat this is (a hash): the proxy files the usage record under it, so 状态 shows this chat's last turn.
+    const chatKey = quiet ? null : chatKeyOf(SillyTavern.getContext());
+    if (chatKey) lines.push(`  chat_key: ${chatKey}`);
     return lines.join('\n');
 }
 

@@ -116,6 +116,7 @@ export function recordRequest(r) {
         effort: r.effort ?? null,
         placement: r.placement ?? null,
         auxiliary: r.auxiliary === true,
+        ...(r.chatKey ? { chatKey: r.chatKey } : {}),
         ...(r.purpose && r.purpose !== 'chat' ? { purpose: r.purpose } : {}),
         // ms from request start: CLI ready (init), API response started, first content delta
         phases: r.timing?.initAt ? {
@@ -199,7 +200,9 @@ function aggregate(list) {
     };
 }
 
-export function summarizeStats(now = Date.now()) {
+/** `chat` (a chat key, or any other string for "no such chat") limits the last-turn card to that chat's
+ *  requests; today / week totals stay global. Entries from before chat keys existed belong to no chat. */
+export function summarizeStats(now = Date.now(), { chat = null } = {}) {
     const all = load();
     const cutoff = now - WINDOW_MS;
     while (all.length && all[0].at < cutoff) all.shift();
@@ -211,21 +214,23 @@ export function summarizeStats(now = Date.now()) {
     const bg = all.filter((e) => e.auxiliary);
     const today = main.filter((e) => e.at >= startOfDay.getTime());
     const lastFailure = [...all].reverse().find((e) => !e.ok) ?? null;
-    const lastRequest = main.length ? main[main.length - 1] : null;
+    const mine = chat ? main.filter((e) => e.chatKey === chat) : main;
+    const lastRequest = mine.length ? mine[mine.length - 1] : null;
     let lastError = null;
     if (lastFailure) {
         const ex = explainError(lastFailure.errorRaw);
         lastError = { at: lastFailure.at, model: lastFailure.model, code: lastFailure.errorCode, message: ex.message, hint: ex.hint, raw: lastFailure.errorRaw, background: !!lastFailure.auxiliary };
     }
-    const prevRequest = main.length > 1 ? main[main.length - 2] : null;
+    const prevRequest = mine.length > 1 ? mine[mine.length - 2] : null;
     const lastCache = explainCache(lastRequest, prevRequest);
     const bgToday = bg.filter((e) => e.at >= startOfDay.getTime());
     const background = { today: aggregate(bgToday), week: aggregate(bg) };
     return { today: aggregate(today), week: aggregate(main), background, lastRequest, lastCache, lastError, pricesAsOf: PRICES_AS_OF };
 }
 
-export function handleStats(_req, res) {
-    res.json({ ok: true, ...summarizeStats() });
+export function handleStats(req, res) {
+    const chat = typeof req.query?.chat === 'string' && /^[0-9a-zA-Z_-]{1,40}$/.test(req.query.chat) ? req.query.chat : null;
+    res.json({ ok: true, ...summarizeStats(Date.now(), { chat }) });
 }
 
 /** Test seam. */

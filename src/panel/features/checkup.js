@@ -19,21 +19,24 @@ let lastToastKey = '';
 export function runCheckup({ toast = false } = {}) {
     const box = document.getElementById('claude_max_checkup');
     if (!libs.chatCheck) {
+        store.merge('glance', { issues: 0 });
         box?.replaceChildren(stateLine('error', '没加载（扩展文件不完整），重装扩展即可。'));
         return;
     }
     const settings = getSettings();
     const ctx = SillyTavern.getContext();
     const chat = ctx.chat ?? [];
-    const ai = chat.filter((m) => !m.is_user && !m.is_system);
-    if (chat.length < 2 || !ai.length) {
-        box?.replaceChildren(stateLine('empty', '还没有 AI 回复，生成后自动体检。'));
+    // The greeting (floor 0) is not a reply. With nothing to check the tab badge must drop to 0 too:
+    // it used to keep the number of whatever chat was checked last.
+    const replies = chat.length < 2 ? null : libs.chatCheck.latestReplies(chat);
+    if (!replies) {
+        store.merge('glance', { issues: 0 });
+        box?.replaceChildren(stateLine('empty', '还没有回复，生成后自动体检。'));
         return;
     }
     const prompts = ctx.chatCompletionSettings?.prompts ?? [];
-    const leaks = String(settings.leakWords?.[currentCharKey()] ?? '').split(/[,，、\s]+/).filter(Boolean);
-    const last = ai[ai.length - 1];
-    const prev = ai.length > 1 ? ai[ai.length - 2] : null;
+    const leaks = libs.chatCheck.parseLeakWords(settings.leakWords?.[currentCharKey()]);
+    const { last, prev } = replies;
     const r = libs.chatCheck.checkReply({
         mes: last.mes ?? '', prevMes: prev?.mes ?? null,
         words: libs.chatCheck.wordRangeFromPreset(ctx.chatCompletionSettings), banned: libs.chatCheck.bannedFromPrompts(prompts), leaks,

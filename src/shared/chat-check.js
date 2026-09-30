@@ -240,3 +240,26 @@ export function checkReply({ mes, prevMes = null, words = null, banned = DEFAULT
     }
     return { chars, paragraphs: paras, issues };
 }
+
+/**
+ * The replies the check-up looks at: the newest AI reply and the one before it. The greeting (floor 0,
+ * the card's first_mes) is not a reply and is never checked; player and system messages are skipped.
+ * Null when the chat has no reply yet.
+ */
+export function latestReplies(chat) {
+    const ai = (chat ?? []).filter((m, i) => i > 0 && m && !m.is_user && !m.is_system);
+    if (!ai.length) return null;
+    return { last: ai[ai.length - 1], prev: ai.length > 1 ? ai[ai.length - 2] : null };
+}
+
+/** The hidden-setting keywords field → words (split on commas, 、, spaces). */
+export function parseLeakWords(text) {
+    return String(text ?? '').split(/[,，、\s]+/).filter(Boolean);
+}
+
+/** What the keyword field says right after saving. */
+export function leakSavedText(words) {
+    return words.length
+        ? `已保存 ${words.length} 个词，之后的回复里出现会在体检里标出`
+        : '已清空，不再检查隐藏设定';
+}

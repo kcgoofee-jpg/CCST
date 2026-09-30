@@ -9,11 +9,12 @@ import { getSettings, saveSettingsDebounced, EFFORT_LABEL } from './core/setting
 import { connectHelp } from './core/connect-help.js';
 import { IS_TAURI, cloudHosted, normalizeEndpoint } from './core/capabilities.js';
 import { libs } from './core/libs.js';
+import { F } from './core/registry.js';
 import { connectionInfo, shortModel } from './core/connection.js';
 import { effectiveEffort } from './core/inject.js';
 import { el, note } from './core/dom.js';
 import { notify, ui, flushIsland } from './core/notify.js';
-import { refreshAll, refreshStatus, refreshStats, refreshQuota } from './core/live.js';
+import { refreshAll, refreshStatus, refreshStats } from './core/live.js';
 import { buildReasonTab } from './tabs/reason.js';
 import { buildStatusTab } from './tabs/status.js';
 import { buildCheckTab } from './tabs/check.js';
@@ -22,6 +23,7 @@ import { buildSettingsTab } from './tabs/settings.js';
 import { buildOtherTab } from './tabs/other.js';
 import { TABS, resolveTab } from './core/tabs.js';
 import { buildGuideCard, renderGuide } from './guide.js';
+import { PROFILE_MODEL, ensureProfile, profileNotice } from './core/connection-profile.js';
 
 // ── One-click connect (same selector path as ST's /api-url command) ──
 
@@ -34,9 +36,31 @@ function currentConnectionText() {
     return [profile && `连接配置「${profile}」`, src && `来源 ${src}`, url, model].filter(Boolean).join(' · ');
 }
 
+/** Point SillyTavern's live connection fields at the proxy. */
+function applyConnection(settings) {
+    $('#main_api').val('openai').trigger('change');
+    // Endpoint (and the LAN key) MUST be set before the source change: ST's change handler
+    // auto-reconnects immediately, and firing it with the stale custom_url would race a status
+    // check against the wrong endpoint.
+    $('#custom_api_url_text').val(settings.endpoint).trigger('input');
+    // Only a LAN proxy needs a key (its access key). Otherwise the key field is left alone: it may
+    // hold the user's key for another service.
+    const keyField = $('#api_key_custom');
+    if (keyField.length && settings.accessKey) keyField.val(settings.accessKey).trigger('input');
+    $('#chat_completion_source').val('custom').trigger('change');
+    // The proxy sorts out roles itself. ST's merge/strict post-processing
+    // turns the whole preset into a user message (after the first
+    // assistant-role preset entry), which kills prompt caching.
+    $('#custom_prompt_post_processing').val('').trigger('change');
+    $('#api_button_openai').trigger('click');
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 // One-click connect rewrites SillyTavern's LIVE connection fields (source, URL, post-processing, and
-// on a LAN the key). It never edits saved connection profiles, but it does replace whatever the user
-// is connected to now — so it always asks first unless ST already points at this proxy.
+// on a LAN the key), picks Opus 4.6, then saves that as the connection profile 「CCST」 (created, or
+// updated when it exists). Other profiles are never edited, but the live connection is replaced — so
+// it always asks first unless ST already points at this proxy.
 export async function connect(settings) {
     try {
         const ours = $('#chat_completion_source').val() === 'custom'
@@ -48,34 +72,45 @@ export async function connect(settings) {
                 '一键连接会把酒馆现在的连接改成 CCST 代理：',
                 `现在：${currentConnectionText() || '（未连接）'}`,
                 `改成：自定义来源 · ${settings.endpoint}`,
-                '你保存的「连接配置」不会被改；想切回，在「API 连接」顶部把连接配置选回来即可。继续吗？',
+                '同时会新建（或更新）一个叫「CCST」的连接配置并选中它，模型选 Opus 4.6；你别的连接配置不会被改，想切回在「API 连接」顶部选回来即可。继续吗？',
             ]) { const p = document.createElement('p'); p.textContent = line; box.append(p); }
             const ok = await ctx.callGenericPopup(box, ctx.POPUP_TYPE.CONFIRM);
             if (!ok) return;
         }
-        $('#main_api').val('openai').trigger('change');
-        // Endpoint (and the LAN key) MUST be set before the source change: ST's change handler
-        // auto-reconnects immediately, and firing it with the stale custom_url would race a status
-        // check against the wrong endpoint.
-        $('#custom_api_url_text').val(settings.endpoint).trigger('input');
-        // Only a LAN proxy needs a key (its access key). Otherwise the key field is left alone: it may
-        // hold the user's key for another service.
-        const keyField = $('#api_key_custom');
-        if (keyField.length && settings.accessKey) keyField.val(settings.accessKey).trigger('input');
-        $('#chat_completion_source').val('custom').trigger('change');
-        // The proxy sorts out roles itself. ST's merge/strict post-processing
-        // turns the whole preset into a user message (after the first
-        // assistant-role preset entry), which kills prompt caching.
-        $('#custom_prompt_post_processing').val('').trigger('change');
-        $('#api_button_openai').trigger('click');
+        applyConnection(settings);
         notify('ok', '正在连接', '稍后在「API 连接」里选模型。', { replace: 'connect' });
-        if (IS_TAURI) {
-            notify('info', '首次连接', `TauriTavern 会弹出授权框，请允许访问 ${settings.endpoint}。`, { ms: 10000 });
-        }
+        await connectProfile(settings);
         setTimeout(refreshAll, 800);
     } catch (err) {
         console.error('[claude-max] connect failed', err);
         notify('bad', '连接失败', String(err), { replace: 'connect' });
+    }
+}
+
+/** After connecting: Opus 4.6, then the 「CCST」 profile (slash commands of ST's connection manager). */
+async function connectProfile(settings) {
+    try {
+        const ctx = SillyTavern.getContext();
+        const parser = ctx.SlashCommandParser;
+        const run = async (cmd) => String((await ctx.executeSlashCommandsWithOptions(cmd, { handleExecutionErrors: true }))?.pipe ?? '');
+        let modelOk = false;
+        const pickModel = async () => {
+            await sleep(600); // the source change reconnects asynchronously; the profile reads the settled fields
+            modelOk = F.models.setModel(PROFILE_MODEL) === true;
+            await sleep(300);
+        };
+        await pickModel();
+        const res = await ensureProfile({
+            run,
+            applyConnection: async () => { applyConnection(settings); await pickModel(); },
+            hasCommands: () => !!(ctx.executeSlashCommandsWithOptions && parser?.commands?.['profile-create'] && parser.commands['profile-list']),
+        });
+        if (res.ok) notify('ok', '连接配置', profileNotice({ existed: res.existed, modelOk }), { ms: 12000, replace: 'connect-profile' });
+        else if (res.reason === 'no-connection-manager') notify('warn', '没建连接配置', '酒馆的「连接管理器」扩展没开，没能建「CCST」配置；已连上代理，请到「API 连接」选模型。', { ms: 10000, replace: 'connect-profile' });
+        else notify('warn', '没建连接配置', '酒馆没有接受建「CCST」配置；已连上代理，请到「API 连接」核对后自己存一个。', { ms: 10000, replace: 'connect-profile' });
+    } catch (err) {
+        console.error('[claude-max] connection profile failed', err);
+        notify('warn', '没建连接配置', `已连上代理，但建「CCST」配置出错：${String(err?.message ?? err)}`, { ms: 10000, replace: 'connect-profile' });
     }
 }
 
@@ -294,7 +329,7 @@ function buildStatusBar(showTab) {
     const sum = el('div', 'cm-bar-sum');
     sum.id = 'claude_max_bar_sum';
     bar.append(el('span', 'cm-dot'), sum, el('i', 'fa-solid fa-chevron-right cm-bar-go'));
-    bar.addEventListener('click', () => { showTab('status'); refreshStats(); refreshQuota(); });
+    bar.addEventListener('click', () => { showTab('status'); refreshStats(); });
 
     const card = note('info');
     card.id = 'claude_max_status_block';
@@ -410,7 +445,7 @@ export function addExtensionSettings(settings) {
         b.addEventListener('click', () => {
             showTab(k);
             // Stats go stale while the panel sits open: re-read on entering the tab
-            if (k === 'status') { refreshStats(); refreshQuota(); }
+            if (k === 'status') refreshStats();
             if (k === 'other') refreshMac();
         });
         bar.append(b);

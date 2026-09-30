@@ -1,0 +1,50 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { parseProfileList, planProfile, profileNotice, ensureProfile } from '../src/panel/core/connection-profile.js';
+
+test('no CCST profile yet: apply first, then create (which also selects it)', () => {
+    const plan = planProfile('["我的 Claude","备用"]');
+    assert.deepEqual(plan, { existed: false, select: null, save: '/profile-create CCST' });
+    assert.equal(planProfile('[]').existed, false);
+    assert.equal(planProfile('not json').existed, false);
+    assert.deepEqual(parseProfileList('{"a":1}'), []);
+});
+
+test('CCST exists: select it, re-apply on top, then update; other profiles are never named', () => {
+    const plan = planProfile('["备用","CCST"]');
+    assert.deepEqual(plan, { existed: true, select: '/profile CCST', save: '/profile-update' });
+});
+
+test('ensureProfile runs the commands in order, awaiting each', async () => {
+    const log = [];
+    const run = async (cmd) => { log.push(cmd); await Promise.resolve(); return cmd === '/profile-list' ? '["CCST"]' : 'CCST'; };
+    const res = await ensureProfile({
+        run, hasCommands: () => true,
+        applyConnection: async () => { log.push('apply'); },
+        settle: async () => { log.push('settle'); },
+    });
+    assert.deepEqual(res, { ok: true, existed: true });
+    assert.deepEqual(log, ['/profile-list', '/profile CCST', 'apply', 'settle', '/profile-update']);
+
+    log.length = 0;
+    const fresh = await ensureProfile({
+        run: async (cmd) => { log.push(cmd); return cmd === '/profile-list' ? '["备用"]' : 'CCST'; },
+        hasCommands: () => true, applyConnection: async () => { log.push('apply'); }, settle: async () => { log.push('settle'); },
+    });
+    assert.deepEqual(fresh, { ok: true, existed: false });
+    assert.deepEqual(log, ['/profile-list', 'settle', '/profile-create CCST']);
+});
+
+test('no connection manager, or ST refusing, is reported instead of thrown', async () => {
+    assert.deepEqual(await ensureProfile({ run: async () => '', hasCommands: () => false, applyConnection: async () => {} }),
+        { ok: false, reason: 'no-connection-manager' });
+    const refused = await ensureProfile({ run: async (c) => (c === '/profile-list' ? '[]' : ''), hasCommands: () => true, applyConnection: async () => {} });
+    assert.equal(refused.ok, false);
+    assert.equal(refused.reason, 'refused');
+});
+
+test('notice text', () => {
+    assert.equal(profileNotice({ existed: false }), '已新建并选中连接配置『CCST』，模型 Opus 4.6。请到『API 连接』核对来源、地址和模型。');
+    assert.match(profileNotice({ existed: true }), /^已更新连接配置『CCST』，模型 Opus 4\.6。/);
+    assert.match(profileNotice({ existed: false, modelOk: false }), /模型没能自动选上/);
+});

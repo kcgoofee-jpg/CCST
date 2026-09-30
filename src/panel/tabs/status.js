@@ -8,7 +8,7 @@ import { libs } from '../core/libs.js';
 import { IS_TAURI } from '../core/capabilities.js';
 import { connectionInfo, shortModel } from '../core/connection.js';
 import { proxyErrorText } from '../core/proxy.js';
-import { el, note, iconButton, group, stateLine, button } from '../core/dom.js';
+import { el, note, iconButton, group, collapsible, stateLine, button } from '../core/dom.js';
 import { notify } from '../core/notify.js';
 import { refreshAll, refreshQuota, refreshStats } from '../core/live.js';
 
@@ -23,6 +23,16 @@ export function init() {
 }
 
 // ── Quota meter ──
+
+/** 「点刷新查看额度」 with its button: what the quota shows until it has been asked for. */
+function idleQuotaLine() {
+    const line = stateLine('empty', '点刷新查看额度');
+    const b = el('button', 'cm-link-btn', '刷新');
+    b.type = 'button';
+    b.addEventListener('click', () => refreshQuota({ force: true }));
+    line.append(b);
+    return line;
+}
 
 const WINDOW_LABELS = {
     five_hour: '5 小时窗口',
@@ -51,6 +61,11 @@ function renderQuota(quota) {
         return;
     }
     box.classList.remove('cm-loading');
+    if (quota.phase === 'idle') {
+        // Not asked yet (the quota is read after each reply or by 刷新, never on opening).
+        box.replaceChildren(idleQuotaLine());
+        return;
+    }
     if (quota.phase === 'error') {
         box.replaceChildren(stateLine('error', proxyErrorText('额度', quota.error), () => refreshQuota({ force: true })));
         return;
@@ -208,8 +223,11 @@ function renderStats(stats) {
     }
     if (stats.phase !== 'ok') return;
     const data = stats.data;
-    lastBox?.replaceChildren(data.lastCache ? lastTurnCard(data) : stateLine('empty', '还没有对话，发一条消息后这里显示缓存命中。'));
+    lastBox?.replaceChildren(data.lastCache ? lastTurnCard(data)
+        : stateLine('empty', data.lastRequest ? '这个聊天上一轮没有成功，原因看「用量」里的最近失败。' : '这个聊天还没有回复'));
     box.replaceChildren();
+    const sum = document.getElementById('claude_max_usage_sum');
+    if (sum) sum.textContent = data.week?.requests ? `近 7 天 ${data.week.requests} 次请求` : '近 7 天还没有请求';
     if (!data.week?.requests) {
         box.append(stateLine('empty', '还没有记录（只记耗时和 token，不记内容）。'));
     } else {
@@ -245,18 +263,23 @@ export function buildStatusTab(pane) {
     const last = group('上一轮', '刚才那条回复用了多久、缓存命中多少。', { tools });
     const lastBox = el('div', 'cm-stats');
     lastBox.id = 'claude_max_lastturn';
-    lastBox.append(stateLine('loading', '正在读取…'));
+    lastBox.append(stateLine('empty', '这个聊天还没有回复'));
     last.body.append(lastBox);
     pane.append(last.root);
 
-    const quota = group('订阅额度', '5 小时和 7 天的用量窗口，到点自动重置。', { id: 'claude_max_quota_sec' });
+    const quota = group('订阅额度', '5 小时和 7 天的用量窗口，到点自动重置。每条回复写完后自动查一次。', {
+        id: 'claude_max_quota_sec',
+        tools: iconButton('fa-rotate', '刷新额度', () => refreshQuota({ force: true })),
+    });
     const quotaBox = el('div', 'cm-quota');
     quotaBox.id = 'claude_max_quota';
-    quotaBox.append(stateLine('loading', '正在读取额度…'));
+    quotaBox.append(idleQuotaLine());
     quota.body.append(quotaBox);
     pane.append(quota.root);
 
-    const usage = group('用量', '今天和近 7 天，只记耗时和 token，不记内容。');
+    // Folded by default: the table is long. The folded header carries the one number most people look for.
+    const usage = collapsible('用量', '今天和近 7 天，只记耗时和 token，不记内容。', { id: 'claude_max_usage' });
+    usage.root.querySelector('.cm-fold-desc').id = 'claude_max_usage_sum';
     const statsBox = el('div', 'cm-stats');
     statsBox.id = 'claude_max_stats';
     statsBox.append(stateLine('loading', '正在读取用量…'));
