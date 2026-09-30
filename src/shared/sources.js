@@ -34,7 +34,7 @@ export const CLAUDE_SOURCES = {
 };
 
 /** Claude models newer than SillyTavern 1.19's built-in Claude dropdown knows about. */
-export const KNOWN_CLAUDE_MODELS = ['claude-opus-5-5'];
+export const KNOWN_CLAUDE_MODELS = ['claude-opus-5-5', 'claude-sonnet-5-5'];
 
 /** Any id naming a Claude model: claude-opus-4-6, anthropic/claude-opus-4.6, us.anthropic.claude-… */
 export function isClaudeModel(id) {

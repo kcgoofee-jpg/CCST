@@ -50,6 +50,8 @@ export const CLAUDE_SUBSCRIPTION_MODELS = [
     { id: 'claude-opus-4-8', name: 'Claude Opus 4.8', tier: 'opus', oneM: true, adaptiveOnly: true, context: 200000 },
     { id: 'claude-opus-4-7', name: 'Claude Opus 4.7', tier: 'opus', oneM: true, adaptiveOnly: true, context: 200000 },
     { id: 'claude-opus-4-6', name: 'Claude Opus 4.6', tier: 'opus', oneM: true, adaptiveOnly: false, context: 200000 },
+    // Sonnet 5.5: 1M is native (no [1m] variant) and thinking can't be turned off (CLI capability rejects_disabled_thinking).
+    { id: 'claude-sonnet-5-5', name: 'Claude Sonnet 5.5', tier: 'sonnet', oneM: false, adaptiveOnly: true, context: 1000000 },
     { id: 'claude-sonnet-5', name: 'Claude Sonnet 5', tier: 'sonnet', oneM: true, adaptiveOnly: false, noBudget: true, context: 200000 },
     { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', tier: 'sonnet', oneM: true, adaptiveOnly: false, context: 200000 },
     { id: 'claude-opus-4-5', name: 'Claude Opus 4.5', tier: 'opus', oneM: false, adaptiveOnly: false, context: 200000 },

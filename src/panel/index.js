@@ -1562,7 +1562,7 @@
 
     const MODEL_SHORT = [
         [/fable-5-1/, 'Fable 5.1'], [/fable-5/, 'Fable 5'], [/opus-5-5/, 'Opus 5.5'], [/opus-5/, 'Opus 5'],
-        [/sonnet-5/, 'Sonnet 5'], [/opus-4-(\d)/, 'Opus 4.$1'], [/sonnet-4-(\d)/, 'Sonnet 4.$1'], [/haiku-4-5/, 'Haiku 4.5'],
+        [/sonnet-5-5/, 'Sonnet 5.5'], [/sonnet-5/, 'Sonnet 5'], [/opus-4-(\d)/, 'Opus 4.$1'], [/sonnet-4-(\d)/, 'Sonnet 4.$1'], [/haiku-4-5/, 'Haiku 4.5'],
     ];
 
     function shortModel(id) {
@@ -1743,6 +1743,7 @@
     const MODEL_PICKS = [
         { value: 'claude-opus-5-5', label: 'Opus 5.5', hint: '总会思考；要求把思考写进正文的条目会被拦。' },
         { value: 'claude-opus-4-6', label: 'Opus 4.6', hint: '思考可关，思考过程完整可见。' },
+        { value: 'claude-sonnet-5-5', label: 'Sonnet 5.5', hint: '总会思考（关不掉）；原生 1M 上下文，比 Opus 快、便宜。' },
     ];
     const modelBase = (id) => String(id ?? '').replace(/\[1m\]$/i, '');
     /** The canonical id (claude-opus-4-6) behind any source's name: what MODEL_PICKS and byModel use. */
