@@ -113,8 +113,13 @@ https://github.com/kcgoofee-jpg/CCST
 
 - **不用订阅，用 API 密钥 / Bedrock / Vertex / OpenRouter**：照上面装好，在面板「设置 → 代理后端」里切换并填密钥。密钥只存在你电脑上。
 - **不装代理，直接连 Claude API 或 OpenRouter**：只在酒馆「扩展 → 安装扩展」里填本仓库地址。面板照样能切模型、做体检，但没有防丢回复和额度统计。
-- **酒馆装在服务器上 / 用 Docker**：见[使用指南 · 服务器与 Docker](docs/使用指南.md#服务器与-docker)。
-- **手机 TauriTavern、Mac 一键脚本**：见[使用指南 · 其他](docs/使用指南.md#其他mac-一键安装tauritavern-与命令行)。
+- **酒馆装在服务器上 / 用 Docker**：见[使用指南 · 用法三](docs/使用指南.md#用法三-服务器与-docker)。
+- **手机 TauriTavern、Mac 酒馆工具**：见[使用指南 · 用法二](docs/使用指南.md#用法二-tauritavern-与手机)。
+
+**三种用法**：
+- 用法一 原版酒馆（电脑）：上面的安装流程，[详细](docs/使用指南.md#用法一-原版酒馆)。
+- 用法二 TauriTavern / 手机：电脑上独立跑代理（手机模式），TT 装面板并连它，[详细](docs/使用指南.md#用法二-tauritavern-与手机)。
+- 用法三 服务器 / 云酒馆：一条命令或 Docker，[详细](docs/使用指南.md#用法三-服务器与-docker)（真机测试计划在 4.4）。
 
 更多细节（缓存原理、环境变量、所有设置项）在 **[使用指南](docs/使用指南.md)**，计划在 **[路线图](docs/路线图.md)**。
 

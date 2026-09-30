@@ -111,7 +111,12 @@ The panel has five tabs; you mostly need the first. The first time, click **一�
 
 - **API key / Bedrock / Vertex / OpenRouter instead of a subscription**: install as above, then switch in Settings → 代理后端 (proxy backend). Keys stay on your computer.
 - **No proxy, direct Claude API or OpenRouter**: just install the extension. Model switching and check-ups work; reply recovery and quota don't.
-- **SillyTavern on a server / Docker**: see the [guide](docs/使用指南.md#服务器与-docker) (Chinese).
+- **SillyTavern on a server / Docker**: see the [guide](docs/使用指南.md#用法三-服务器与-docker) (Chinese).
+
+**Three setups** (Chinese guide):
+- Usage 1, vanilla SillyTavern on a computer: the install flow above ([details](docs/使用指南.md#用法一-原版酒馆)).
+- Usage 2, TauriTavern / phone: a computer runs the standalone proxy in phone mode; TT installs the panel and connects to it ([details](docs/使用指南.md#用法二-tauritavern-与手机)).
+- Usage 3, server / cloud: one command or Docker ([details](docs/使用指南.md#用法三-服务器与-docker); real-server testing planned for 4.4).
 
 More in the [guide](docs/使用指南.md) and [roadmap](docs/路线图.md) (Chinese).
 

@@ -2,12 +2,15 @@
 # 做的事：找到酒馆文件夹 -> 检查 Node.js -> 打开酒馆的「插件开关」（先备份）-> 装 CCST -> 装依赖 -> 登录 Claude。
 # 不会删除你的任何数据。兼容 Windows PowerShell 5.1。文件必须保存为 UTF-8（带 BOM）。
 # 测试用环境变量（平时不用）：CCST_ST_DIR 指定酒馆文件夹；CCST_NO_PROCESS_SCAN=1 不去找正在运行的酒馆；
-#   CCST_SKIP_LOGIN=1 跳过登录；CCST_YES=1 不问问题；CCST_REPO_URL / CCST_ZIP_URL 换下载地址。
+#   CCST_SKIP_LOGIN=1 跳过登录；CCST_YES=1 不问问题；CCST_REPO_URL / CCST_ZIP_URL 换下载地址；
+#   CCST_BRANCH 指定分支（默认用仓库默认分支）。
 
 $ErrorActionPreference = 'Stop'
 try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) } catch { }
 $RepoUrl = if ($env:CCST_REPO_URL) { $env:CCST_REPO_URL } else { 'https://github.com/kcgoofee-jpg/CCST' }
-$ZipUrl = if ($env:CCST_ZIP_URL) { $env:CCST_ZIP_URL } else { 'https://github.com/kcgoofee-jpg/CCST/archive/refs/heads/main.zip' }
+$Branch = $env:CCST_BRANCH
+$ZipBranch = if ($Branch) { $Branch } else { 'main' }
+$ZipUrl = if ($env:CCST_ZIP_URL) { $env:CCST_ZIP_URL } else { "https://github.com/kcgoofee-jpg/CCST/archive/refs/heads/$ZipBranch.zip" }
 $AssumeYes = ($env:CCST_YES -eq '1')
 $Stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch { }
@@ -192,7 +195,7 @@ if (Test-Path -LiteralPath (Join-Path $Dest '.git')) {
     $done = $false
     if ($haveGit) {
         Say '  正在下载…'
-        if ((Run-Native { git clone --quiet $RepoUrl $Dest }) -eq 0) { $done = $true }
+        if ((Run-Native { if ($Branch) { git clone --quiet --branch $Branch $RepoUrl $Dest } else { git clone --quiet $RepoUrl $Dest } }) -eq 0) { $done = $true }
         else { Warn '用 git 下载失败，换个办法再试'; Remove-Item -LiteralPath $Dest -Recurse -Force -ErrorAction SilentlyContinue }
     }
     if (-not $done) { $done = Install-Zip }

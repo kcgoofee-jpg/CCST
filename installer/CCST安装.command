@@ -3,12 +3,14 @@
 # 做的事：找到酒馆文件夹 -> 检查 Node.js -> 打开酒馆的「插件开关」（先备份）-> 装 CCST -> 装依赖 -> 登录 Claude。
 # 不会删除你的任何数据。
 # 测试用环境变量（平时不用）：CCST_ST_DIR 指定酒馆文件夹；CCST_NO_PROCESS_SCAN=1 不去找正在运行的酒馆；
-#   CCST_SKIP_LOGIN=1 跳过登录；CCST_YES=1 不问问题；CCST_REPO_URL / CCST_ZIP_URL 换下载地址。
+#   CCST_SKIP_LOGIN=1 跳过登录；CCST_YES=1 不问问题；CCST_REPO_URL / CCST_ZIP_URL 换下载地址；
+#   CCST_BRANCH 指定分支（默认用仓库默认分支）。
 
 setopt NO_NOMATCH
 export PATH="$PATH:/opt/homebrew/bin:/usr/local/bin"
 REPO_URL="${CCST_REPO_URL:-https://github.com/kcgoofee-jpg/CCST}"
-ZIP_URL="${CCST_ZIP_URL:-https://github.com/kcgoofee-jpg/CCST/archive/refs/heads/main.zip}"
+BRANCH="${CCST_BRANCH:-}"
+ZIP_URL="${CCST_ZIP_URL:-https://github.com/kcgoofee-jpg/CCST/archive/refs/heads/${BRANCH:-main}.zip}"
 ASSUME_YES="${CCST_YES:-0}"
 STAMP=$(date +%Y%m%d-%H%M%S)
 
@@ -169,7 +171,7 @@ else
     installed=0
     if (( have_git )); then
         say "  正在下载…"
-        git clone --quiet "$REPO_URL" "$DEST" && installed=1 || { warn "用 git 下载失败，换个办法再试"; rm -rf "$DEST" 2>/dev/null; }
+        git clone --quiet ${BRANCH:+--branch} ${BRANCH:+"$BRANCH"} "$REPO_URL" "$DEST" && installed=1 || { warn "用 git 下载失败，换个办法再试"; rm -rf "$DEST" 2>/dev/null; }
     fi
     (( installed )) || zip_install && installed=1
     (( installed )) || stop_with "下载 CCST 失败。" "多半是没联网，或者访问 GitHub 很慢。检查网络（需要能打开 github.com），然后再双击本文件。"

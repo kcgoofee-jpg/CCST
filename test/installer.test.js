@@ -65,3 +65,31 @@ test('Mac installer end to end on a fake tavern: config edited once (backed up),
         assert.equal(readFileSync(`${st}/plugins/CCST/keep.txt`, 'utf8'), 'user data');
     } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test('CCST_BRANCH: Mac installer clones that branch; both installers build the zip URL from it', (t) => {
+    try { execFileSync('zsh', ['-c', 'exit 0']); execFileSync('git', ['--version']); } catch { return t.skip('needs zsh + git'); }
+    const mac = readFileSync(`${dir}CCST安装.command`, 'utf8');
+    const ps = readFileSync(`${dir}ccst-install.ps1`, 'utf8');
+    assert.match(mac, /archive\/refs\/heads\/\$\{BRANCH:-main\}\.zip/);
+    assert.match(ps, /archive\/refs\/heads\/\$ZipBranch\.zip/);
+    assert.match(ps, /git clone --quiet --branch \$Branch/);
+    const root = mkdtempSync(`${tmpdir()}/ccst-br-`);
+    try {
+        const st = `${root}/home/SillyTavern`;
+        mkdirSync(`${st}/default`, { recursive: true });
+        writeFileSync(`${st}/server.js`, ''); writeFileSync(`${st}/package.json`, '{ "name": "sillytavern" }');
+        writeFileSync(`${st}/config.yaml`, 'enableServerPlugins: true\n');
+        const repo = `${root}/repo`; mkdirSync(repo);
+        const cleanEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_')));
+        const git = (...a) => execFileSync('git', ['-C', repo, '-c', 'user.name=t', '-c', 'user.email=t@t', ...a], { env: cleanEnv });
+        git('init', '-q', '-b', 'main');
+        writeFileSync(`${repo}/package.json`, '{ "name": "fake-ccst", "version": "main" }');
+        git('add', '.'); git('commit', '-q', '-m', 'x');
+        git('checkout', '-q', '-b', 'feature');
+        writeFileSync(`${repo}/package.json`, '{ "name": "fake-ccst", "version": "feature" }');
+        git('commit', '-q', '-am', 'y'); git('checkout', '-q', 'main');
+        const env = { PATH: process.env.PATH, HOME: `${root}/home`, CCST_NO_PROCESS_SCAN: '1', CCST_SKIP_LOGIN: '1', CCST_YES: '1', CCST_REPO_URL: repo, CCST_BRANCH: 'feature' };
+        execFileSync('zsh', [`${dir}CCST安装.command`], { env, encoding: 'utf8' });
+        assert.match(readFileSync(`${st}/plugins/CCST/package.json`, 'utf8'), /"feature"/);
+    } finally { rmSync(root, { recursive: true, force: true }); }
+});
