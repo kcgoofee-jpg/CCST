@@ -1,14 +1,17 @@
 <div align="center">
 
-# CCST
-
-**在 SillyTavern（酒馆）里用你自己的 Claude 订阅聊天。**
+<img src="docs/assets/cover.png" alt="CCST：在 SillyTavern 里用你自己的 Claude 订阅聊天" width="100%">
 
 **简体中文** · [English](README.en.md)
 
-[![版本](https://img.shields.io/github/package-json/v/kcgoofee-jpg/CCST?label=%E7%89%88%E6%9C%AC&color=0d0d0d)](https://github.com/kcgoofee-jpg/CCST/releases)
+[![版本](https://img.shields.io/github/package-json/v/kcgoofee-jpg/CCST?label=%E7%89%88%E6%9C%AC&color=c08a55)](https://github.com/kcgoofee-jpg/CCST/releases)
+[![最新发布](https://img.shields.io/github/v/release/kcgoofee-jpg/CCST?label=%E6%9C%80%E6%96%B0%E5%8F%91%E5%B8%83&color=c08a55)](https://github.com/kcgoofee-jpg/CCST/releases/latest)
 [![测试](https://github.com/kcgoofee-jpg/CCST/actions/workflows/test.yml/badge.svg)](https://github.com/kcgoofee-jpg/CCST/actions/workflows/test.yml)
+![平台](https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-Mac%20%7C%20Windows%20%7C%20Linux-555)
+![Node](https://img.shields.io/badge/node-%E2%89%A518-339933)
 [![许可证](https://img.shields.io/badge/%E8%AE%B8%E5%8F%AF%E8%AF%81-AGPL--3.0-blue)](LICENSE)
+
+[安装](#安装5-分钟) · [使用指南](docs/使用指南.md) · [路线图](docs/路线图.md) · [更新记录](CHANGELOG.md) · [参与开发](CONTRIBUTING.md) · [安全](SECURITY.md)
 
 <sub>非 Anthropic 官方产品，与 Anthropic 无关。Claude 是 Anthropic 的商标。</sub>
 
@@ -22,10 +25,13 @@
 
 酒馆本身只能用按量付费的 API。CCST 是一个酒馆插件，装上以后：
 
-- **用 Claude Pro / Max 订阅聊天**，不用另外买 API 额度（也支持 API 密钥、Bedrock、Vertex、OpenRouter）。
-- **自动省额度**：长聊天每轮只重算新内容，其余走缓存。
-- **回复不丢**：浏览器关了、断网了，回复照样写完，回来自动补上。
-- **面板里一键切模型**（Opus 5.5 / Opus 4.6 / Sonnet 5.5）、调思考深度、看额度和每轮用量、检查回复质量。
+| | |
+| --- | --- |
+| 🎟️ **用订阅聊天**<br>Claude Pro / Max 直接用，不用另买额度；API 密钥、Bedrock、Vertex、OpenRouter 也行 | 💰 **自动省额度**<br>长聊天每轮只重算新内容，其余走缓存 |
+| 🛟 **回复不丢**<br>浏览器关了、断网了，回复照样写完，回来自动补上 | 🔀 **一键切模型**<br>Opus 5.5 / Opus 4.6 / Sonnet 5.5，思考深度随时调 |
+| 🩺 **回复体检**<br>字数、禁词、重复段落、角色卡问题，发送前后都查 | 📦 **一键安装**<br>不开终端、不改文件，双击就装好 |
+
+面板里还能看订阅额度和每轮用量。
 
 > [!CAUTION]
 > 用订阅跑第三方程序**不在** Anthropic 允许的范围内，账号可能被限制或封禁。不能接受就用 API 密钥（见下面「其他用法」）。详见[风险提示](#风险提示)。
