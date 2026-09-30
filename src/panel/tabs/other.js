@@ -7,7 +7,7 @@
 // The work itself is in features/ (quiet-render, perf-diag, compact-buttons, debug-request).
 // ──────────────────────────────────────────────
 
-import { IS_TAURI } from '../core/capabilities.js';
+import { IS_TAURI, debugViewState } from '../core/capabilities.js';
 import { DEFAULT_ENDPOINT } from '../core/settings.js';
 import { el, segmented, toggleRow, collapsible, button } from '../core/dom.js';
 import { F } from '../core/registry.js';
@@ -22,9 +22,7 @@ function usageNotes() {
         '代理要一直开着（「酒馆工具」启动，或 npm start）。',
         '首次使用按面板顶部的提示「一键连接」，再在「API 连接」里选 Claude 模型。',
         '酒馆自带的「推理强度」保持「自动」，思考深度在「推理」页设。',
-        IS_TAURI
-            ? '首次连接 TauriTavern 会弹授权框，允许即可。'
-            : `默认地址 ${DEFAULT_ENDPOINT} 时，其他设备打开的酒馆经酒馆服务器读额度和状态。`,
+        ...(IS_TAURI ? [] : [`默认地址 ${DEFAULT_ENDPOINT} 时，其他设备打开的酒馆经酒馆服务器读额度和状态。`]),
         '不支持温度、Top-P 等采样参数（Agent SDK 限制）。',
         '「(1M context)」模型有 100 万上下文；不可用时自动退回普通版一小时。',
         '直连 Claude（官方源、OpenRouter、Electron Hub、NanoGPT、AI/ML API、CometAPI、自定义地址）也能用：模型切换、按模型调整预设、发送前检查、体检、灵动岛照常；缓存排布、防丢回复、额度统计要走代理。',
@@ -84,12 +82,20 @@ export function buildOtherTab(pane, settings, save) {
         id: 'claudeMaxDebugDump', title: '保存最近一次完整请求', desc: '存到代理 data/debug/（本机，每次覆盖）。',
         checked: settings.debugDump, onChange: (v) => { settings.debugDump = v; save(); },
     }));
-    dbg.body.append(button('查看发给模型的内容', () => F.debug.showDebugRequest(), { icon: 'fa-magnifying-glass' }));
+    const viewBtn = button('查看发给模型的内容', () => F.debug.showDebugRequest(), { icon: 'fa-magnifying-glass' });
+    const viewHint = el('small', 'cm-hint');
+    const syncView = () => {
+        const st = debugViewState(settings);
+        viewBtn.disabled = !st.enabled;
+        viewHint.textContent = st.hint;
+        viewHint.hidden = st.enabled;
+    };
+    syncView();
+    dbg.body.querySelector('#claudeMaxDebugDump')?.addEventListener('change', syncView);
+    dbg.body.append(viewBtn, viewHint);
     pane.append(dbg.root);
 
-    const guide = collapsible('重新引导', '再走一遍：选来源 → 连接 → 完成。', { id: 'claude_max_guide_again' });
-    guide.body.append(button('重新引导', () => restartGuide(), { icon: 'fa-compass' }));
-    pane.append(guide.root);
+    pane.append(button('重新引导（选来源 → 连接 → 完成）', () => restartGuide(), { icon: 'fa-compass', id: 'claude_max_guide_again' }));
 
     pane.append(usageNotes());
 }

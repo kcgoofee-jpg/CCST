@@ -4,7 +4,7 @@
 // says it runs on the Mac launcher.
 // ──────────────────────────────────────────────
 
-import { canSyncPhone } from '../core/capabilities.js';
+import { canSyncPhone, PHONE_SYNC_WARNING, PHONE_SYNC_LABEL } from '../core/capabilities.js';
 import { controlFetch } from '../core/proxy.js';
 import { el, note, collapsible, popupText, stateLine } from '../core/dom.js';
 import { notify } from '../core/notify.js';
@@ -55,7 +55,8 @@ export async function refreshMac() {
             if (confirmText) {
                 // window.confirm may do nothing in TauriTavern's web view.
                 const ctx = SillyTavern.getContext();
-                if (!await ctx.callGenericPopup(popupText(confirmText), ctx.POPUP_TYPE.CONFIRM)) return;
+                const lines = Array.isArray(confirmText) ? confirmText : [confirmText];
+                if (!await ctx.callGenericPopup(popupText(...lines), ctx.POPUP_TYPE.CONFIRM)) return;
             }
             b.disabled = true;
             try {
@@ -72,25 +73,41 @@ export async function refreshMac() {
         row.append(b);
     };
     act('重启代理', 'restart-proxy', '重启 Mac 上的代理？几秒后自动恢复。');
-    if (lid.installed) act(lid.paused ? '恢复合盖不睡' : '暂停合盖不睡', lid.paused ? 'lid-resume' : 'lid-pause');
-    act(s.comfy ? '关闭本地生图' : '启动本地生图', s.comfy ? 'comfy-stop' : 'comfy-start');
     // Syncs the phone's TauriTavern: only makes sense from inside it.
-    if (canSyncPhone(s)) act('同步手机', 'phone-sync', '从 Mac 同步这台手机？TauriTavern 会先关闭，同步完自动重新打开。');
+    if (canSyncPhone(s)) act(PHONE_SYNC_LABEL, 'phone-sync', [PHONE_SYNC_WARNING, '仍要从 Mac 同步这台手机？TauriTavern 会先关闭，同步完自动重新打开。']);
+    const copyBtn = el('button', 'menu_button cm-btn', '复制');
+    copyBtn.type = 'button';
+    copyBtn.style.display = 'none'; // .menu_button sets display, which would override [hidden]
+    copyBtn.addEventListener('click', async () => {
+        try {
+            await navigator.clipboard.writeText(pre.textContent);
+            notify('ok', 'Mac · 看日志', '已复制');
+        } catch {
+            // No clipboard permission (TauriTavern web view): select the text so the user can copy it by hand.
+            const range = document.createRange();
+            range.selectNodeContents(pre);
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+            notify('info', 'Mac · 看日志', '已全选，请手动复制');
+        }
+    });
     const logBtn = el('button', 'menu_button cm-btn', '看日志');
     logBtn.type = 'button';
     const pre = el('pre', 'cm-log');
     pre.hidden = true;
     logBtn.addEventListener('click', async () => {
-        if (!pre.hidden) { pre.hidden = true; return; }
+        if (!pre.hidden) { pre.hidden = true; copyBtn.style.display = 'none'; return; }
         try {
             const r = await (await controlFetch('/v1/control/log')).json();
             pre.textContent = [...(r.launcher ?? []), '──', ...(r.proxy ?? [])].join('\n');
             pre.hidden = false;
+            copyBtn.style.display = '';
         } catch {
             notify('warn', 'Mac · 看日志', '取日志失败');
         }
     });
-    row.append(logBtn);
+    row.append(logBtn, copyBtn);
     box.replaceChildren(card, row, pre);
 }
 

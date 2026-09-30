@@ -45,7 +45,10 @@ test('Mac installer end to end on a fake tavern: config edited once (backed up),
         const repo = `${root}/repo`;
         mkdirSync(repo);
         writeFileSync(`${repo}/package.json`, '{ "name": "fake-ccst", "version": "0.0.0" }');
-        const git = (...a) => execFileSync('git', ['-C', repo, '-c', 'user.name=t', '-c', 'user.email=t@t', ...a]);
+        // Under the pre-commit hook git exports GIT_INDEX_FILE / GIT_DIR; the throwaway repo must not inherit them
+        // (it would run `git add .` against the real index).
+        const cleanEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_')));
+        const git = (...a) => execFileSync('git', ['-C', repo, '-c', 'user.name=t', '-c', 'user.email=t@t', ...a], { env: cleanEnv });
         git('init', '-q'); git('add', '.'); git('commit', '-q', '-m', 'x');
         const env = { PATH: process.env.PATH, HOME: `${root}/home`, CCST_NO_PROCESS_SCAN: '1', CCST_SKIP_LOGIN: '1', CCST_YES: '1', CCST_REPO_URL: repo };
         const run = () => execFileSync('zsh', [`${dir}CCST安装.command`], { env, encoding: 'utf8' });
