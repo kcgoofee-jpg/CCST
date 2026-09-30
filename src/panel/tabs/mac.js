@@ -1,27 +1,23 @@
 // ──────────────────────────────────────────────
-// Tab Mac（手机遥控）: the proxy's /v1/control routes (src/proxy/control.js).
-// The tab itself is hidden until the proxy says it runs on the Mac launcher.
+// 其他 → Mac 遥控（手机遥控）: the proxy's /v1/control routes (src/proxy/platform/control.js).
+// Until 4.0 this was a tab of its own; now it is a section of 其他 that stays hidden until the proxy
+// says it runs on the Mac launcher.
 // ──────────────────────────────────────────────
 
 import { canSyncPhone } from '../core/capabilities.js';
 import { controlFetch } from '../core/proxy.js';
-import { el, note, section, popupText } from '../core/dom.js';
+import { el, note, collapsible, popupText } from '../core/dom.js';
 import { notify } from '../core/notify.js';
-import { savedTab, showTab } from '../shell.js';
 
-let macTabOn = false;
-export const isMacTabOn = () => macTabOn;
+const SECTION_ID = 'claude_max_mac_section';
 
-/** Show / hide the Mac tab; leaving it hidden while selected falls back to 推理 (the choice stays saved). */
-function setMacTab(on) {
-    macTabOn = on;
-    const b = document.getElementById('claude_max_tab_mac');
-    if (b) b.hidden = !on;
-    if (!on && document.querySelector('.claude-max .cm-tab.active')?.dataset.tab === 'mac') showTab('reason', false);
-    else if (on && savedTab() === 'mac') showTab('mac', false);
+/** Show / hide the Mac section (hidden unless the proxy runs on the Mac launcher). */
+function setMacSection(on) {
+    const root = document.getElementById(SECTION_ID);
+    if (root) root.hidden = !on;
 }
 
-// Read when the panel opens and when the Mac tab is entered; the tab stays
+// Read when the panel opens and when 其他 is entered; the section stays
 // hidden unless the proxy was started by the Mac launcher.
 export async function refreshMac() {
     if (!document.getElementById('claude_max_mac')) return;
@@ -32,16 +28,15 @@ export async function refreshMac() {
     } catch {
         s = null;
     }
-    const tab = document.getElementById('claude_max_tab_mac');
     const box = document.getElementById('claude_max_mac');
-    if (!tab || !box) return;
-    if (s && !s.supported) { setMacTab(false); return; }
+    if (!box) return;
+    if (s && !s.supported) { setMacSection(false); return; }
     if (!s) {
-        // Only worth a line when this proxy was known to be the Mac's (the tab is shown already).
+        // Only worth a line when this proxy was known to be the Mac's (the section is shown already).
         box.replaceChildren(el('small', 'cm-hint', '连不上代理，看不到 Mac 状态。'));
         return;
     }
-    setMacTab(true);
+    setMacSection(true);
     const lid = s.lid ?? {};
     const lines = [
         `模式：${s.phoneMode ? '手机模式' : '电脑模式'}${s.watchdog ? '（守护中）' : ''}${s.ip ? ` · ${s.ip}` : ''}`,
@@ -99,9 +94,12 @@ export async function refreshMac() {
     box.replaceChildren(card, row, pre);
 }
 
-/** Tab Mac: the phone's remote for the Mac launcher. The tab itself is hidden until the proxy says it runs there. */
-export function buildMacTab(pane) {
+/** 其他 → Mac 遥控: the phone's remote for the Mac launcher. Hidden until the proxy says it runs there. */
+export function buildMacSection() {
+    const { root, body } = collapsible('Mac 遥控', '在手机上看 Mac 的电量、盖子，重启代理、同步手机（代理跑在 Mac 上时才有）', { id: SECTION_ID });
+    root.hidden = true;
     const macBox = el('div', 'cm-field');
     macBox.id = 'claude_max_mac';
-    pane.append(section('Mac（手机遥控）'), macBox);
+    body.append(macBox);
+    return root;
 }

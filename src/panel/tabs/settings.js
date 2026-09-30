@@ -1,13 +1,12 @@
 // ──────────────────────────────────────────────
-// Tab 设置: connection (the only copy of the address / password fields), backend, debug options, notes.
+// Tab 设置: connection to the local proxy, backend, thinking, and the folded 高级 (cache & context switches).
 // ──────────────────────────────────────────────
 
 import { store } from '../core/store.js';
 import { getSettings, DEFAULT_ENDPOINT, VALID_THINKING, THINKING_OPTIONS } from '../core/settings.js';
-import { IS_TAURI, normalizeEndpoint } from '../core/capabilities.js';
-import { el, segmented, toggleRow, section } from '../core/dom.js';
+import { normalizeEndpoint } from '../core/capabilities.js';
+import { el, segmented, toggleRow, section, collapsible } from '../core/dom.js';
 import { notify } from '../core/notify.js';
-import { F } from '../core/registry.js';
 import { refreshStatus, refreshBackend } from '../core/live.js';
 import { connect, renderGlance, SUBSCRIPTION_LABELS, SOURCE_LABELS } from '../shell.js';
 import { syncThinkingControls } from './reason.js';
@@ -23,26 +22,7 @@ export function init() {
     });
 }
 
-function usageNotes() {
-    const steps = el('details', 'cm-details');
-    steps.append(el('summary', null, '使用说明'));
-    const list = el('ol', 'cm-notes');
-    for (const line of [
-        '代理要一直开着（npm start；装了服务器插件的酒馆会自动启动）。',
-        '点「一键连接」，再在「API 连接」里选 Claude 模型。',
-        '酒馆自带的「推理强度」保持「自动」，思考深度在「推理」页设。',
-        IS_TAURI
-            ? '首次连接 TauriTavern 会弹授权框，允许即可。'
-            : `默认地址 ${DEFAULT_ENDPOINT} 时，其他设备打开的酒馆经酒馆服务器读额度和状态。`,
-        '不支持温度、Top-P 等采样参数（Agent SDK 限制）。',
-        '「(1M context)」模型有 100 万上下文；不可用时自动退回普通版一小时。',
-        '直连 Claude（官方源、OpenRouter、Electron Hub、NanoGPT、AI/ML API、CometAPI、自定义地址）也能用：模型切换、按模型调整预设、发送前检查、体检、灵动岛照常；缓存排布、防丢回复、额度统计要走代理。',
-    ]) list.append(el('li', null, line));
-    steps.append(list);
-    return steps;
-}
-
-/** Tab 设置: connection (the only copy of the address / password fields), debug options, notes. */
+/** Tab 设置: connection to the local proxy, backend, thinking; the cache & context switches are folded into 高级. */
 export function buildSettingsTab(pane, settings, save) {
     pane.append(section('连接'));
     const info = el('small', 'cm-hint');
@@ -57,15 +37,38 @@ export function buildSettingsTab(pane, settings, save) {
     // The pane isn't in the document yet (refreshBackend looks the box up by id): fetch once it is.
     queueMicrotask(() => setTimeout(refreshBackend, 0));
 
-    // Everything below decides itself (defaults, the preset's own
-    // recommendation, the proxy watching each chat). Kept for chasing
-    // problems, folded away so nobody has to think about it.
-    const dbg = el('details', 'cm-details cm-debug-box');
-    dbg.append(el('summary', null, '调试选项'));
-    dbg.append(el('small', 'cm-hint', '一般不用动：缓存项默认开、代理按聊天自动决定；思考和身份模式随预设推荐；省电显示按设备自动。'));
-    const add = (x) => dbg.append(x);
+    pane.append(section('思考'));
+    const thinking = segmented({
+        label: '思考模式',
+        options: THINKING_OPTIONS,
+        current: settings.thinking,
+        onChange: (v) => { settings.thinking = VALID_THINKING.includes(v) ? v : 'adaptive'; save(); renderGlance(); syncThinkingControls(); },
+    });
+    thinking.id = 'claude_max_thinking';
+    pane.append(thinking);
+    pane.append(segmented({
+        label: '后台请求思考深度',
+        options: [
+            { value: 'low', label: '低', hint: '其他插件的后台请求（生图 tag、总结）用「低」，快、省额度。' },
+            { value: 'follow', label: '跟随', hint: '后台请求也用「推理」页的深度。' },
+        ],
+        current: settings.quietEffort === 'follow' ? 'follow' : 'low',
+        onChange: (v) => { settings.quietEffort = v === 'follow' ? 'follow' : 'low'; save(); },
+    }));
+    pane.append(toggleRow({
+        id: 'claudeMaxShowReasoning', title: '显示思考过程', desc: '跟随酒馆「显示模型思维」；关掉则总不显示。',
+        checked: settings.showReasoning, onChange: (v) => { settings.showReasoning = v; save(); },
+    }));
+    pane.append(toggleRow({
+        id: 'claudeMaxIdentity', title: '身份模式', desc: '角色扮演建议关（预设可推荐）。',
+        more: '加上 Claude Code 官方前言，模型能说出型号，但多耗 token、带编程助手味。',
+        checked: settings.identityMode, onChange: (v) => { settings.identityMode = v; save(); },
+    }));
 
-    add(section('缓存与上下文'));
+    // These decide themselves (defaults on, the preset's own recommendation, the proxy watching each
+    // chat). Kept for chasing cache problems, folded away so nobody has to think about it.
+    const adv = collapsible('高级', '缓存与上下文的开关：一般不用动，默认开、代理按聊天自动决定。', { id: 'claude_max_advanced' });
+    const add = (x) => adv.body.append(x);
     add(toggleRow({
         id: 'claudeMaxResume', title: '会话续接', desc: '按真实多轮发送，能用缓存。',
         more: '关掉会把聊天记录压成一整段，只在排查时关。',
@@ -91,109 +94,70 @@ export function buildSettingsTab(pane, settings, save) {
         more: '把每轮不变的后置条目挪到对话最前，旧楼层能命中缓存；代价是规则离回复更远。',
         checked: settings.tailBlockFront, onChange: (v) => { settings.tailBlockFront = v; save(); },
     }));
-
-    add(section('思考'));
-    const thinking = segmented({
-        label: '思考模式',
-        options: THINKING_OPTIONS,
-        current: settings.thinking,
-        onChange: (v) => { settings.thinking = VALID_THINKING.includes(v) ? v : 'adaptive'; save(); renderGlance(); syncThinkingControls(); },
-    });
-    thinking.id = 'claude_max_thinking';
-    add(thinking);
-    add(segmented({
-        label: '后台请求思考深度',
-        options: [
-            { value: 'low', label: '低', hint: '其他插件的后台请求（生图 tag、总结）用「低」，快、省额度。' },
-            { value: 'follow', label: '跟随', hint: '后台请求也用「推理」页的深度。' },
-        ],
-        current: settings.quietEffort === 'follow' ? 'follow' : 'low',
-        onChange: (v) => { settings.quietEffort = v === 'follow' ? 'follow' : 'low'; save(); },
-    }));
-    add(toggleRow({
-        id: 'claudeMaxShowReasoning', title: '显示思考过程', desc: '跟随酒馆「显示模型思维」；关掉则总不显示。',
-        checked: settings.showReasoning, onChange: (v) => { settings.showReasoning = v; save(); },
-    }));
-    add(toggleRow({
-        id: 'claudeMaxIdentity', title: '身份模式', desc: '角色扮演建议关（预设可推荐）。',
-        more: '加上 Claude Code 官方前言，模型能说出型号，但多耗 token、带编程助手味。',
-        checked: settings.identityMode, onChange: (v) => { settings.identityMode = v; save(); },
-    }));
-
-    add(section('显示'));
-    add(segmented({
-        label: '省电显示',
-        options: [
-            { value: 'auto', label: '自动', hint: '手机和 TauriTavern 上开，电脑上关。' },
-            { value: 'on', label: '开', hint: '旧楼层动画只播一遍、不做毛玻璃，悬浮挂件约 20 秒后停。' },
-            { value: 'off', label: '关', hint: '动画照常循环。' },
-        ],
-        current: ['on', 'off'].includes(settings.quietRender) ? settings.quietRender : 'auto',
-        onChange: (v) => { settings.quietRender = v; F.quiet.applyQuietRender(); save(); F.perf.renderPerfNote(); },
-    }));
-    add(toggleRow({
-        id: 'claudeMaxCheckupToast', title: '体检有问题时提示', desc: '点一下关掉；同类点掉两次不再提示。',
-        checked: settings.checkupToast, onChange: (v) => { settings.checkupToast = v; save(); },
-    }));
-    add(toggleRow({
-        id: 'claudeMaxCompactButtons', title: '输入栏脚本按钮并排', desc: '酒馆助手的脚本按钮排成一行。',
-        checked: settings.compactScriptButtons, onChange: (v) => { settings.compactScriptButtons = v; save(); F.compact.applyCompactButtons(); },
-    }));
-
-    add(section('请求'));
-    add(toggleRow({
-        id: 'claudeMaxDebugDump', title: '保存最近一次完整请求', desc: '存到代理 data/debug/（本机，每次覆盖）。',
-        checked: settings.debugDump, onChange: (v) => { settings.debugDump = v; save(); },
-    }));
-    const debugBtn = el('div', 'menu_button cm-connect cm-connect-quiet');
-    debugBtn.append(el('i', 'fa-solid fa-magnifying-glass'), document.createTextNode(' 查看发给模型的内容'));
-    debugBtn.addEventListener('click', () => F.debug.showDebugRequest());
-    add(debugBtn);
-    pane.append(dbg, usageNotes());
+    pane.append(adv.root);
 }
 
-/** Proxy address + access key, in 设置 (the status note links here while the proxy can't be reached). */
-function connectionFields(settings, save) {
-    const box = el('div', 'cm-conn-fields');
-    const endpointField = el('div', 'cm-field');
-    endpointField.append(el('div', 'cm-field-label', '代理地址'));
-    const endpointInput = el('input', 'text_pole cm-endpoint-input');
-    endpointInput.type = 'text';
-    endpointInput.id = 'claude_max_endpoint';
-    endpointInput.value = settings.endpoint;
-    endpointInput.placeholder = DEFAULT_ENDPOINT;
+/** Every address input shows the same setting (设置 → 连接 and 其他 → 手机连接): keep them in step. */
+function syncEndpointInputs(value) {
+    for (const input of document.querySelectorAll('.cm-endpoint-input')) input.value = value;
+}
+
+/** The proxy address input. `id` differs per copy (设置 has one, 其他 → 手机连接 the other). */
+export function endpointField(settings, save, { id = 'claude_max_endpoint', hint } = {}) {
+    const field = el('div', 'cm-field');
+    field.append(el('div', 'cm-field-label', '代理地址'));
+    const input = el('input', 'text_pole cm-endpoint-input');
+    input.type = 'text';
+    input.id = id;
+    input.value = settings.endpoint;
+    input.placeholder = DEFAULT_ENDPOINT;
     // Committed on change (Enter / leaving the field), not per keystroke:
     // half-typed addresses would be saved and probed by the heartbeat.
-    endpointInput.addEventListener('change', () => {
-        const next = normalizeEndpoint(endpointInput.value) || DEFAULT_ENDPOINT;
-        if (normalizeEndpoint(settings.endpoint) === next) return;
+    input.addEventListener('change', () => {
+        const next = normalizeEndpoint(input.value) || DEFAULT_ENDPOINT;
+        if (normalizeEndpoint(settings.endpoint) === next) { input.value = settings.endpoint; return; }
         settings.endpoint = next;
-        endpointInput.value = next;
+        syncEndpointInputs(next);
         save();
         // Requests are only tagged when ST's own Custom URL matches this address.
         notify('info', '代理地址已改', '点「重新连接」让酒馆改用它。', { ms: 10000, replace: 'endpoint' });
         refreshStatus();
     });
-    endpointField.append(endpointInput, el('small', 'cm-hint', `默认 ${DEFAULT_ENDPOINT}。手机连 Mac：填「酒馆工具」标题栏的地址（手机同步会自动填）。`));
-    const keyField = el('div', 'cm-field');
-    keyField.append(el('div', 'cm-field-label', '访问密码'));
-    const keyInput = el('input', 'text_pole cm-key-input');
-    keyInput.type = 'password';
-    keyInput.autocomplete = 'off';
-    keyInput.value = settings.accessKey ?? '';
-    keyInput.placeholder = '本机使用时留空';
-    keyInput.addEventListener('change', () => {
-        const next = keyInput.value.trim();
+    field.append(input, el('small', 'cm-hint', hint ?? `默认 ${DEFAULT_ENDPOINT}，本机使用不用改。`));
+    return field;
+}
+
+/** The LAN access password (only needed when the proxy is on another computer). */
+export function accessKeyField(settings, save) {
+    const field = el('div', 'cm-field');
+    field.append(el('div', 'cm-field-label', '访问密码'));
+    const input = el('input', 'text_pole cm-key-input');
+    input.type = 'password';
+    input.autocomplete = 'off';
+    input.value = settings.accessKey ?? '';
+    input.placeholder = '本机使用时留空';
+    input.addEventListener('change', () => {
+        const next = input.value.trim();
         if ((settings.accessKey ?? '') === next) return;
         settings.accessKey = next;
         save();
         notify('info', '访问密码已改', '点「重新连接」后生效。', { ms: 10000, replace: 'endpoint' });
         refreshStatus();
     });
-    keyField.append(keyInput);
+    field.append(input);
+    return field;
+}
+
+export function reconnectButton() {
     const reconnect = el('div', 'menu_button cm-connect cm-connect-quiet');
     reconnect.append(el('i', 'fa-solid fa-plug'), document.createTextNode(' 重新连接'));
     reconnect.addEventListener('click', () => connect(getSettings()));
-    box.append(endpointField, keyField, reconnect);
+    return reconnect;
+}
+
+/** 设置 → 连接: the local proxy's address. (The LAN password lives in 其他 → 手机连接.) */
+function connectionFields(settings, save) {
+    const box = el('div', 'cm-conn-fields');
+    box.append(endpointField(settings, save), reconnectButton());
     return box;
 }

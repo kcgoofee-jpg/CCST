@@ -408,6 +408,16 @@
 .claude-max .cm-details[open] { padding-bottom: 8px; }
 .claude-max .cm-details .cm-field { margin-bottom: 4px; }
 
+.claude-max .cm-fold > summary {
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 2px;
+    padding: 6px 0;
+}
+.claude-max .cm-fold-desc { font-weight: 400; opacity: 0.7; }
+.claude-max .cm-fold-body { display: flex; flex-direction: column; gap: 10px; }
+
 .claude-max .cm-mini > summary {
     display: flex;
     align-items: center;
@@ -533,7 +543,7 @@ body.cm-compact-qr #qr--bar:has(> .qr--buttons[id^="script_container_"]) {
 /* Mac 日志 */
 .claude-max pre.cm-log { max-height: 40vh; overflow: auto; white-space: pre-wrap; word-break: break-all; font-size: var(--cm-fs-sm); line-height: 1.4; padding: 6px; border-radius: 6px; background: var(--cm-soft); }
 
-/* 省电显示（面板「体检 → 性能」）：最新一楼以外，美化界面的动画只播一遍、不做毛玻璃 */
+/* 省电显示（面板「其他 → 省电显示」）：最新一楼以外，美化界面的动画只播一遍、不做毛玻璃 */
 body.cm-quiet #chat > .mes:not(.last_mes) *,
 body.cm-quiet #chat > .mes:not(.last_mes) *::before,
 body.cm-quiet #chat > .mes:not(.last_mes) *::after { animation-iteration-count: 1 !important; }

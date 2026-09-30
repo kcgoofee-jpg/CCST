@@ -75,11 +75,11 @@ function checkInlineCot() {
         el('small', 'cm-hint',
             `回复里有 <${tag}> 块，原生思考框因此是空的，还占输出长度。` +
             `收进折叠框：酒馆「用户设置 → 推理 → 自动解析」，前缀 <${tag}>、后缀 </${tag}>。` +
-            '改用原生思考：关掉预设里的思维链条目（需要时在「设置 → 调试选项」选「始终思考」）。'),
+            '改用原生思考：关掉预设里的思维链条目（需要时在「设置 → 思考」选「始终思考」）。'),
     );
 }
 
-/** The two thinking controls (推理 page, 调试选项) show the same settings. */
+/** The two thinking controls (推理 page, 设置) show the same settings. */
 export function syncThinkingControls() {
     const s = getSettings();
     document.getElementById('claude_max_depth')?.select?.(s.thinking === 'off' ? 'off' : s.effort);

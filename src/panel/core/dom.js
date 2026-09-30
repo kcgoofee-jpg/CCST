@@ -100,3 +100,17 @@ export function section(title, extra) {
     if (extra) head.append(extra);
     return head;
 }
+
+/** A collapsed group with a one-line description under its title (visible while folded).
+ *  Returns { root, body }: append the group's content to `body`. */
+export function collapsible(title, desc, { id, open = false } = {}) {
+    const root = el('details', 'cm-details cm-fold');
+    if (id) root.id = id;
+    root.open = open;
+    const head = el('summary');
+    head.append(el('span', 'cm-fold-title', title));
+    if (desc) head.append(el('small', 'cm-hint cm-fold-desc', desc));
+    const body = el('div', 'cm-fold-body');
+    root.append(head, body);
+    return { root, body };
+}

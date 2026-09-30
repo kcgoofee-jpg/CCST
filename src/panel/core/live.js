@@ -105,7 +105,7 @@ export async function heartbeat() {
     } else if (!up && !heartbeatDown && connected) {
         heartbeatDown = true;
         if (status === 401) {
-            notify('bad', '访问密码不对', '在 CCST「设置」里改好，再点「重新连接」。', { ms: 0, replace: 'proxy' });
+            notify('bad', '访问密码不对', '在 CCST「其他 → 手机连接」里改好，再点「重新连接」。', { ms: 0, replace: 'proxy' });
         } else if (status === 403) {
             notify('bad', '代理拒绝连接', '那台电脑没开「手机模式」：在「酒馆工具」里打开。', { ms: 0, replace: 'proxy' });
         } else {

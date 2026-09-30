@@ -16,8 +16,10 @@ import { refreshAll, refreshStatus, refreshStats, refreshQuota } from './core/li
 import { buildReasonTab } from './tabs/reason.js';
 import { buildStatusTab } from './tabs/status.js';
 import { buildCheckTab } from './tabs/check.js';
-import { buildMacTab, refreshMac, isMacTabOn } from './tabs/mac.js';
+import { refreshMac } from './tabs/mac.js';
 import { buildSettingsTab } from './tabs/settings.js';
+import { buildOtherTab } from './tabs/other.js';
+import { TABS, resolveTab } from './core/tabs.js';
 
 // ── One-click connect (same selector path as ST's /api-url command) ──
 
@@ -138,7 +140,7 @@ function buildStatusBar(showTab) {
     connectBtn.id = 'claude_max_connect';
     connectBtn.append(el('i', 'fa-solid fa-plug'), document.createTextNode(' 一键连接'));
     connectBtn.addEventListener('click', () => connect(getSettings()));
-    // The address / password fields live in 设置 only; this jumps there when they matter.
+    // The address field lives in 设置 (and 其他 → 手机连接); this jumps to 设置.
     const fieldsBtn = el('div', 'menu_button');
     fieldsBtn.id = 'claude_max_status_conn';
     fieldsBtn.append(el('i', 'fa-solid fa-gear'), document.createTextNode(' 改地址'));
@@ -179,18 +181,14 @@ export function renderConnect() {
     renderGlance();
 }
 
-const TABS = [['reason', '推理'], ['status', '状态'], ['check', '体检'], ['mac', 'Mac'], ['settings', '设置']];
-// Tab keys before 3.1 (统计 / 更多) map onto their successors.
-const OLD_TABS = { stats: 'status', adv: 'settings' };
 const TAB_STORE = 'ccst.panelTab';
 
-/** The tab last picked on this device (localStorage: a phone and the Mac needn't agree). */
+/** The tab last picked on this device (localStorage: a phone and the Mac needn't agree). Old keys are migrated (core/tabs.js). */
 export function savedTab() {
     let key = null;
     try { key = localStorage.getItem(TAB_STORE); } catch { /* storage blocked */ }
     key ??= getSettings().panelTab; // settings from before 3.1
-    key = OLD_TABS[key] ?? key;
-    return TABS.some(([k]) => k === key) ? key : 'reason';
+    return resolveTab(key);
 }
 
 let showTabFn = () => {};
@@ -223,15 +221,15 @@ export function addExtensionSettings(settings) {
     toggle.addEventListener('click', () => setTimeout(() => {
         if (drawerContent.offsetParent === null) return flushIsland();
         refreshAll();
-        refreshMac(); // decides whether the Mac tab shows
+        refreshMac(); // decides whether 其他 shows the Mac section
     }, 50));
 
     const panes = Object.fromEntries(TABS.map(([k]) => [k, el('div', 'cm-pane')]));
     buildReasonTab(panes.reason, settings, save);
     buildStatusTab(panes.status);
     buildCheckTab(panes.check, settings, save);
-    buildMacTab(panes.mac);
     buildSettingsTab(panes.settings, settings, save);
+    buildOtherTab(panes.other, settings, save);
 
     const bar = el('div', 'cm-tabs');
     bar.setAttribute('role', 'tablist');
@@ -248,7 +246,6 @@ export function addExtensionSettings(settings) {
         b.type = 'button';
         b.dataset.tab = k;
         b.setAttribute('role', 'tab');
-        if (k === 'mac') { b.id = 'claude_max_tab_mac'; b.hidden = !isMacTabOn(); }
         if (k === 'check') {
             const badge = el('span', 'cm-badge');
             badge.id = 'claude_max_check_badge';
@@ -259,7 +256,7 @@ export function addExtensionSettings(settings) {
             showTab(k);
             // Stats go stale while the panel sits open: re-read on entering the tab
             if (k === 'status') { refreshStats(); refreshQuota(); }
-            if (k === 'mac') refreshMac();
+            if (k === 'other') refreshMac();
         });
         bar.append(b);
     }
@@ -268,8 +265,7 @@ export function addExtensionSettings(settings) {
     islandSlot.id = 'claude_max_island_slot';
     content.append(islandSlot, buildStatusBar((k) => showTab(k)), bar, ...TABS.map(([k]) => panes[k]));
     ui.island?.mount(islandSlot);
-    const first = savedTab();
-    showTab(first === 'mac' && !isMacTabOn() ? 'reason' : first, false);
+    showTab(savedTab(), false);
     renderConnect();
     renderGlance();
     return true;

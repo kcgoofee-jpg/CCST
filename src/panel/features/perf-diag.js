@@ -1,5 +1,5 @@
 // ──────────────────────────────────────────────
-// Performance diagnosis: what in this page keeps the phone busy (体检 → 性能)
+// Performance diagnosis: what in this page keeps the phone busy (其他 → 性能诊断)
 // Counts running animations, embedded frames and frosted-glass elements per chat floor, then samples the
 // frame rate and long tasks for a few seconds. Reported to the proxy (the Mac reads it); numbers only.
 // ──────────────────────────────────────────────
@@ -9,14 +9,14 @@ import { IS_TAURI, quietRenderMode } from '../core/capabilities.js';
 import { controlFetch } from '../core/proxy.js';
 import { el, note } from '../core/dom.js';
 
-/** 体检 → 性能: what 省电显示 is doing right now, and why. */
+/** 其他 → 性能诊断: what 省电显示 is doing right now, and why. */
 export function renderPerfNote(note = document.getElementById('claude_max_perf_note')) {
     if (!note) return;
     const mode = quietRenderMode(getSettings().quietRender);
     const why = mode === 'auto' ? `自动${quietOn() ? '，手机 / TauriTavern' : '，电脑'}` : '手动';
     note.textContent = quietOn()
         ? `省电显示开（${why}）：旧楼层动画只播一遍、不做毛玻璃。`
-        : `省电显示关（${why}）。在「设置 → 调试选项」可改。`;
+        : `省电显示关（${why}）。在「其他 → 省电显示」可改。`;
 }
 
 export async function showPerfDiag() {
@@ -35,7 +35,7 @@ export async function showPerfDiag() {
         card.append(el('small', 'cm-hint', `${f === 'page' ? '聊天之外' : `第 ${f} 楼`}：循环动画 ${t.infiniteAnimations ?? 0} · 内嵌窗口 ${t.iframes ?? 0} · 毛玻璃 ${t.backdropBlur ?? 0}`));
     }
     if (!quietOn() && floors.length > 2) {
-        card.append(el('small', 'cm-hint cm-warn', '旧楼层还在播动画：酒馆助手「渲染深度」设 3 左右，或在「设置 → 调试选项」把省电显示设为「开」。'));
+        card.append(el('small', 'cm-hint cm-warn', '旧楼层还在播动画：酒馆助手「渲染深度」设 3 左右，或在「其他 → 省电显示」把省电显示设为「开」。'));
     }
     box.replaceChildren(card);
 }

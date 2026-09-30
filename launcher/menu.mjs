@@ -5,6 +5,8 @@
 //
 // 各系统只留一个启动壳（mac/酒馆工具.command、windows/酒馆工具.bat），
 // 菜单的分组、说明、问题判断都在这里；状态和不分系统的动作在 core.mjs（三个系统同一份）：
+// 首页只放每天要用的；手机、TT 守护、生图、导入这些主线以外的收在「其他」里（冻结维护，都还能用）。
+// 只有 Mac 的功能统一用 core.mjs 的 macOnly() 判断，不在各处散着写 OS === 'mac'。
 //   检查状态                      三个系统都用 core.mjs
 //   启动 / 关闭 / 重启            Windows、Linux 用 core.mjs；Mac 用 mac/actions/*.zsh（要连带手机模式守护、合盖）、
 //                                 Termux 用 termux/claude-max.sh（代理在 Debian 子系统里）。重启前统一由 core.mjs 把关
@@ -20,7 +22,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { emitKeypressEvents } from 'node:readline';
 
-import { ACTIONS, HERE, IS_TERMUX, OS, VERSION, ago, clock, getJson, loadConfig, readState, restartRefusal } from './core.mjs';
+import { ACTIONS, HERE, IS_TERMUX, MAC_ONLY, OS, VERSION, ago, clock, getJson, loadConfig, macOnly, readState, restartRefusal } from './core.mjs';
 import { PHONE_ACTIONS, latestGuard, pullJob, versionNote } from './phone.mjs';
 
 export { readState };
@@ -61,35 +63,50 @@ export function problems(s) {
     if (s.proxy && s.proxyVersion && s.proxyVersion !== VERSION) {
         out.push({ text: `代理还在跑 v${s.proxyVersion}（本地代码 v${VERSION}）`, fix: 'restart', fixLabel: '重启代理' });
     }
-    if (s.phoneMode && !s.watchdog && OS === 'mac') out.push({ text: '手机模式的守护没在运行', fix: 'phone-mode', fixLabel: '修复' });
-    if (s.phone === 'unauthorized') out.push({ text: '手机上还没允许这台电脑调试', fixLabel: '在手机上点「允许」' });
-    if (s.phoneTT?.restoring) out.push({ text: '手机上 TT 守护正在恢复备份', fixLabel: '恢复完再同步' });
-    else if (s.phoneTT?.restorePending) out.push({ text: '手机上次从备份恢复没做完', sub: 'guard', fixLabel: '看 TT 守护' });
+    // 手机相关的提醒只在开着手机模式时出现：不用手机的人首页不该看到这些
+    if (s.phoneMode && !macOnly()) {
+        if (!s.watchdog) out.push({ text: '手机模式的守护没在运行', fix: 'phone-mode', fixLabel: '修复' });
+        if (s.phone === 'unauthorized') out.push({ text: '手机上还没允许这台电脑调试', fixLabel: '在手机上点「允许」' });
+        if (s.phoneTT?.restoring) out.push({ text: '手机上 TT 守护正在恢复备份', fixLabel: '恢复完再同步' });
+        else if (s.phoneTT?.restorePending) out.push({ text: '手机上次从备份恢复没做完', sub: 'guard', fixLabel: '看 TT 守护' });
+    }
     return out;
 }
 
-const MAC_ONLY = '只支持 Mac';
 const NEED_REPO = '要 tt-root-module（clone 到本仓库同级目录）';
 const phoneOn = (s) => s.phone === 'usb' || s.phone === 'wifi';
 
 /** 一个菜单项：key 按键、id 动作、sub 子菜单、label 名字、note 说明；why 有值时灰着显示原因。 */
 export function screens(s) {
-    const mac = OS === 'mac';
+    const mac = !macOnly();
+    const why = macOnly();
     const openLabel = s.stManaged ? '打开酒馆' : s.hasTT || !mac ? '打开 TT' : '打开酒馆';
     const withSt = s.stManaged ? '和酒馆' : '';
+    const sub = (s.backend?.id ?? 'subscription') === 'subscription';
     const home = {
         title: '首页',
         primary: { id: 'start', label: s.proxy ? openLabel : `启动代理${withSt}` },
         rows: [[
-            { key: '1', id: 'phone-sync', label: '同步手机', why: mac ? null : MAC_ONLY },
-            { key: '2', id: 'restart', label: `重启代理${withSt}` },
-            { key: '3', id: 'check', label: '检查状态' },
+            { key: '1', id: 'restart', label: `重启代理${withSt}` },
+            { key: '2', id: 'check', label: '检查状态' },
+            { key: '3', id: 'login', label: '登录 Claude', note: !sub ? `现在用 ${s.backend.label}，不用登录` : s.loggedIn ? `已登录${s.plan ? `（${s.plan}）` : ''}` : '浏览器登录订阅，一般只要一次' },
         ], [
-            { key: '4', sub: 'phone', label: '手机 >', why: mac ? null : MAC_ONLY },
-            { key: '5', sub: 'guard', label: 'TT 守护 >', why: mac ? null : MAC_ONLY },
-            { key: '6', sub: 'maint', label: '维护 >' },
-            ...(mac && s.hasComfy ? [{ key: '7', sub: 'comfy', label: '生图 >' }] : []),
+            { key: '4', sub: 'maint', label: '维护 >' },
+            { key: '5', sub: 'other', label: '其他 >' },
         ]],
+    };
+    const other = {
+        title: '其他',
+        note: '主线以外的功能：手机、TT、生图、导入。冻结维护，都还能用。',
+        items: [
+            { key: '1', sub: 'phone', label: '手机 >', note: '手机模式、手机同步、合盖不睡', why },
+            { key: '2', sub: 'guard', label: 'TT 守护 >', note: '手机上 TT 的备份和恢复', why },
+            ...(mac && s.hasComfy ? [{ key: '3', sub: 'comfy', label: '生图 >', note: '本地 ComfyUI' }] : []),
+            { group: '导入和工具' },
+            ...(s.canTTImport ? [{ key: '4', id: 'tt-import', label: '本机TT导入', note: '测试用：电脑酒馆 -> 这台 Mac 的 TauriTavern', why }] : []),
+            { key: '5', id: 'baibai-import', label: '柏宝绘配方导入', note: '把「提示词拆分」导出的配方写进酒馆和手机', why },
+            { key: '6', id: 'prompt-split', label: '提示词拆分', note: '打开本机网页工具', why },
+        ],
     };
     const phone = {
         title: '手机',
@@ -97,10 +114,10 @@ export function screens(s) {
             ? `${s.phoneMode ? '手机模式' + (s.watchdog ? '（守护中）' : '（守护没在运行）') : '电脑模式'}  ·  ${phoneText(s)}${s.lastSyncAt ? `  ·  上次同步 ${ago(s.lastSyncAt)}` : ''}`
             : '手机相关功能只支持 Mac。',
         items: [
-            { key: '1', id: 'phone-sync', label: '同步手机', note: `${s.hubLabel || '电脑'} <-> 手机：先预览，拿不准的问你`, why: mac ? null : MAC_ONLY },
-            { key: '2', id: 'phone-mode', label: s.phoneMode ? '切到电脑模式' : '切到手机模式', note: s.phoneMode ? '关掉防睡眠和掉线重启' : '同一 Wi-Fi 的手机用这台 Mac 的代理', why: mac ? null : MAC_ONLY },
+            { key: '1', id: 'phone-sync', label: '同步手机', note: `${s.hubLabel || '电脑'} <-> 手机：先预览，拿不准的问你`, why },
+            { key: '2', id: 'phone-mode', label: s.phoneMode ? '切到电脑模式' : '切到手机模式', note: s.phoneMode ? '关掉防睡眠和掉线重启' : '同一 Wi-Fi 的手机用这台 Mac 的代理', why },
             { group: '一次性设置' },
-            { key: '3', id: 'lid', label: '合盖不睡', note: s.lidInstalled ? '已安装 · 装 / 卸' : '没安装 · 装 / 卸（输一次密码）', why: mac ? null : MAC_ONLY },
+            { key: '3', id: 'lid', label: '合盖不睡', note: s.lidInstalled ? '已安装 · 装 / 卸' : '没安装 · 装 / 卸（输一次密码）', why },
         ],
     };
     const g = s.phoneTT;
@@ -112,10 +129,10 @@ export function screens(s) {
             '手机上的界面：KernelSU → 模块 → TT 守护（更新也在那里点）',
         ] : '只支持 Mac。',
         items: [
-            { key: '1', id: 'guard-status', label: '看状态', note: '版本、备份、有没有新版本', why: mac ? null : MAC_ONLY },
-            { key: '2', id: 'guard-pull', label: '立即拉一次备份', note: '手机上的新备份拷到电脑', why: !mac ? MAC_ONLY : s.hasModule ? null : NEED_REPO },
-            { key: '3', id: 'guard-auto', label: '电脑自动拉备份', note: s.pullJob?.installed ? '开着 · 关掉' : '没开 · 打开', why: !mac ? MAC_ONLY : s.hasModule ? null : NEED_REPO },
-            { key: '4', id: 'guard-restore', label: '从备份恢复', note: '选一份 → 确认 → 恢复（TT 要先关）', why: !mac ? MAC_ONLY : phoneOn(s) ? null : '手机没连' },
+            { key: '1', id: 'guard-status', label: '看状态', note: '版本、备份、有没有新版本', why },
+            { key: '2', id: 'guard-pull', label: '立即拉一次备份', note: '手机上的新备份拷到电脑', why: why ?? (s.hasModule ? null : NEED_REPO) },
+            { key: '3', id: 'guard-auto', label: '电脑自动拉备份', note: s.pullJob?.installed ? '开着 · 关掉' : '没开 · 打开', why: why ?? (s.hasModule ? null : NEED_REPO) },
+            { key: '4', id: 'guard-restore', label: '从备份恢复', note: '选一份 → 确认 → 恢复（TT 要先关）', why: why ?? (phoneOn(s) ? null : '手机没连') },
         ],
     };
     const comfy = {
@@ -127,23 +144,18 @@ export function screens(s) {
                 : { key: '1', id: 'comfy-start', label: '启动生图', note: '本地 ComfyUI，端口 8188' },
         ],
     };
-    const sub = (s.backend?.id ?? 'subscription') === 'subscription';
     const maint = {
         title: '维护',
         items: [
-            { key: '1', id: 'login', label: '登录 Claude', note: !sub ? `现在用 ${s.backend.label}，不用登录` : s.loggedIn ? `已登录${s.plan ? `（${s.plan}）` : ''}` : '浏览器登录订阅，一般只要一次' },
-            { key: '2', id: 'repair', label: '修复依赖', note: '报「缺少依赖 / Cannot find module」时' },
-            { key: '3', id: 'logs', label: '打开日志', note: '出错时附上最后几十行求助' },
-            { key: '4', id: 'autostart-toggle', label: '开机自动启动', note: s.autostart ? '已开 · 开 / 关' : '没开 · 开 / 关' },
-            { key: '5', id: 'stop', label: `关闭代理${withSt}`, note: '聊天记录都已保存' },
-            ...(mac ? [{ group: '工具' },
-                { key: '6', id: 'baibai-import', label: '导入柏宝绘配方', note: '把「提示词拆分」导出的配方写进酒馆和手机' },
-                { key: '7', id: 'prompt-split', label: '提示词拆分', note: '打开本机网页工具' },
-                ...(s.canTTImport ? [{ key: '8', id: 'tt-import', label: '本机TT导入', note: '测试用：电脑酒馆 -> 这台 Mac 的 TauriTavern' }] : []),
-            ] : []),
+            { key: '1', id: 'repair', label: '修复依赖', note: '报「缺少依赖 / Cannot find module」时' },
+            { key: '2', id: 'logs', label: '打开日志', note: '出错时附上最后几十行求助' },
+            { key: '3', id: 'autostart-toggle', label: '开机自动启动', note: s.autostart ? '已开 · 开 / 关' : '没开 · 开 / 关' },
+            { key: '4', id: 'stop', label: `关闭代理${withSt}`, note: '聊天记录都已保存' },
         ],
     };
-    return { home, phone, guard, comfy, maint };
+    let n = 0;
+    for (const it of other.items) if (!it.group) it.key = String(++n); // 按实际出现的项连续编号
+    return { home, other, phone, guard, comfy, maint };
 }
 
 function phoneText(s) {
@@ -155,7 +167,7 @@ function phoneText(s) {
     return { unauthorized: '手机待授权', noadb: '没找到 adb' }[s.phone] ?? '手机没连';
 }
 
-/** 首页状态三行：能不能玩、两边 TT、同步和备份。 */
+/** 首页状态：第一行能不能玩（+ 问题和修复键）；第二行酒馆在不在、地址；开着手机模式时才多手机 / TT 两行。 */
 export function statusLines(s, probs = problems(s)) {
     const blocked = probs.some((p) => p.block);
     const head = blocked ? c.bad('● 还不能玩') : probs.length ? c.warn('● 可以玩') : c.ok('● 可以玩');
@@ -173,9 +185,11 @@ export function statusLines(s, probs = problems(s)) {
         const act = p.fix || p.sub ? `→ ${p.fixLabel}` : c.dim(p.fixLabel);
         L.push(`    ${c.key(String.fromCharCode(97 + i))}  ${pad(p.text, w)}${act}`);
     });
-    if (OS !== 'mac') { L.push(`  ${c.dim('手机功能只支持 Mac')}`); return L; }
+    if (s.hasST === false) L.push(`  ${c.dim('酒馆：没找到酒馆目录（config.local 里设 ST_DIR）')}`);
+    else L.push(`  酒馆 ${s.stRunning ? `${c.ok('运行中')} · http://127.0.0.1:${s.stPort ?? 8000}` : c.dim('没运行')}`);
+    if (!s.phoneMode || macOnly()) return L;
     const tt = [s.hasTT ? `Mac TT ${s.macTTRunning ? '开着' : '没开'}` : null, phoneText(s),
-        s.phoneMode ? `手机模式${s.watchdog ? '' : '（守护没运行）'}` : null].filter(Boolean);
+        `手机模式${s.watchdog ? '' : '（守护没运行）'}`].filter(Boolean);
     L.push(`  ${tt.join(' · ')}`);
     const g = s.phoneTT;
     const more = [s.lastSyncAt ? `上次同步 ${ago(s.lastSyncAt)}` : '还没同步过',
@@ -332,6 +346,7 @@ async function main() {
     const plain = !process.stdin.isTTY || process.env.CCST_MENU_PLAIN === '1';
     if (!plain) emitKeypressEvents(process.stdin);
     let screen = 'home';
+    const trail = []; // 从哪一层进来的：返回时回到上一层，不是一律回首页
     let sel = 0;
     let msg = '';
     for (;;) {
@@ -361,20 +376,20 @@ async function main() {
         if (k === 'h') { openHelp(); continue; }
         if (key.name === 'up') { sel = Math.max(0, sel - 1); continue; }
         if (key.name === 'down') { sel = Math.min(view.actions.length - 1, sel + 1); continue; }
-        if (screen !== 'home' && (k === '0' || key.name === 'escape' || key.name === 'backspace' || key.name === 'left')) { screen = 'home'; sel = 0; continue; }
+        if (screen !== 'home' && (k === '0' || key.name === 'escape' || key.name === 'backspace' || key.name === 'left')) { screen = trail.pop() ?? 'home'; sel = 0; continue; }
 
         let item = null;
         if (key.name === 'return' || k === '\r') item = view.actions[sel] ?? null;
         else if (screen === 'home' && /^[a-z]$/.test(k) && view.probs?.[k.charCodeAt(0) - 97]) {
             const p = view.probs[k.charCodeAt(0) - 97];
-            if (p.sub) { screen = p.sub; sel = 0; continue; }
+            if (p.sub) { trail.push(screen); screen = p.sub; sel = 0; continue; }
             if (!p.fix) { msg = p.fixLabel; continue; }
             item = { id: p.fix, label: p.fixLabel };
         } else item = view.actions.find((a) => a.key === k) ?? null;
 
         if (!item) { if (k.trim()) msg = `没有「${k}」这一项`; continue; }
         if (item.why) { msg = `${item.label.replace(/ >$/, '')}：${item.why}`; continue; }
-        if (item.sub) { screen = item.sub; sel = 0; continue; }
+        if (item.sub) { trail.push(screen); screen = item.sub; sel = 0; continue; }
         if (!plain) process.stdout.write('\x1b[2J\x1b[H');
         const err = await run(item.id, {
             ask: async (q) => /^y/i.test((await readLine(`  ${q} (y/N) `)) ?? ''),

@@ -1,6 +1,6 @@
 // ──────────────────────────────────────────────
-// Tab 体检: latest reply check-up, the card check, hidden-setting words and the performance test.
-// The work itself is in features/checkup.js, card-audit.js and perf-diag.js.
+// Tab 体检: latest reply check-up, the card check and hidden-setting words.
+// The work itself is in features/checkup.js and card-audit.js. (The performance test moved to 其他.)
 // ──────────────────────────────────────────────
 
 import { el, iconButton, toggleRow, section } from '../core/dom.js';
@@ -15,6 +15,10 @@ export function buildCheckTab(pane, settings, save) {
     const checkBox = el('div', 'cm-stats');
     checkBox.id = 'claude_max_checkup';
     pane.append(checkBox);
+    pane.append(toggleRow({
+        id: 'claudeMaxCheckupToast', title: '体检有问题时提示', desc: '点一下关掉；同类点掉两次不再提示。',
+        checked: settings.checkupToast, onChange: (v) => { settings.checkupToast = v; save(); },
+    }));
     pane.append(el('small', 'cm-hint', '查字数、禁词、破折号、「不是A，是B」、人称、重复段落等；范围和禁词读自当前预设。'));
 
     const auditTools = el('div', 'cm-section-tools');
@@ -50,15 +54,4 @@ export function buildCheckTab(pane, settings, save) {
         unmute.addEventListener('click', (e) => { e.preventDefault(); settings.checkupMuted = {}; save(); unmute.remove(); });
         pane.append(el('small', 'cm-hint', '同类提示点掉两次就不再弹。'), unmute);
     }
-
-    const perfTools = el('div', 'cm-section-tools');
-    perfTools.append(iconButton('fa-gauge-high', '测一次（约 4 秒）', () => F.perf.showPerfDiag()));
-    pane.append(section('性能', perfTools));
-    const perfNote = el('small', 'cm-hint');
-    perfNote.id = 'claude_max_perf_note';
-    pane.append(perfNote);
-    F.perf.renderPerfNote(perfNote); // not in the document yet
-    const perfBox = el('div', 'cm-stats');
-    perfBox.id = 'claude_max_perf';
-    pane.append(perfBox);
 }

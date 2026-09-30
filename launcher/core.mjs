@@ -24,6 +24,10 @@ import { fileURLToPath } from 'node:url';
 export const HERE = dirname(fileURLToPath(import.meta.url));
 export const ROOT = join(HERE, '..');
 export const OS = process.platform === 'darwin' ? 'mac' : process.platform === 'win32' ? 'win' : 'linux';
+
+// 只有 Mac 才有的功能（手机、TT、合盖、生图…）统一从这里判断：null = 可用，字符串 = 灰着显示的原因。
+export const MAC_ONLY = '只支持 Mac';
+export const macOnly = (os = OS) => (os === 'mac' ? null : MAC_ONLY);
 export const IS_TERMUX = OS === 'linux' && /com\.termux/.test(process.env.PREFIX ?? '');
 export const VERSION = (() => { try { return JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).version; } catch { return '?'; } })();
 
@@ -267,6 +271,8 @@ export async function readState(deps = {}) {
         hubLabel: hub === 'tt' ? 'Mac TT' : '电脑酒馆',
         stManaged: !!cfg.stDir && cfg.stAutostart,
         stRunning: !!stUp,
+        hasST: !!cfg.stDir,
+        stPort: cfg.stPort,
         hasTT: mac && exists('/Applications/TauriTavern.app'),
         macTTRunning: on('mactt_running'),
         hasComfy: comfy,

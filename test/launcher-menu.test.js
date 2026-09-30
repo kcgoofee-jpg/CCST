@@ -41,7 +41,7 @@ test('home: Enter starts when the proxy is down, opens when it runs', () => {
 });
 
 test('image-generation group only when ComfyUI is installed (macOS)', () => {
-    const keys = (s) => screens(s).home.rows.flat().map((i) => i.sub).filter(Boolean);
+    const keys = (s) => screens(s).other.items.map((i) => i.sub).filter(Boolean);
     if (process.platform === 'darwin') {
         assert.ok(!keys(base).includes('comfy'));
         assert.ok(keys({ ...base, hasComfy: true }).includes('comfy'));
@@ -65,31 +65,67 @@ test('problems: other backends need no login but need their settings', () => {
 });
 
 test('problems: TT guard restoring / unfinished restore on the phone', () => {
-    assert.match(problems({ ...base, phoneTT: { restoring: true } })[0].text, /正在恢复/);
-    const p = problems({ ...base, phoneTT: { restorePending: true } })[0];
+    if (!mac) return;
+    assert.match(problems({ ...base, phoneMode: true, watchdog: true, phoneTT: { restoring: true } })[0].text, /正在恢复/);
+    const p = problems({ ...base, phoneMode: true, watchdog: true, phoneTT: { restorePending: true } })[0];
     assert.equal(p.sub, 'guard');
     assert.equal(p.block, undefined);   // 不影响玩
+    // 没开手机模式：这些提醒不出现在首页
+    assert.deepEqual(problems({ ...base, phoneTT: { restoring: true } }), []);
 });
 
-test('home: can I play / what is wrong / what next', () => {
-    const s = { ...base, proxyVersion: '9.9.9', macTTRunning: true, phone: 'usb', lastSyncAt: new Date(Date.now() - 2 * 3600e3),
-        phoneTT: { ttRunning: true, generating: true, root: true, guardVersion: '1.9', guardLastBackup: new Date(), restoring: false, restorePending: false } };
-    const ok = statusLines({ ...s, proxyVersion: null });
+test('home: line 1 can-play, line 2 SillyTavern; phone lines only in phone mode', () => {
+    const st = { ...base, stRunning: true, stPort: 8000, hasST: true };
+    const ok = statusLines(st);
+    assert.equal(ok.length, 2);
     assert.match(ok[0], /● 可以玩 +代理 \? · 订阅 · 已登录（Max）/);
-    if (mac) {
-        assert.match(ok[1], /Mac TT 开着 · 手机 TT 在线（在生成回复）/);
-        assert.match(ok[2], /上次同步 2 小时前 · TT 守护上次备份 \d\d:\d\d/);
-    }
-    const down = statusLines({ ...s, proxy: false });
+    assert.match(ok[1], /酒馆 运行中 · http:\/\/127\.0\.0\.1:8000/);
+    assert.match(statusLines({ ...st, stRunning: false })[1], /酒馆 没运行/);
+    assert.match(statusLines({ ...st, hasST: false })[1], /没找到酒馆目录/);
+    const down = statusLines({ ...st, proxy: false });
     assert.match(down[0], /● 还不能玩 +代理没运行/);
     assert.match(down[1], /a  代理没在运行 +→ 启动代理/);
-    const home = renderHome(s);
+    assert.match(down[2], /酒馆/);
+    const phoneMode = statusLines({ ...st, phoneMode: true, watchdog: true, macTTRunning: true, phone: 'usb', lastSyncAt: new Date(Date.now() - 2 * 3600e3),
+        phoneTT: { ttRunning: true, generating: true, root: true, guardVersion: '1.9', guardLastBackup: new Date() } });
+    if (mac) {
+        assert.equal(phoneMode.length, 4);
+        assert.match(phoneMode[2], /Mac TT 开着 · 手机 TT 在线（在生成回复） · 手机模式/);
+        assert.match(phoneMode[3], /上次同步 2 小时前 · TT 守护上次备份 \d\d:\d\d/);
+    } else {
+        assert.equal(phoneMode.length, 2);
+    }
+});
+
+test('home menu tree: Enter / 1 restart / 2 check / 3 login / 4 maintenance / 5 other', () => {
+    const home = renderHome(base);
     assert.match(home.text, /CCST 酒馆工具 v\d+\.\d+/);
     assert.match(home.text, /回车  打开 TT/);
-    assert.deepEqual(home.actions.map((a) => a.key ?? 'enter'), ['enter', '1', '2', '3', '4', '5', '6']);
-    assert.equal(home.actions[1].id, 'phone-sync');
-    assert.equal(home.actions[5].sub, 'guard');
-    if (!mac) assert.ok(home.actions[1].why);
+    assert.deepEqual(home.actions.map((a) => a.key ?? 'enter'), ['enter', '1', '2', '3', '4', '5']);
+    assert.deepEqual(home.actions.map((a) => a.id ?? a.sub), ['start', 'restart', 'check', 'login', 'maint', 'other']);
+    // phone / TT guard / sync are no longer on the home page
+    assert.ok(!home.actions.some((a) => ['phone-sync', 'phone', 'guard'].includes(a.id ?? a.sub)));
+});
+
+test('maintenance: repair, logs, autostart, stop — login moved home', () => {
+    const ids = screens(base).maint.items.map((i) => i.id);
+    assert.deepEqual(ids, ['repair', 'logs', 'autostart-toggle', 'stop']);
+});
+
+test('other: phone / TT guard / (ComfyUI) submenus and the import tools, numbered in order', () => {
+    const o = screens({ ...base, hasComfy: true, canTTImport: true }).other.items.filter((i) => !i.group);
+    if (mac) {
+        assert.deepEqual(o.map((i) => i.sub ?? i.id), ['phone', 'guard', 'comfy', 'tt-import', 'baibai-import', 'prompt-split']);
+        assert.ok(o.every((i) => !i.why));
+    } else {
+        assert.deepEqual(o.map((i) => i.sub ?? i.id), ['phone', 'guard', 'tt-import', 'baibai-import', 'prompt-split']);
+        assert.ok(o.every((i) => i.why === '只支持 Mac'));
+    }
+    assert.deepEqual(o.map((i) => i.key), o.map((_, i) => String(i + 1)));
+    // no TauriTavern import when there is nothing to import
+    assert.ok(!screens(base).other.items.some((i) => i.id === 'tt-import'));
+    // phone submenu keeps mode, sync and lid
+    assert.deepEqual(screens(base).phone.items.filter((i) => !i.group).map((i) => i.id), ['phone-sync', 'phone-mode', 'lid']);
 });
 
 test('TT guard screen: version vs latest, auto pull, KernelSU hint', () => {
