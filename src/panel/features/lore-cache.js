@@ -86,7 +86,7 @@ async function convertLore(name, book, backup) {
         ctx.reloadWorldInfoEditor?.(name);
         notify('ok', `「${name}」已设为常驻`, `${changed} 条改为常驻，备份在「${backup}」。`, { ms: 8000 });
     } catch (err) {
-        notify('bad', '没改成', String(err instanceof Error ? err.message : err));
+        notify('bad', '世界书没改成', String(err instanceof Error ? err.message : err));
     }
     refreshLoreBox();
 }
@@ -101,7 +101,7 @@ async function restoreLore(name, backup) {
         ctx.reloadWorldInfoEditor?.(name);
         notify('ok', `「${name}」已恢复`, '备份仍保留，不需要时可在世界书列表里删除。', { ms: 8000 });
     } catch (err) {
-        notify('bad', '没恢复成', String(err instanceof Error ? err.message : err));
+        notify('bad', '世界书没恢复成', String(err instanceof Error ? err.message : err));
     }
     refreshLoreBox();
 }

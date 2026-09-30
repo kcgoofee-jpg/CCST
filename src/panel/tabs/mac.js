@@ -64,7 +64,7 @@ export async function refreshMac() {
                 const r = await res.json().catch(() => ({}));
                 notify(res.ok ? 'ok' : 'warn', `Mac · ${label}`, String(r.message ?? `HTTP ${res.status}`));
             } catch {
-                notify('warn', `Mac · ${label}`, '没发出去：连不上代理');
+                notify('warn', `Mac · ${label}`, '没发出去：连不上代理，请确认它还在运行');
             } finally {
                 b.disabled = false;
                 setTimeout(refreshMac, action === 'restart-proxy' ? 6000 : 1500);
@@ -104,7 +104,7 @@ export async function refreshMac() {
             pre.hidden = false;
             copyBtn.style.display = '';
         } catch {
-            notify('warn', 'Mac · 看日志', '取日志失败');
+            notify('warn', 'Mac · 看日志', '没取到日志：连不上代理');
         }
     });
     row.append(logBtn, copyBtn);

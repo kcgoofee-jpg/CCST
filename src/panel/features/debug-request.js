@@ -12,7 +12,7 @@ export async function showDebugRequest() {
         const res = await fetchProxy('/debug', '/v1/debug/last');
         data = await res.json();
     } catch (err) {
-        notify('bad', '读取失败', String(err instanceof Error ? err.message : err));
+        notify('bad', '没读到发给模型的请求', String(err instanceof Error ? err.message : err));
         return;
     }
     if (!data?.ok) {

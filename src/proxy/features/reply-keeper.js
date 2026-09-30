@@ -72,7 +72,7 @@ export function cancelReply(slot) {
 
 export function handleCancelReply(req, res) {
     const slot = String(req.params?.slot ?? '');
-    if (!isValidSlot(slot)) return res.status(400).json({ ok: false, message: 'invalid slot' });
+    if (!isValidSlot(slot)) return res.status(400).json({ ok: false, message: '回复编号无效' });
     res.json({ ok: true, cancelled: cancelReply(slot) });
 }
 

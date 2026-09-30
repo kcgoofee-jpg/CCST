@@ -15,7 +15,7 @@ test('common upstream errors get Chinese explanations', () => {
     assert.equal(explainError('Extra usage is required for 1M context').code, 'extra_usage');
     assert.equal(explainError('something odd').code, 'unknown');
     const text = formatErrorForUser('Not logged in · Please run /login');
-    assert.match(text, /^【CCST】Claude 订阅未登录/);
+    assert.match(text, /^【CCST】Claude 订阅没登录/);
     assert.match(text, /原始错误：Not logged in/);
 });
 
@@ -93,4 +93,13 @@ test('promptShape run-length encodes roles without content', async () => {
     const { promptShape } = await import('../src/proxy/features/usage-stats.js');
     const S = { role: 'system', content: 'x' }, U = { role: 'user', content: 'y' }, A = { role: 'assistant', content: 'z' };
     assert.equal(promptShape([S, S, S, A, S, U, A, U]), 'S3 A1 S1 U1 A1 U1');
+});
+
+test('user-facing failure texts: no preset names, no English sentences, plugin-first login help', () => {
+    const cot = explainError('safeguards flagged: reasoning_extraction');
+    assert.doesNotMatch(cot.hint, /十四行诗/);
+    const login = explainError('Not logged in');
+    assert.match(login.hint, /SillyTavern\/plugins\/CCST/);
+    assert.ok(login.hint.indexOf('npm run login') < login.hint.indexOf('酒馆工具'));
+    assert.match(explainError('???').message, /原因不明/);
 });

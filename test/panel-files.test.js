@@ -25,7 +25,7 @@ test('the auto-installed extension carries every panel and shared file, and noth
     // src/shared also holds proxy-only helpers: only the ones core/libs.js loads travel with the panel.
     const libs = readFileSync(join(root, 'src/panel/core/libs.js'), 'utf8');
     const shared = [...libs.matchAll(/'([\w-]+\.js)'/g)].map((m) => `src/shared/${m[1]}`);
-    assert.ok(shared.length >= 7);
+    assert.ok(shared.length >= 6);
     const needed = [...walk(join(root, 'src/panel')).map(rel), ...shared];
     const missing = needed.filter((f) => !listed.has(f));
     assert.deepEqual(missing, [], `not in UI_EXTENSION_FILES: ${missing.join(', ')}`);

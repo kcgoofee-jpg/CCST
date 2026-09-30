@@ -25,7 +25,7 @@ export function quietSweep() {
         for (const a of doc.getAnimations?.() ?? []) {
             const t = a.effect?.target;
             if (a.playState !== 'running' || a.effect?.getTiming?.().iterations !== Infinity || !t) continue;
-            if (doc === document && (t.closest?.('#chat .last_mes, #send_form, .claude-max, .cm-island') || !t.closest?.('body'))) continue;
+            if (doc === document && (t.closest?.('#chat .last_mes, #send_form, .claude-max') || !t.closest?.('body'))) continue;
             if (QUIET_KEEP.test(`${a.animationName ?? ''} ${t.className?.baseVal ?? t.className ?? ''}`)) continue;
             const done = Math.floor((a.currentTime ?? 0) / (a.effect.getTiming().duration || 1)) + 1;
             a.effect.updateTiming({ iterations: done });

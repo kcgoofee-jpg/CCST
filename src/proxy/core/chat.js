@@ -495,7 +495,7 @@ export async function handleChatCompletions(req, res) {
     if (!Array.isArray(messages) || messages.length === 0 || !body.model
         || messages.some((m) => !m || typeof m !== 'object' || Array.isArray(m))) {
         return res.status(400).json({
-            error: { message: 'messages[] (non-empty, message objects) and model are required', type: 'invalid_request_error' },
+            error: { message: '请求格式不对：需要 messages（非空的消息列表）和 model。', type: 'invalid_request_error' },
         });
     }
 
@@ -889,8 +889,7 @@ async function completeChat(req, res, body, settings, conn) {
 export function rejectEmbeddings(_req, res) {
     return res.status(501).json({
         error: {
-            message: 'The Claude (Subscription) proxy does not support embeddings. ' +
-                'Configure a separate embedding source (OpenAI, Google, or local).',
+            message: 'CCST 代理不支持向量嵌入（embeddings）。请在酒馆里另外设置向量来源（OpenAI、Google 或本地模型）。',
             type: 'not_supported',
         },
     });

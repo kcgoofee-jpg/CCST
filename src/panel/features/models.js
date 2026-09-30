@@ -113,7 +113,7 @@ export function modelRow() {
                 return;
             }
             renderGlance();
-            notify('info', `已切到 ${shortModel(id)}`, '到下次切换预设为止。', { ms: 6000 });
+            notify('info', `已切到 ${shortModel(id)}`, `这次聊天用 ${shortModel(id)}；切换到自带模型设置的预设时会改回预设的模型。`, { ms: 6000 });
         },
     });
     row.id = 'claude_max_model';
@@ -132,7 +132,7 @@ export function applyPresetModel(model) {
     const id = modelBase(model) + (/\[1m\]$/i.test(cur ?? '') ? '[1m]' : '');
     if (!setModel(id)) return;
     renderGlance();
-    notify('info', `预设用 ${shortModel(id)}`, '临时换：在「推理」页点另一个。', { ms: 5000 });
+    notify('info', `这个预设用 ${shortModel(id)}`, '预设自带模型设置，已自动选上。想换的话在「推理」页点另一个模型。', { ms: 5000 });
 }
 
 /** The model row exists only while ST is on a Claude source: rebuild when that flips. */

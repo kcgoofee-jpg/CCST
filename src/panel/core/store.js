@@ -61,6 +61,7 @@ export const store = createStore({
     statsAt: 0,
     backend: { phase: 'idle' },
     glance: { quota: null, cache: null, issues: null },
+    gen: { kind: 'idle' }, // the reply being written: idle | thinking | writing | done (features/gen-progress.js)
     nextEffort: null,      // one-shot effort for the next reply (memory only)
     pulse: 0,
 });

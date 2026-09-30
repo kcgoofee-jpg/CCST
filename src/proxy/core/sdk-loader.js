@@ -22,10 +22,8 @@ export function loadSdk() {
             cachedSdk = null;
             const msg = err instanceof Error ? err.message : String(err);
             throw new Error(
-                'Failed to load @anthropic-ai/claude-agent-sdk. Run `npm install` inside the plugin ' +
-                'directory (plugins/CCST) WITHOUT --omit=optional, restart ' +
-                'SillyTavern, and make sure `claude login` has been run once on this host. ' +
-                `Underlying error: ${msg}`,
+                '没能加载 Claude SDK（@anthropic-ai/claude-agent-sdk）。在 SillyTavern/plugins/CCST 文件夹里运行 npm install（不要加 --omit=optional），' +
+                `然后重启酒馆，并确认这台电脑上登录过一次 Claude。底层错误：${msg}`,
             );
         });
     }

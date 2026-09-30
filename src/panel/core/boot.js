@@ -3,10 +3,8 @@
 // store, building the panel, the heartbeat, and the SillyTavern events.
 // ──────────────────────────────────────────────
 
-import { store } from './store.js';
 import { getSettings } from './settings.js';
 import { IS_TAURI } from './capabilities.js';
-import { ui } from './notify.js';
 import { F, loadedFeatures } from './registry.js';
 import { refreshAll, refreshStatus, startHeartbeat, heartbeat } from './live.js';
 import { wireEvents } from './events.js';
@@ -27,14 +25,6 @@ export const libHooks = {
         if (document.querySelector('.inline-drawer.claude-max')) rebuildPanel();
         refreshAll();
         F.models.fillMissingClaudeModels();
-    },
-    // 灵动岛 (shared/island.js): one morphing pill at the top of the CCST panel (never over the chat).
-    // It shows the reply being generated and, while the panel is open, the notices; with the panel
-    // closed notices are ordinary toasts.
-    islandLib: (m) => {
-        ui.island = m.createIsland(document);
-        ui.island.set({ online: store.get().proxyOnline });
-        ui.island.mount(document.getElementById('claude_max_island_slot'));
     },
 };
 

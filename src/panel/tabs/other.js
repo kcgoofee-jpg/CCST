@@ -25,7 +25,7 @@ function usageNotes() {
         ...(IS_TAURI ? [] : [`默认地址 ${DEFAULT_ENDPOINT} 时，其他设备打开的酒馆经酒馆服务器读额度和状态。`]),
         '不支持温度、Top-P 等采样参数（Agent SDK 限制）。',
         '「(1M context)」模型有 100 万上下文；不可用时自动退回普通版一小时。',
-        '直连 Claude（官方源、OpenRouter、Electron Hub、NanoGPT、AI/ML API、CometAPI、自定义地址）也能用：模型切换、按模型调整预设、发送前检查、体检、灵动岛照常；缓存排布、防丢回复、额度统计要走代理。',
+        '直连 Claude（官方源、OpenRouter、Electron Hub、NanoGPT、AI/ML API、CometAPI、自定义地址）也能用：模型切换、按模型调整预设、发送前检查、体检照常；缓存排布、防丢回复、额度统计要走代理。',
     ]) list.append(el('li', null, line));
     body.append(list);
     return root;

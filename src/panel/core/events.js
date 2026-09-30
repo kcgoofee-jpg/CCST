@@ -57,11 +57,11 @@ export function wireEvents({ eventSource, eventTypes }) {
     eventSource.on(eventTypes.OAI_PRESET_CHANGED_AFTER, () => F.presets.applyPresetRecommendation());
     if (eventTypes.CHATCOMPLETION_MODEL_CHANGED) eventSource.on(eventTypes.CHATCOMPLETION_MODEL_CHANGED, () => setTimeout(() => F.presets.applyModelProfile(), 150));
     const genStartEvent = eventTypes.GENERATION_AFTER_COMMANDS ?? eventTypes.GENERATION_STARTED;
-    if (genStartEvent) eventSource.on(genStartEvent, (...a) => F.island.islandGenStart(...a));
-    if (eventTypes.STREAM_TOKEN_RECEIVED) eventSource.on(eventTypes.STREAM_TOKEN_RECEIVED, (...a) => F.island.islandToken(...a));
-    eventSource.on(eventTypes.MESSAGE_RECEIVED, onOwnReply(() => setTimeout(() => F.island.islandGenEnd(), 50)));
-    if (eventTypes.GENERATION_STOPPED) eventSource.on(eventTypes.GENERATION_STOPPED, () => F.island.islandStopped());
-    if (eventTypes.GENERATION_ENDED) eventSource.on(eventTypes.GENERATION_ENDED, () => setTimeout(() => F.island.islandGenEnd(), 100));
+    if (genStartEvent) eventSource.on(genStartEvent, (...a) => F.progress.genStart(...a));
+    if (eventTypes.STREAM_TOKEN_RECEIVED) eventSource.on(eventTypes.STREAM_TOKEN_RECEIVED, (...a) => F.progress.genToken(...a));
+    eventSource.on(eventTypes.MESSAGE_RECEIVED, onOwnReply(() => setTimeout(() => F.progress.genEnd(), 50)));
+    if (eventTypes.GENERATION_STOPPED) eventSource.on(eventTypes.GENERATION_STOPPED, () => F.progress.genStopped());
+    if (eventTypes.GENERATION_ENDED) eventSource.on(eventTypes.GENERATION_ENDED, () => setTimeout(() => F.progress.genEnd(), 100));
     if (eventTypes.APP_READY) eventSource.on(eventTypes.APP_READY, () => F.presets.adoptUnrecordedReco());
     // After a sync or a fresh start the preset may already be one with a per-model profile: apply it once.
     if (eventTypes.APP_READY) eventSource.on(eventTypes.APP_READY, () => setTimeout(() => F.presets.applyModelProfile(), 1500));

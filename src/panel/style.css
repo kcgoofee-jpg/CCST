@@ -540,11 +540,12 @@
     gap: 2px;
     padding: 2px;
     border-radius: 10px;
-    background: var(--cm-soft);
+    /* Sticky over scrolling content: the tint must sit on the opaque floor, or the content shows through. */
+    background: color-mix(in srgb, var(--cm-text) 8%, var(--cm-solid));
     position: sticky;
     top: 0;
     z-index: 2;
-    backdrop-filter: blur(6px);
+    box-shadow: 0 1px 0 var(--cm-line), 0 4px 6px -4px rgba(0, 0, 0, 0.35);
 }
 
 .claude-max .cm-tab {
@@ -776,44 +777,7 @@ body.cm-quiet #chat > .mes:not(.last_mes) *::before,
 body.cm-quiet #chat > .mes:not(.last_mes) *::after { animation-iteration-count: 1 !important; }
 body.cm-quiet #chat > .mes:not(.last_mes) * { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
 
-/* ── 灵动岛 (lib/island.js): lives at the top of the CCST panel ── */
-.cm-island-slot { display: flex; justify-content: center; margin: 2px 0 8px; min-height: 20px; }
-/* 空闲时（只剩一个点）整块不占位置：在线与否标题旁的点已经表示了，只在生成、完成、有提示时出现 */
-.cm-island-slot:has(> .cm-island[data-shape="dot"]) { display: none; }
-.cm-island {
-    position: relative;
-    overflow: hidden;
-    background: #0d0d0d;
-    color: #f4f4f2;
-    font: 500 13px/1.3 -apple-system, BlinkMacSystemFont, "Geist", "PingFang SC", "Noto Sans SC", sans-serif;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, .22);
-    user-select: none;
-    -webkit-user-select: none;
-    contain: layout paint;
-}
-.cm-island[data-shape="dot"] { border-radius: 99px; box-shadow: none; background: transparent; }
-.cm-island[data-shape="pill"] { border-radius: 99px; }
-.cm-island[data-shape="card"] { border-radius: 20px; max-width: 100%; }
-.cm-island.cm-isl-tappable { cursor: pointer; }
-.cm-island-body { position: relative; }
-.cm-isl-ghost { position: absolute; inset: 0; pointer-events: none; }
-.cm-isl-content { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
-.cm-isl-dot { width: 8px; height: 8px; margin: 3px; border-radius: 50%; background: #3ecf6e; opacity: .45; }
-.cm-island[data-online="false"] .cm-isl-dot { background: #ff5a4e; opacity: .85; }
-.cm-island[data-online="null"] .cm-isl-dot { opacity: 0; }
-.cm-isl-live, .cm-isl-done { height: 32px; padding: 0 14px 0 12px; }
-.cm-isl-num { font-variant-numeric: tabular-nums; opacity: .7; }
-.cm-isl-pulse { width: 8px; height: 8px; border-radius: 50%; background: #f4f4f2; animation: cm-isl-pulse 1.1s ease-in-out infinite; }
-@keyframes cm-isl-pulse { 50% { opacity: .25; transform: scale(.7); } }
-.cm-isl-done .cm-isl-icon { color: #3ecf6e; }
-.cm-isl-notice { padding: 10px 16px 10px 14px; white-space: normal; align-items: flex-start; }
-.cm-isl-notice .cm-isl-icon { margin-top: 2px; }
-.cm-isl-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.cm-isl-text small { opacity: .72; font-size: 12px; font-weight: 400; }
-.cm-isl-ok .cm-isl-icon { color: #3ecf6e; }
-.cm-isl-info .cm-isl-icon { color: #8ab4ff; }
-.cm-isl-warn .cm-isl-icon { color: #ffc24a; }
-.cm-isl-bad .cm-isl-icon { color: #ff5a4e; }
-@media (prefers-reduced-motion: reduce) { .cm-isl-pulse { animation: none; } }
-
-.cm-isl-text small { white-space: pre-line; }
+/* 生成进度占用状态栏那一行：思考中 / 写作中 / 完成 */
+.claude-max .cm-bar[data-gen="thinking"] .cm-bar-model,
+.claude-max .cm-bar[data-gen="writing"] .cm-bar-model { color: var(--cm-accent); font-variant-numeric: tabular-nums; }
+.claude-max .cm-bar[data-gen="done"] .cm-bar-model { color: color-mix(in srgb, var(--cm-ok) 75%, var(--cm-text)); font-variant-numeric: tabular-nums; }

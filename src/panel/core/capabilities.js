@@ -122,3 +122,12 @@ export function classifyRequest(data, settings, sources = null) {
         : data.chat_completion_source === 'claude' || (data.chat_completion_source === 'openrouter' && CLAUDE_OPENROUTER.test(String(data.model ?? ''))));
     return { ours, direct };
 }
+
+/** The status bar's text while a reply is being written or has just finished; '' when idle. */
+export function genLine(gen) {
+    if (!gen || gen.kind === 'idle') return '';
+    const n = (v) => Number(v).toLocaleString('en-US');
+    if (gen.kind === 'thinking') return `思考中 ${Math.max(0, Math.round((Date.now() - gen.startedAt) / 1000))} 秒`;
+    if (gen.kind === 'writing') return `写作中 ${n(gen.chars ?? 0)} 字`;
+    return ['完成', gen.chars != null ? `${n(gen.chars)} 字` : null, gen.seconds != null ? `${gen.seconds} 秒` : null, gen.cache != null ? `缓存 ${Math.round(gen.cache)}%` : null].filter(Boolean).join(' · ');
+}

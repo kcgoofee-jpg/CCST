@@ -13,12 +13,11 @@ export const libs = {
     presetReco: null,    // 预设推荐 (shared/preset-reco.js)
     hostCheck: null,     // 云端酒馆检测 (shared/host.js)
     sources: null,       // 哪些来源连 Claude、模型名、缓存 (shared/sources.js)
-    islandLib: null,     // 灵动岛 (shared/island.js)
 };
 
 const FILES = {
     chatCheck: 'chat-check.js', loreConst: 'lore-constant.js', cardAudit: 'card-audit.js', presetReco: 'preset-reco.js',
-    hostCheck: 'host.js', sources: 'sources.js', islandLib: 'island.js',
+    hostCheck: 'host.js', sources: 'sources.js',
 };
 
 /** Start loading every helper; `hooks[name](module)` runs when that one arrives. */

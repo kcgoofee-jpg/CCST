@@ -11,9 +11,10 @@ import { IS_TAURI, cloudHosted, normalizeEndpoint } from './core/capabilities.js
 import { libs } from './core/libs.js';
 import { F } from './core/registry.js';
 import { connectionInfo, shortModel } from './core/connection.js';
+import { genLine } from './core/capabilities.js';
 import { effectiveEffort } from './core/inject.js';
 import { el, note } from './core/dom.js';
-import { notify, ui, flushIsland } from './core/notify.js';
+import { notify } from './core/notify.js';
 import { refreshAll, refreshStatus, refreshStats } from './core/live.js';
 import { buildReasonTab } from './tabs/reason.js';
 import { buildStatusTab } from './tabs/status.js';
@@ -78,12 +79,12 @@ export async function connect(settings) {
             if (!ok) return;
         }
         applyConnection(settings);
-        notify('ok', '正在连接', '稍后在「API 连接」里选模型。', { replace: 'connect' });
+        notify('ok', '正在连接', '会自动选 Opus 4.6，并保存成「CCST」连接配置。', { replace: 'connect' });
         await connectProfile(settings);
         setTimeout(refreshAll, 800);
     } catch (err) {
         console.error('[claude-max] connect failed', err);
-        notify('bad', '连接失败', String(err), { replace: 'connect' });
+        notify('bad', '一键连接没成功', `${String(err?.message ?? err)}。可以到「API 连接」手动选「自定义」来源，地址填上面的代理地址。`, { replace: 'connect' });
     }
 }
 
@@ -106,11 +107,11 @@ async function connectProfile(settings) {
             hasCommands: () => !!(ctx.executeSlashCommandsWithOptions && parser?.commands?.['profile-create'] && parser.commands['profile-list']),
         });
         if (res.ok) notify('ok', '连接配置', profileNotice({ existed: res.existed, modelOk }), { ms: 12000, replace: 'connect-profile' });
-        else if (res.reason === 'no-connection-manager') notify('warn', '没建连接配置', '酒馆的「连接管理器」扩展没开，没能建「CCST」配置；已连上代理，请到「API 连接」选模型。', { ms: 10000, replace: 'connect-profile' });
-        else notify('warn', '没建连接配置', '酒馆没有接受建「CCST」配置；已连上代理，请到「API 连接」核对后自己存一个。', { ms: 10000, replace: 'connect-profile' });
+        else if (res.reason === 'no-connection-manager') notify('warn', '已连上代理，但没保存连接配置', '酒馆的「连接管理器」扩展没开，存不了「CCST」配置。不影响聊天；模型请到「API 连接」里选。', { ms: 10000, replace: 'connect-profile' });
+        else notify('warn', '已连上代理，但没保存连接配置', '酒馆没接受「CCST」配置。不影响聊天；想保留的话，到「API 连接」核对后自己存一个。', { ms: 10000, replace: 'connect-profile' });
     } catch (err) {
         console.error('[claude-max] connection profile failed', err);
-        notify('warn', '没建连接配置', `已连上代理，但建「CCST」配置出错：${String(err?.message ?? err)}`, { ms: 10000, replace: 'connect-profile' });
+        notify('warn', '已连上代理，但没保存连接配置', `保存「CCST」配置时出错：${String(err?.message ?? err)}。不影响聊天。`, { ms: 10000, replace: 'connect-profile' });
     }
 }
 
@@ -128,7 +129,7 @@ const planOf = (cred) => SUBSCRIPTION_LABELS[cred?.subscriptionType] ?? cred?.su
 /** The header summary of the collapsed drawer and the status bar say the same thing:
  *  dot · model · where/billing · 5h quota. Clicking the bar opens 状态. */
 export function renderGlance() {
-    const { nextEffort, glance } = store.get();
+    const { nextEffort, glance, gen } = store.get();
     const { connected, direct, model, where, billing } = connectionInfo();
     const linked = connected || direct;
     const settings = getSettings();
@@ -143,15 +144,25 @@ export function renderGlance() {
     const bar = document.getElementById('claude_max_bar_sum');
     if (bar) {
         const q = glance.quota;
-        bar.replaceChildren(el('b', 'cm-bar-model', linked ? (model ? shortModel(model) : '未选模型') : '未连接'));
-        if (linked && where) bar.append(el('span', 'cm-bar-src', `${where} · ${billing}`));
-        // One-off boost: the only effort worth a place in the bar, because it expires by itself.
-        if (connected && nextEffort) bar.append(el('span', 'cm-bar-effort', `下一轮${EFFORT_LABEL[effort]}`));
-        // The 5h window is the subscription's: beside an API key or OpenRouter it says nothing.
-        if (q != null && !direct) {
-            const quota = el('span', 'cm-bar-quota', `5h ${q}%`);
-            if (q >= 70) quota.dataset.tone = q >= 90 ? 'error' : 'warn';
-            bar.append(quota);
+        const progress = genLine(gen);
+        const barBtn = document.getElementById('claude_max_bar');
+        if (progress) {
+            // A reply is being written (or just finished): the bar says so in place of the model.
+            if (barBtn) barBtn.dataset.gen = gen.kind;
+            bar.replaceChildren(el('b', 'cm-bar-model', progress));
+            if (linked && model) bar.append(el('span', 'cm-bar-src', shortModel(model)));
+        } else {
+            barBtn?.removeAttribute('data-gen');
+            bar.replaceChildren(el('b', 'cm-bar-model', linked ? (model ? shortModel(model) : '未选模型') : '未连接'));
+            if (linked && where) bar.append(el('span', 'cm-bar-src', `${where} · ${billing}`));
+            // One-off boost: the only effort worth a place in the bar, because it expires by itself.
+            if (connected && nextEffort) bar.append(el('span', 'cm-bar-effort', `下一轮${EFFORT_LABEL[effort]}`));
+            // The 5h window is the subscription's: beside an API key or OpenRouter it says nothing.
+            if (q != null && !direct) {
+                const quota = el('span', 'cm-bar-quota', `5h ${q}%`);
+                if (q >= 70) quota.dataset.tone = q >= 90 ? 'error' : 'warn';
+                bar.append(quota);
+            }
         }
     }
     // The check-up result lives on its tab: a count badge instead of another status block.
@@ -169,8 +180,8 @@ export function renderGlance() {
 
 const STEPS = {
     login: [
-        '「酒馆工具」按 3 登录 Claude，在浏览器里完成登录。',
-        '或在代理目录运行 npm run login。',
+        { text: '在 SillyTavern/plugins/CCST 文件夹里运行下面的命令，在弹出的浏览器里登录 Claude：', cmd: 'npm run login' },
+        '用一键安装包装的：打开「酒馆工具」，按 3 登录 Claude。',
     ],
 };
 
@@ -402,10 +413,9 @@ export function addExtensionSettings(settings) {
     drawer.append(toggle, drawerContent);
     container.append(drawer);
 
-    // Refresh live data whenever the drawer is opened; closed with notices
-    // still in the pill → they become toasts.
+    // Refresh live data whenever the drawer is opened.
     toggle.addEventListener('click', () => setTimeout(() => {
-        if (drawerContent.offsetParent === null) return flushIsland();
+        if (drawerContent.offsetParent === null) return;
         refreshAll();
         refreshMac(); // decides whether 其他 shows the Mac section
     }, 50));
@@ -451,10 +461,7 @@ export function addExtensionSettings(settings) {
         bar.append(b);
     }
 
-    const islandSlot = el('div', 'cm-island-slot');
-    islandSlot.id = 'claude_max_island_slot';
-    content.append(islandSlot, buildStatusBar((k) => showTab(k)), bar, ...TABS.map(([k]) => panes[k]));
-    ui.island?.mount(islandSlot);
+    content.append(buildStatusBar((k) => showTab(k)), bar, ...TABS.map(([k]) => panes[k]));
     showTab(savedTab(), false);
     renderConnect();
     renderGlance();
@@ -484,7 +491,7 @@ export function renderStatus() {
 /** Subscribe the shell's own drawing to the store (once; the drawing looks its DOM up by id, so a rebuilt panel needs nothing). */
 export function initShell() {
     store.subscribe('status', () => renderStatus());
-    store.subscribe(['glance', 'nextEffort'], () => renderGlance());
+    store.subscribe(['glance', 'nextEffort', 'gen'], () => renderGlance());
     // A full refresh: re-read what SillyTavern is connected to (the connect note; the tabs' own pulse
     // listeners draw the cache card, lore box, check-up and card check).
     store.subscribe('pulse', () => { renderConnect(); renderGlance(); });

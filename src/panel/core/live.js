@@ -11,7 +11,7 @@ import { normalizeEndpoint } from './capabilities.js';
 import { fetchProxy, timeoutSignal } from './proxy.js';
 import { IS_TAURI } from './capabilities.js';
 import { connectionInfo } from './connection.js';
-import { notify, ui, flushIsland, clearNotice } from './notify.js';
+import { notify, clearNotice } from './notify.js';
 import { F } from './registry.js';
 import { chatKeyOf } from './chat-key.js';
 import { quotaGate, QUOTA_MIN_GAP_MS } from './quota-gate.js';
@@ -33,8 +33,8 @@ export function versionMismatch(proxyVersion, panelV = panelVersion) {
     if (pa === xa && pb === xb) return null;
     const proxyOlder = xa < pa || (xa === pa && xb < pb);
     return proxyOlder
-        ? `代理 v${proxyVersion} 旧于面板 v${panelV}：「酒馆工具」里重启代理（ZIP 要先换新版）。`
-        : `面板 v${panelV} 旧于代理 v${proxyVersion}：在酒馆「扩展」里更新 CCST（手机用「手机同步」）。`;
+        ? `代理 v${proxyVersion} 比面板 v${panelV} 旧：更新代理后重启（装成酒馆插件的，更新后重启酒馆）。`
+        : `面板 v${panelV} 比代理 v${proxyVersion} 旧：在酒馆「扩展」里更新 CCST（手机用「手机同步」）。`;
 }
 
 const glancePatch = (partial) => store.merge('glance', partial);
@@ -54,7 +54,6 @@ export async function refreshStatus() {
         }
         if (!res.ok || !data.ok) throw new Error(data.message || `HTTP ${res.status}`);
         const cred = data.credential ?? {};
-        ui.island?.set({ online: true });
         if (!cred.present) {
             store.set({ proxyState: 'warning', proxyOnline: true, status: { phase: 'nologin' } });
             return;
@@ -73,7 +72,6 @@ export async function refreshStatus() {
             status: { phase: 'online', version: data.version, cred, mismatch },
         });
     } catch {
-        ui.island?.set({ online: false });
         const where = normalizeEndpoint(getSettings().endpoint);
         store.set({
             proxyState: 'offline', proxyOnline: false,
@@ -89,7 +87,6 @@ let heartbeatDown = false;
 
 export async function heartbeat() {
     if (!getSettings().enabled || document.hidden) return;
-    flushIsland();
     let up = false;
     let status = 0;
     try {
@@ -99,7 +96,7 @@ export async function heartbeat() {
     } catch { /* down */ }
     if (up) F.perf.diagIfAsked();
     F.quiet.quietSweep();
-    if (up !== store.get().proxyOnline) { store.set({ proxyOnline: up }); ui.island?.set({ online: up }); }
+    if (up !== store.get().proxyOnline) { store.set({ proxyOnline: up }); }
     // Only worth a notice when SillyTavern is actually using this proxy.
     const { connected } = connectionInfo();
     if (!up && heartbeatDown && !connected) {
@@ -108,16 +105,16 @@ export async function heartbeat() {
     } else if (!up && !heartbeatDown && connected) {
         heartbeatDown = true;
         if (status === 401) {
-            notify('bad', '访问密码不对', '在 CCST「其他 → 手机连接」里改好，再点「重新连接」。', { ms: 0, replace: 'proxy' });
+            notify('bad', '访问密码不对', '代理拒绝了这台设备。在 CCST「其他 → 手机连接」里填对访问密码，再点「重新连接」。', { ms: 0, replace: 'proxy' });
         } else if (status === 403) {
-            notify('bad', '代理拒绝连接', '那台电脑没开「手机模式」：在「酒馆工具」里打开。', { ms: 0, replace: 'proxy' });
+            notify('bad', '代理不让这台设备用', '代理只开放给它所在的那台电脑，手机 / 另一台电脑要用，得在代理那边打开「手机模式」（Mac 的「酒馆工具」里有），再点「重新连接」。', { ms: 0, replace: 'proxy' });
         } else {
-            notify('bad', '连不上代理，重试中', '手机连 Mac：确认 Mac 没睡、同一个 Wi-Fi。', { ms: 0, replace: 'proxy' });
+            notify('bad', '连不上代理，重试中', '先确认代理还在运行、那台电脑没睡眠。手机连电脑时，两边还要在同一个 Wi-Fi。', { ms: 0, replace: 'proxy' });
         }
         refreshStatus();
     } else if (up && heartbeatDown) {
         heartbeatDown = false;
-        notify('ok', '代理已恢复', '可以继续发消息了', { ms: 3000, replace: 'proxy' });
+        notify('ok', '代理已恢复', '可以继续发消息了。', { ms: 3000, replace: 'proxy' });
         setTimeout(() => F.keeper.recoverKeptReply(), 500);
         refreshStatus();
     }

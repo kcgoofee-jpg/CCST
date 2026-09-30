@@ -333,7 +333,7 @@ export function directCacheCard(kind, where) {
                 await navigator.clipboard.writeText(advice.yaml);
                 notify('ok', '已复制', '粘到酒馆目录的 config.yaml（替换原来的 claude: 段里对应几行），再重启酒馆。', { ms: 8000 });
             } catch {
-                notify('warn', '复制不了', '手动照着上面改 config.yaml。');
+                notify('warn', '没能自动复制', '请手动选中上面的内容复制，粘到酒馆目录的 config.yaml，再重启酒馆。');
             }
         });
         const row = el('div', 'cm-btn-row');

@@ -328,7 +328,7 @@ export async function handleQuota(_req, res) {
         return res.json({ ok: true, windows: [], extraUsage: null, unavailable: 'rate_limited', retryAt: snapshot.retryAt });
     }
     if (!snapshot) {
-        return res.status(503).json({ ok: false, message: 'Quota unavailable (no OAuth credentials or upstream error).' });
+        return res.status(503).json({ ok: false, message: '暂时读不到额度：可能还没登录 Claude，或 Anthropic 那边出错了。先确认已登录，稍后再点刷新。' });
     }
     return res.json({ ok: true, ...snapshot });
 }

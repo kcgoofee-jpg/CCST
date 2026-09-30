@@ -112,9 +112,9 @@ test('versionMismatch: same major.minor is fine, otherwise names the side that i
     assert.equal(versionMismatch('3.4.1', '3.4.9'), null);
     assert.equal(versionMismatch(null, '3.4.1'), null);
     assert.equal(versionMismatch('3.4.1', null), null);
-    assert.match(versionMismatch('3.3.0', '3.4.1'), /代理 v3\.3\.0 旧于面板 v3\.4\.1/);
-    assert.match(versionMismatch('3.5.0', '3.4.1'), /面板 v3\.4\.1 旧于代理 v3\.5\.0/);
-    assert.match(versionMismatch('2.9.0', '3.0.0'), /代理 v2\.9\.0 旧于面板/);
+    assert.match(versionMismatch('3.3.0', '3.4.1'), /代理 v3\.3\.0 比面板 v3\.4\.1 旧/);
+    assert.match(versionMismatch('3.5.0', '3.4.1'), /面板 v3\.4\.1 比代理 v3\.5\.0 旧/);
+    assert.match(versionMismatch('2.9.0', '3.0.0'), /代理 v2\.9\.0 比面板/);
 });
 
 test('debugViewState: the view button needs 保存最近一次完整请求', () => {
@@ -129,4 +129,14 @@ test('phone sync in TauriTavern: untested warning and button label', () => {
     assert.match(PHONE_SYNC_WARNING, /自带同步和备份/);
     assert.match(PHONE_SYNC_WARNING, /还没测试过/);
     assert.equal(PHONE_SYNC_LABEL, '仍要同步（未测试）');
+});
+
+test('genLine: the status bar text for thinking, writing, done, idle', async () => {
+    const { genLine } = await import('../src/panel/core/capabilities.js');
+    assert.equal(genLine({ kind: 'idle' }), '');
+    assert.equal(genLine(undefined), '');
+    assert.equal(genLine({ kind: 'thinking', startedAt: Date.now() - 12400 }), '思考中 12 秒');
+    assert.equal(genLine({ kind: 'writing', chars: 1234 }), '写作中 1,234 字');
+    assert.equal(genLine({ kind: 'done', chars: 1850, seconds: 38, cache: 94 }), '完成 · 1,850 字 · 38 秒 · 缓存 94%');
+    assert.equal(genLine({ kind: 'done', chars: 900, seconds: null, cache: null }), '完成 · 900 字');
 });

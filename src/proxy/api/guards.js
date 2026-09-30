@@ -40,7 +40,7 @@ export function isAllowedHost(hostHeader, bindHost, extra = process.env.CLAUDE_S
 export function guardHost(bindHost) {
     return (req, res, next) => {
         if (isAllowedHost(req.headers.host, bindHost)) return next();
-        res.status(403).json({ error: { message: `Host "${req.headers.host}" is not allowed. Add it to CLAUDE_SUBSCRIPTION_ALLOWED_HOSTS if this is intended.` } });
+        res.status(403).json({ error: { message: `代理不接受用「${req.headers.host}」这个地址访问。只有本机地址和已允许的地址能用；确实要用这个地址的话，把它加到环境变量 CLAUDE_SUBSCRIPTION_ALLOWED_HOSTS 里。` } });
     };
 }
 
@@ -49,7 +49,7 @@ export function guardHost(bindHost) {
 export function guardPostOrigin(req, res, next) {
     const origin = req.headers.origin;
     if (!origin || isAllowedOrigin(origin)) return next();
-    res.status(403).json({ error: { message: `Origin ${origin} is not allowed.` } });
+    res.status(403).json({ error: { message: `代理拒绝了来自其他网站（${origin}）的请求：只有酒馆页面可以用这个代理。` } });
 }
 
 // LAN use (a phone's TauriTavern talking to the proxy on a Mac): requests
@@ -88,10 +88,10 @@ export function guardRemote(req, res, next) {
     }
     const expected = process.env.CLAUDE_SUBSCRIPTION_LAN_KEY;
     if (!expected) {
-        return res.status(403).json({ error: { message: '这台电脑上的代理没有开启局域网访问（需要访问密码）。在 Mac 的「酒馆工具」里切到「手机模式」。' } });
+        return res.status(403).json({ error: { message: '这个代理只给它所在的电脑用，没有开放给其他设备（手机、另一台电脑）。要从别的设备用，先在代理所在的电脑上打开局域网访问（Mac：「酒馆工具」里切到「手机模式」），再回来点「重新连接」。' } });
     }
     if (keyMatches(presentedKey(req), expected)) return next();
-    res.status(401).json({ error: { message: '访问密码不对。在 CCST 面板「其他 → 手机连接」里填 Mac 上「酒馆工具 → 其他 → 手机 → 手机模式」显示的访问密码，再点一键连接。' } });
+    res.status(401).json({ error: { message: '访问密码不对：代理开放给其他设备使用时需要密码。在 CCST 面板「其他 → 手机连接」里填代理那边显示的访问密码（Mac：「酒馆工具 → 其他 → 手机 → 手机模式」），再点「一键连接」。' } });
 }
 
 /** Async route handler → rejections go to the error handler (express 4 does

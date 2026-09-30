@@ -38,11 +38,11 @@ function preflightCheck(data) {
     if (!asked && !/<\/?(thinking|cot)>/i.test(system)) return;
     warnedPresets.add(key);
     const where = asked
-        ? `这段要求：「${asked[0].slice(0, 60)}」（多半在角色卡的世界书或预设条目里，把那一条关掉就好）。`
-        : `预设「${preset}」要求模型把思考过程（<thinking>/<cot>）写进回复。`;
+        ? `发现这段要求：「${asked[0].slice(0, 60)}」（多半在预设条目或角色卡的世界书里）。`
+        : `预设「${preset}」要求模型把思考（<thinking> / <cot>）写进回复。`;
     notify('warn', 'Opus 5 / 5.5 可能会拦这条请求',
-        `${where}Opus 5 / Opus 5.5 的安全分类器会拦截「把思考写进正文」的请求（reasoning_extraction），被拦也照样计费。` +
-        '本扩展用的是原生思考，不需要这类条目；想看写在正文里的思维链，就在「推理」页把模型切到 Opus 4.6 并把思考关掉。',
+        `${where}这类条目让模型把思考写进回复，Opus 5、Opus 5.5、Sonnet 5.5 会拒绝这样的请求（拒绝了也照常计费）。` +
+        '把那一条关掉；想看写在正文里的思考，用 Opus 4.6 并把思考模式关闭。',
         { ms: 20000 });
 }
 
@@ -60,9 +60,9 @@ function postProcessingCheck(data) {
     const mode = String(data.custom_prompt_post_processing ?? '');
     if (!mode || warnedPostProcessing) return;
     warnedPostProcessing = true;
-    notify('warn', `提示词后处理是「${POST_PROCESSING_LABELS[mode] ?? mode}」`,
-        '它会把预设合并成用户消息，预设失去系统权重，而且世界书一变整段缓存就失效。' +
-        '改成「无」（API 连接 → 提示词后处理），或在 CCST「设置」点「重新连接」。',
+    notify('warn', '连 CCST 时，提示词后处理建议选「无」',
+        `现在是「${POST_PROCESSING_LABELS[mode] ?? mode}」：酒馆会把预设改成普通用户消息，Claude 对预设指令的遵循会变弱，长聊天的缓存也更容易整段失效。` +
+        'CCST 代理会自己整理消息角色，所以选「无」更好。改法：API 连接 → 提示词后处理 → 无。用别的 API 时按预设作者的建议来。',
         { ms: 20000 });
 }
 

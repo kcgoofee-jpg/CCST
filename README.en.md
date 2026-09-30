@@ -1,0 +1,136 @@
+<div align="center">
+
+# CCST
+
+**Chat in SillyTavern with your own Claude subscription.**
+
+[简体中文](README.md) · **English**
+
+[![Version](https://img.shields.io/github/package-json/v/kcgoofee-jpg/CCST?label=version&color=0d0d0d)](https://github.com/kcgoofee-jpg/CCST/releases)
+[![Tests](https://github.com/kcgoofee-jpg/CCST/actions/workflows/test.yml/badge.svg)](https://github.com/kcgoofee-jpg/CCST/actions/workflows/test.yml)
+[![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
+
+<sub>Not an official Anthropic product and not affiliated with Anthropic. Claude is a trademark of Anthropic.</sub>
+
+<img src="docs/assets/panel-reason.png" width="200" alt="Reasoning tab">
+<img src="docs/assets/panel-status.png" width="200" alt="Status tab">
+<img src="docs/assets/panel-check.png" width="200" alt="Check-up tab">
+
+</div>
+
+> The panel's interface is in Chinese for now.
+
+## What it is
+
+SillyTavern on its own only talks to pay-per-token APIs. CCST is a SillyTavern plugin; once installed:
+
+- **Chat on your Claude Pro / Max subscription** — no separate API credit needed (API keys, Bedrock, Vertex and OpenRouter work too).
+- **Saves usage automatically**: in long chats only the new part of each turn is processed; the rest comes from the prompt cache.
+- **Replies don't get lost**: close the browser or drop the connection and the reply still finishes; it's filled in when you come back.
+- **One panel** to switch models (Opus 5.5 / Opus 4.6 / Sonnet 5.5), set thinking depth, see your quota and per-turn usage, and check reply quality.
+
+> [!CAUTION]
+> Using a subscription through third-party software is **not** permitted by Anthropic; your account may be limited or banned. If that's not acceptable, use an API key (see "Other setups"). Read the [risks](#risks).
+
+## You need
+
+- A computer (Mac / Windows / Linux) with [SillyTavern](https://github.com/SillyTavern/SillyTavern) installed. [Node.js](https://nodejs.org) 18+ (the installer tells you if it's missing).
+- A Claude Pro or Max subscription (or an API key).
+- Chrome or Edge.
+
+## Install (5 minutes)
+
+No terminal, no editing files.
+
+**1. Install the panel in SillyTavern.** Extensions (puzzle icon) → Install extension, paste this link and install:
+
+```
+https://github.com/kcgoofee-jpg/CCST
+```
+
+**2. Download the one-click installer.** Open the **CCST** panel. A card says it can't reach the CCST proxy; click **下载一键安装（Mac）** (Mac) or **下载一键安装（Windows）** (Windows).
+
+**3. Double-click it and sign in to Claude.** On Mac you get a zip: double-click to unzip, then double-click `CCST安装`. It finds SillyTavern, installs what's needed and opens your browser once to sign in to Claude. It says 「装好了」 (done) at the end.
+
+- Mac "cannot verify the developer": **right-click the file → Open → Open**.
+- Windows "Windows protected your PC": **More info → Run anyway**.
+- No Node.js yet: it opens the download page; install it and double-click again.
+
+**4. Restart SillyTavern.** Close and reopen it, then hard-refresh the browser (`Ctrl+F5`, Mac `Cmd+Shift+R`). The panel connects by itself.
+
+From then on CCST starts with SillyTavern. To update, double-click the same file again.
+
+<details>
+<summary>Didn't work?</summary>
+
+The installer only does these steps; you can do them by hand:
+
+1. **Allow server plugins.** In SillyTavern's `config.yaml` set:
+
+   ```yaml
+   enableServerPlugins: true
+   ```
+
+2. **Download CCST.** In the SillyTavern folder (the one with `server.js`) run:
+
+   ```bash
+   node plugins.js install https://github.com/kcgoofee-jpg/CCST
+   ```
+
+3. **Install and sign in** (opens the browser once):
+
+   ```bash
+   cd plugins/CCST
+   npm install
+   npm run login
+   ```
+
+4. Restart SillyTavern and click **一键连接** (connect) in the CCST panel.
+
+- **Panel can't reach the proxy**: check `config.yaml` says `true` and that you restarted. The SillyTavern console should show `[claude-subscription] initialised`.
+- **Installer can't find SillyTavern**: drag the SillyTavern folder (with `server.js`) into the installer window and press Enter.
+- **`npm install` fails**: don't use `--omit=optional`; Node must be 18+ (`node -v`).
+- **Panel says you're not signed in**: run the installer again, or `npm run login` in `plugins/CCST`.
+- **No download button / blocked by security software**: download from the [installer folder](installer) or follow the manual steps.
+
+</details>
+
+## Using it
+
+The panel has five tabs; you mostly need the first. The first time, click **一键连接** (connect): it creates and selects a SillyTavern connection profile named "CCST" (model Opus 4.6) and asks you to check it under API Connections. Your existing profiles are not changed.
+
+| Tab | What it does |
+| --- | --- |
+| **推理** (Reasoning) | Model and thinking depth (deeper = slower, more usage) |
+| **状态** (Status) | Last turn in this chat: time and cache hit; subscription quota; 7-day usage |
+| **体检** (Check-up) | Checks the latest AI reply (length, banned words, repeated paragraphs…) and the character card |
+| **设置** (Settings) | Proxy address, backend (subscription / API key / Bedrock …), thinking options |
+| **其他** (Other) | Phone connection, Mac remote, debugging |
+
+## Other setups
+
+- **API key / Bedrock / Vertex / OpenRouter instead of a subscription**: install as above, then switch in Settings → 代理后端 (proxy backend). Keys stay on your computer.
+- **No proxy, direct Claude API or OpenRouter**: just install the extension. Model switching and check-ups work; reply recovery and quota don't.
+- **SillyTavern on a server / Docker**: see the [guide](docs/使用指南.md#服务器与-docker) (Chinese).
+
+More in the [guide](docs/使用指南.md) and [roadmap](docs/路线图.md) (Chinese).
+
+## Limits
+
+- No temperature, Top-P or Top-K.
+- Usage is shared with Claude.ai and subject to the 5-hour and 7-day windows.
+- First token takes a few seconds longer than a direct API call.
+
+## Risks
+
+- **Not an approved use.** Anthropic's docs say third-party products may not use claude.ai sign-in or subscription usage without approval. Anthropic may restrict this at any time or act on accounts.
+- **Content is bound by Anthropic's [Usage Policy](https://www.anthropic.com/legal/aup).** Explicit sexual content is prohibited; any sexual content involving minors is strictly prohibited and reported.
+- **Don't expose the proxy to others or share accounts.**
+
+The author is not responsible for limited or banned accounts or any other loss.
+
+> Independently maintained fork of [LukaTheHero/SillyTavern-ClaudeSubscription](https://github.com/LukaTheHero/SillyTavern-ClaudeSubscription) (AGPL-3.0). Thanks to the original author.
+
+## License
+
+[GNU AGPL v3.0 or later](LICENSE)

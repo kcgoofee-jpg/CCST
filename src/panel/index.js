@@ -39,7 +39,7 @@
 const FEATURES = [
     ['keeper', 'reply-keeper'], ['lore', 'lore-cache'], ['checkup', 'checkup'], ['audit', 'card-audit'],
     ['backend', 'backend-form'], ['perf', 'perf-diag'], ['quiet', 'quiet-render'], ['compact', 'compact-buttons'],
-    ['models', 'models'], ['presets', 'presets'], ['notice', 'turn-notice'], ['island', 'gen-island'],
+    ['models', 'models'], ['presets', 'presets'], ['notice', 'turn-notice'], ['progress', 'gen-progress'],
     ['score', 'image-score'], ['debug', 'debug-request'],
 ];
 
