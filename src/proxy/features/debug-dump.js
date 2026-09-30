@@ -17,8 +17,8 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { extractSystemText } from './system-prompt.js';
-import { DATA_DIR } from './paths.js';
+import { extractSystemText } from '../core/system-prompt.js';
+import { DATA_DIR } from '../paths.js';
 
 const PLUGIN_TAG = '[claude-subscription]';
 // Everything this module writes (and nothing else — the folder may be one the user chose).

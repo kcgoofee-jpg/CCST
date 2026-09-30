@@ -5,7 +5,7 @@
 // Exposes an OpenAI-compatible chat-completions API backed by the local
 // Claude Agent SDK, billing against an Anthropic Pro/Max subscription. The
 // chat endpoints run on a *separate* HTTP listener (default 127.0.0.1:8901)
-// so they sit outside SillyTavern's CSRF middleware — see lib/listener.js.
+// so they sit outside SillyTavern's CSRF middleware — see api/listener.js.
 //
 // v2 additions:
 //   • Companion UI extension ("CCST") is auto-installed/updated into
@@ -30,13 +30,8 @@ import express from 'express';
 import { cpSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
-import { handleStatus } from './status.js';
-import { handleQuota } from './oauth.js';
-import { handleBackendGet, handleBackendPost } from './backend-config.js';
-import { handleStats } from './usage-stats.js';
-import { handleDebugLast } from './debug-dump.js';
-import { handleCancelReply, handleKeptReply } from './reply-keeper.js';
-import { asyncRoute, startStandaloneListener, stopStandaloneListener, probeExistingProxy, portInUseMessage } from './listener.js';
+import { registerRoutes } from './api/routes.js';
+import { startStandaloneListener, stopStandaloneListener, probeExistingProxy, portInUseMessage } from './api/listener.js';
 import { ROOT } from './paths.js';
 
 const DEFAULT_PORT = 8901;
@@ -150,16 +145,8 @@ export async function init(router) {
     // a direct browser fetch to 127.0.0.1:8901 resolves to the CLIENT device
     // and fails whenever SillyTavern is browsed from a phone/another PC.
     router.use(express.json({ limit: '50mb' }));
-    router.get('/status', asyncRoute(handleStatus));
-    router.get('/quota', asyncRoute(handleQuota));
-    router.get('/stats', handleStats);
-    router.get('/debug', handleDebugLast);
-    router.get('/reply/:slot', handleKeptReply);
-    // The panel's Stop button (POST: goes through SillyTavern's CSRF check).
-    router.post('/reply/:slot/cancel', handleCancelReply);
-    // Backend choice, same-origin for a panel opened on another device (POST: CSRF-checked by SillyTavern).
-    router.get('/backend', handleBackendGet);
-    router.post('/backend', handleBackendPost);
+    // POSTs (/reply/:slot/cancel, /backend) go through SillyTavern's CSRF check.
+    registerRoutes(router, 'plugin');
 
     installUiExtension();
 

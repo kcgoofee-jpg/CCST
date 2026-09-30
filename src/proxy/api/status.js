@@ -10,11 +10,11 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { SDK_VERSION } from './jsonl-entries.js';
-import { credentialSummary } from './oauth.js';
-import { ROOT } from './paths.js';
-import { resolveBackendConfig } from './backend-config.js';
-import { BACKEND_LABELS } from '../shared/backends.js';
+import { SDK_VERSION } from '../features/jsonl-entries.js';
+import { credentialSummary } from '../features/oauth.js';
+import { ROOT } from '../paths.js';
+import { resolveBackendConfig } from '../features/backend-config.js';
+import { BACKEND_LABELS } from '../../shared/backends.js';
 
 let cachedPluginVersion = null;
 function getPluginVersion() {

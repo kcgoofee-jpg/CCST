@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseModelRequest } from '../src/proxy/models.js';
+import { parseModelRequest } from '../src/proxy/core/models.js';
 import { canonicalModel } from '../src/shared/sources.js';
 
 test('Sonnet 5.5: always thinks, native 1M (no [1m] variant)', () => {

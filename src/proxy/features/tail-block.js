@@ -19,7 +19,7 @@
 
 import { createHash } from 'node:crypto';
 
-import { contentToText } from './system-prompt.js';
+import { contentToText } from '../core/system-prompt.js';
 
 const MAX_CHATS = 6;
 const MIN_BLOCK_CHARS = 300; // below this there is nothing worth moving

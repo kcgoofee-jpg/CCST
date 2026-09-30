@@ -5,10 +5,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { mapModelId, bedrockPrefix, estimateCostUsd, priceFor, isApiBilled } from '../src/shared/backends.js';
-import { resolveBackendConfig, missingFields, backendEnv, publicView, applyUpdate, isValidBaseUrl, handleBackendPost, __resetBackendCache } from '../src/proxy/backend-config.js';
-import { buildSubprocessEnv } from '../src/proxy/env.js';
-import { withBackendModels } from '../src/proxy/chat.js';
-import { parseModelRequest } from '../src/proxy/models.js';
+import { resolveBackendConfig, missingFields, backendEnv, publicView, applyUpdate, isValidBaseUrl, handleBackendPost, __resetBackendCache } from '../src/proxy/features/backend-config.js';
+import { buildSubprocessEnv } from '../src/proxy/core/env.js';
+import { withBackendModels } from '../src/proxy/core/chat.js';
+import { parseModelRequest } from '../src/proxy/core/models.js';
 
 const cfg = (backend, fields = {}) => resolveBackendConfig({ env: {}, file: { backend, ...fields } });
 

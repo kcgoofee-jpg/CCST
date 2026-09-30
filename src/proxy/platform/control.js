@@ -10,13 +10,12 @@
 // other request (guardRemote runs first). Every action is written to the
 // launcher log and shown as a Mac notification.
 
-import { execFile, spawn } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync, unlinkSync, statSync, openSync, readSync, closeSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
-import { ROOT } from './paths.js';
+import { ROOT } from '../paths.js';
+import { LID_PAUSE_FILE, launcherAvailable, logEvent, tail, zsh } from './launcher.js';
 
-const LAUNCHER_LIB = join(ROOT, 'launcher', 'mac', 'lib.zsh');
-export const LID_PAUSE_FILE = join(ROOT, 'launcher', 'lid-pause.local');
+export { LID_PAUSE_FILE };
 
 let inFlight = 0;
 // When a reply to another device (the phone) last finished. Kept in a file
@@ -88,39 +87,9 @@ export const ACTIONS = {
     'phone-sync': { label: '手机同步', script: 'sleep 3; phone_sync_auto >/dev/null 2>&1', whenIdle: true, idleNote: '写完再同步' },
 };
 
-function zsh(script, { detached = false } = {}) {
-    const args = ['-c', `source ${JSON.stringify(LAUNCHER_LIB)}; ${script}`];
-    if (detached) {
-        const child = spawn('/bin/zsh', args, { detached: true, stdio: 'ignore' });
-        child.unref();
-        return Promise.resolve('');
-    }
-    return new Promise((resolve) => {
-        execFile('/bin/zsh', args, { timeout: 15000 }, (err, stdout) => resolve(err ? '' : String(stdout)));
-    });
-}
-
-function logEvent(text) {
-    return zsh(`log_event ${JSON.stringify(`[遥控] ${text}`)}; osascript -e ${JSON.stringify(`display notification "${text.replace(/"/g, '')}" with title "CCST · 手机遥控"`)} >/dev/null 2>&1`);
-}
-
-function tail(file, lines) {
-    try {
-        const size = statSync(file).size;
-        const len = Math.min(size, 64 * 1024);
-        const buf = Buffer.alloc(len);
-        const fd = openSync(file, 'r');
-        readSync(fd, buf, 0, len, size - len);
-        closeSync(fd);
-        return buf.toString('utf8').split('\n').filter(Boolean).slice(-lines);
-    } catch {
-        return [];
-    }
-}
-
 /** Mac-side state for the panel. Numbers and short lines only. */
 export async function macStatus() {
-    if (!existsSync(LAUNCHER_LIB) || process.platform !== 'darwin') {
+    if (!launcherAvailable()) {
         return { ok: false, supported: false };
     }
     const out = await zsh([
@@ -160,7 +129,7 @@ export async function handleControlAction(req, res) {
     // Own keys only: 'constructor' / '__proto__' must not resolve to Object.prototype members.
     const action = Object.hasOwn(ACTIONS, name) ? ACTIONS[name] : null;
     if (!action) return res.status(400).json({ ok: false, message: `没有这个操作：${name}` });
-    if (!existsSync(LAUNCHER_LIB) || process.platform !== 'darwin') {
+    if (!launcherAvailable()) {
         return res.status(501).json({ ok: false, message: '只有 Mac 上用启动器运行的代理支持遥控' });
     }
     if (action.whenIdle && inFlight > 0) {

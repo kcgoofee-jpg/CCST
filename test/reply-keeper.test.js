@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { keepReply, keptReply, isValidSlot, trackGeneration, cancelReply, handleCancelReply, __resetKeptReplies } from '../src/proxy/reply-keeper.js';
-import { extractSettings } from '../src/proxy/settings.js';
+import { keepReply, keptReply, isValidSlot, trackGeneration, cancelReply, handleCancelReply, __resetKeptReplies } from '../src/proxy/features/reply-keeper.js';
+import { extractSettings } from '../src/proxy/features/settings.js';
 
 test('replies are kept per slot, in memory, and expire', () => {
     __resetKeptReplies();

@@ -10,7 +10,7 @@ import {
     isAdaptiveOnlyModel,
     parseModelRequest,
     listModelsHandler,
-} from '../src/proxy/models.js';
+} from '../src/proxy/core/models.js';
 
 test('CANONICAL_TIER_MODELS pins flagship models for each tier', () => {
     assert.equal(CANONICAL_TIER_MODELS.fable, 'claude-fable-5-1');
@@ -153,7 +153,7 @@ test('Package versions match across package.json and manifest.json', () => {
 
 test('handleStatus reports the version from package.json', async () => {
     const pkg = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'package.json'), 'utf8'));
-    const { handleStatus } = await import('../src/proxy/status.js');
+    const { handleStatus } = await import('../src/proxy/api/status.js');
     let responseData = null;
     const mockRes = {
         json(payload) {

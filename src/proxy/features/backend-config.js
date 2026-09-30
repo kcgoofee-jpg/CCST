@@ -31,9 +31,9 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-import { BACKENDS, BACKEND_LABELS, isApiBilled, normalizeBackend } from '../shared/backends.js';
-import { busyCount } from './control.js';
-import { DATA_DIR } from './paths.js';
+import { BACKENDS, BACKEND_LABELS, isApiBilled, normalizeBackend } from '../../shared/backends.js';
+import { busyCount } from '../platform/control.js';
+import { DATA_DIR } from '../paths.js';
 
 // field → { secret, env override }
 export const FIELDS = {

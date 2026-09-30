@@ -22,7 +22,7 @@
 // alternate — the same thing SillyTavern's own Claude converter does. Those
 // deeper than the last reply are moved up to the current turn (see below).
 
-import { contentToText } from './system-prompt.js';
+import { contentToText } from '../core/system-prompt.js';
 
 function asParts(content) {
     if (Array.isArray(content)) return content;

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { diagnoseCache, describeDiag, nearestLabel, explainCache, __resetCacheDiag } from '../src/proxy/cache-diag.js';
+import { diagnoseCache, describeDiag, nearestLabel, explainCache, __resetCacheDiag } from '../src/proxy/features/cache-diag.js';
 
 const U = (content) => ({ role: 'user', content });
 const A = (content) => ({ role: 'assistant', content });
@@ -151,7 +151,7 @@ test('explainCache flags history that stopped caching although nothing changed',
 });
 
 test('equivalentTokens uses list-price ratios', async () => {
-    const { equivalentTokens } = await import('../src/proxy/cache-diag.js');
+    const { equivalentTokens } = await import('../src/proxy/features/cache-diag.js');
     assert.equal(equivalentTokens({ inputTokens: 2, cacheReadTokens: 50000, cacheCreationTokens: 2800, outputTokens: 5000 }), 2 + 5000 + 3500 + 25000);
 });
 

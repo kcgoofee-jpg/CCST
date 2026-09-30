@@ -27,7 +27,7 @@
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { DATA_DIR } from './paths.js';
+import { DATA_DIR } from '../paths.js';
 
 const MAX_TURNS = 400;
 const captures = new Map(); // key → { entries: user entry + its attachments, contextPinned }

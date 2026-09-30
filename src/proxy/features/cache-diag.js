@@ -20,8 +20,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 import { extractVolatileBlocks } from './lore-tail.js';
-import { contentToText } from './system-prompt.js';
-import { DATA_DIR } from './paths.js';
+import { contentToText } from '../core/system-prompt.js';
+import { DATA_DIR } from '../paths.js';
 
 const MAX_CHATS = 6;
 // Below this the static part isn't worth a cache breakpoint (Opus 5.5's

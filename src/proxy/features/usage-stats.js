@@ -15,8 +15,8 @@ import { dirname, join } from 'node:path';
 
 import { explainError } from './errors-zh.js';
 import { explainCache } from './cache-diag.js';
-import { DATA_DIR } from './paths.js';
-import { estimateCostUsd, BACKEND_LABELS, PRICES_AS_OF } from '../shared/backends.js';
+import { DATA_DIR } from '../paths.js';
+import { estimateCostUsd, BACKEND_LABELS, PRICES_AS_OF } from '../../shared/backends.js';
 
 const PLUGIN_TAG = '[claude-subscription]';
 const MAX_FILE_BYTES = 5 * 1024 * 1024;

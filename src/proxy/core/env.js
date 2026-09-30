@@ -28,7 +28,7 @@
 //     the CLI from injecting the cwd project's auto-memory index into the
 //     context (verified with a probe prompt); this does.
 
-import { backendEnv, SCRUBBED_ENV } from './backend-config.js';
+import { backendEnv, SCRUBBED_ENV } from '../features/backend-config.js';
 
 // API credentials, base URLs and provider switches (Bedrock / Vertex / …):
 // see backend-config.js. The chosen backend adds back only its own.

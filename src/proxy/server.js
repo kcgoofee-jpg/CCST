@@ -12,12 +12,12 @@
 // If SillyTavern with the server plugin starts later, the plugin detects
 // this listener on the port and reuses it instead of failing.
 
-import { startStandaloneListener, stopStandaloneListener, portInUseMessage } from './listener.js';
+import { startStandaloneListener, stopStandaloneListener, portInUseMessage } from './api/listener.js';
 import { networkInterfaces } from 'node:os';
 
-import { credentialSummary } from './oauth.js';
-import { markStandalone } from './control.js';
-import { flushSweeps, sweepLeftovers } from './session-store.js';
+import { credentialSummary } from './features/oauth.js';
+import { markStandalone } from './platform/control.js';
+import { flushSweeps, sweepLeftovers } from './features/session-store.js';
 
 const TAG = '[claude-subscription]';
 const port = parseInt(process.env.CLAUDE_SUBSCRIPTION_PORT, 10) || 8901;
@@ -56,7 +56,7 @@ if (host === '0.0.0.0' || host === '::') {
     console.log(`${TAG} 在酒馆里把 Custom (OpenAI-compatible) 端点设为 http://${host}:${port}/v1，或使用 CCST 面板一键连接。Ctrl+C 退出。`);
 }
 
-// Roleplay transcripts a crash or kill left on disk (see lib/session-store.js).
+// Roleplay transcripts a crash or kill left on disk (see features/session-store.js).
 try {
     const swept = sweepLeftovers();
     if (swept.transcripts || swept.tempDirs) console.log(`${TAG} 清理了上次遗留的 ${swept.transcripts} 份会话记录、${swept.tempDirs} 个临时目录`);

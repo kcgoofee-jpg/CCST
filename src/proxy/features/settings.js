@@ -90,7 +90,7 @@ export function extractSettings(body) {
         systemPlacement: ns.system_placement === 'hoist' ? 'hoist' : 'inline',
         // Dev tool: save the last full request (system prompt + messages) locally.
         debugDump: ns.debug_dump === true,
-        // Slot the finished reply is kept under (lib/reply-keeper.js): a hash of chat + player message.
+        // Slot the finished reply is kept under (features/reply-keeper.js): a hash of chat + player message.
         replySlot: typeof ns.reply_slot === 'string' && /^[0-9a-f]{8,40}$/.test(ns.reply_slot) ? ns.reply_slot : null,
         // Dev only: build everything (placement, lore tail, transcript) and dump it, but never call Claude.
         dryRun: ns.dry_run === true && ns.debug_dump === true,

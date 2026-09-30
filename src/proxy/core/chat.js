@@ -33,26 +33,26 @@ import { randomUUID } from 'node:crypto';
 
 import { loadSdk } from './sdk-loader.js';
 import { renderTranscript } from './transcript.js';
-import { extractSettings } from './settings.js';
+import { extractSettings } from '../features/settings.js';
 import { parseModelRequest, isExtendedContextKnownUnavailable, recordExtendedContextUnavailable } from './models.js';
 import { buildSubprocessEnv, pickApiKeyFromAuthHeader } from './env.js';
-import { resolveBackendConfig } from './backend-config.js';
-import { BACKEND_LABELS, mapModelId } from '../shared/backends.js';
+import { resolveBackendConfig } from '../features/backend-config.js';
+import { BACKEND_LABELS, mapModelId } from '../../shared/backends.js';
 import { buildSystemPrompt, extractSystemText } from './system-prompt.js';
-import { assembleEntries, splitHistoryForResume, currentToSdkUserMessage, singleMessageStream, SDK_VERSION } from './jsonl-entries.js';
-import { ResumeSessionStore, resumeScratchCwd, sweepSessionTranscript } from './session-store.js';
-import { createTurnCollector, historyReplay, repliesBefore, replyBefore, sentTextFor } from './turn-capture.js';
+import { assembleEntries, splitHistoryForResume, currentToSdkUserMessage, singleMessageStream, SDK_VERSION } from '../features/jsonl-entries.js';
+import { ResumeSessionStore, resumeScratchCwd, sweepSessionTranscript } from '../features/session-store.js';
+import { createTurnCollector, historyReplay, repliesBefore, replyBefore, sentTextFor } from '../features/turn-capture.js';
 import { StopScanner } from './stops.js';
 import { makeCompletionId, writeSse, chunkShell, roleChunk, contentChunk, reasoningChunk, finishChunk, errorEvent, toOpenAiUsage } from './sse.js';
-import { isExpiredTokenError, isRateLimitError, isExtraUsageRequiredError, isStaleSessionError, refreshOAuthToken } from './oauth.js';
-import { explainError, formatErrorForUser } from './errors-zh.js';
-import { recordRequest, promptShape } from './usage-stats.js';
-import { inlineLateSystemMessages } from './system-placement.js';
-import { moveTailBlockToFront } from './tail-block.js';
-import { diagnoseCache, describeDiag } from './cache-diag.js';
-import { extractVolatileBlocks, foldTrailingInjections, injectBlocks, injectedTextFor, loreTarget, newLoreOnly, rememberInjected } from './lore-tail.js';
-import { dumpEntries, dumpRequest, noteDebugSetting } from './debug-dump.js';
-import { keepReply, trackGeneration } from './reply-keeper.js';
+import { isExpiredTokenError, isRateLimitError, isExtraUsageRequiredError, isStaleSessionError, refreshOAuthToken } from '../features/oauth.js';
+import { explainError, formatErrorForUser } from '../features/errors-zh.js';
+import { recordRequest, promptShape } from '../features/usage-stats.js';
+import { inlineLateSystemMessages } from '../features/system-placement.js';
+import { moveTailBlockToFront } from '../features/tail-block.js';
+import { diagnoseCache, describeDiag } from '../features/cache-diag.js';
+import { extractVolatileBlocks, foldTrailingInjections, injectBlocks, injectedTextFor, loreTarget, newLoreOnly, rememberInjected } from '../features/lore-tail.js';
+import { dumpEntries, dumpRequest, noteDebugSetting } from '../features/debug-dump.js';
+import { keepReply, trackGeneration } from '../features/reply-keeper.js';
 
 const PLUGIN_TAG = '[claude-subscription]';
 const MAX_RATE_LIMIT_RETRIES = 2;
@@ -454,7 +454,7 @@ export function statusForError(raw) {
  *
  * With a reply slot (`keep`) the reply is finished and kept when the client
  * goes away (closed, killed, backgrounded): it is paid for, and the panel
- * puts it back when the chat is opened again (lib/reply-keeper.js). Without
+ * puts it back when the chat is opened again (features/reply-keeper.js). Without
  * one the CLI is stopped. POST …/replies/<slot>/cancel (the panel's Stop)
  * always stops it, and nothing is kept.
  */
