@@ -185,6 +185,23 @@
 .claude-max .cm-setup .cm-btn-row { align-items: center; margin-top: 8px; }
 .claude-max .cm-setup .cm-btn { flex: 1 1 auto; }
 
+/* first-run guide: 选来源 → 连接 → 完成 */
+.claude-max .cm-guide { gap: 8px; padding: 16px; }
+.claude-max .cm-guide .cm-note-title { font-size: var(--cm-fs-lg); }
+.claude-max .cm-guide .cm-notes { margin: 0; }
+.claude-max .cm-guide .cm-btn-row { align-items: center; margin-top: 4px; }
+.claude-max .cm-guide .cm-btn { flex: 1 1 auto; }
+.claude-max .cm-guide-steps { display: flex; gap: 6px; margin: 0; padding: 0; list-style: none; font-size: var(--cm-fs-sm); }
+.claude-max .cm-guide-steps li { flex: 1 1 0; padding: 4px 0; text-align: center; border-bottom: 2px solid var(--cm-line); opacity: 0.55; }
+.claude-max .cm-guide-steps li::before { counter-increment: cm-step; content: counter(cm-step) " · "; }
+.claude-max .cm-guide-steps { counter-reset: cm-step; }
+.claude-max .cm-guide-steps li.active { opacity: 1; font-weight: 700; border-bottom-color: var(--cm-accent); }
+.claude-max .cm-guide-steps li.done { opacity: 0.8; border-bottom-color: var(--cm-ok); }
+.claude-max .cm-guide-list { margin: 0; padding-left: 1.2em; font-size: var(--cm-fs-sm); line-height: 1.5; }
+.claude-max .cm-guide-list li + li { margin-top: 2px; }
+.claude-max .cm-guide-ok li::marker { color: var(--cm-ok); content: "✓ "; }
+.claude-max .cm-guide-gap li::marker { color: var(--cm-warn); content: "· "; }
+
 /* first run: tabs are reachable but out of the way until the user goes looking */
 .claude-max .cm-body[data-stage="setup"]:not([data-explore]) .cm-pane { display: none; }
 .claude-max .cm-body[data-stage="setup"]:not([data-explore]) .cm-tabs { opacity: 0.55; }

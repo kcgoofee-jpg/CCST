@@ -12,6 +12,7 @@ import { DEFAULT_ENDPOINT } from '../core/settings.js';
 import { el, segmented, toggleRow, collapsible, button } from '../core/dom.js';
 import { F } from '../core/registry.js';
 import { buildMacSection } from './mac.js';
+import { restartGuide } from '../guide.js';
 import { endpointField, accessKeyField, reconnectButton } from './settings.js';
 
 function usageNotes() {
@@ -85,6 +86,10 @@ export function buildOtherTab(pane, settings, save) {
     }));
     dbg.body.append(button('查看发给模型的内容', () => F.debug.showDebugRequest(), { icon: 'fa-magnifying-glass' }));
     pane.append(dbg.root);
+
+    const guide = collapsible('重新引导', '再走一遍：选来源 → 连接 → 完成。', { id: 'claude_max_guide_again' });
+    guide.body.append(button('重新引导', () => restartGuide(), { icon: 'fa-compass' }));
+    pane.append(guide.root);
 
     pane.append(usageNotes());
 }

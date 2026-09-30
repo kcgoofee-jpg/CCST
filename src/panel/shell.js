@@ -20,6 +20,7 @@ import { refreshMac } from './tabs/mac.js';
 import { buildSettingsTab } from './tabs/settings.js';
 import { buildOtherTab } from './tabs/other.js';
 import { TABS, resolveTab } from './core/tabs.js';
+import { buildGuideCard, renderGuide } from './guide.js';
 
 // ── One-click connect (same selector path as ST's /api-url command) ──
 
@@ -195,7 +196,10 @@ export function renderConnect() {
         body.dataset.stage = view?.setup ? 'setup' : 'ready';
         if (!view?.setup) delete body.dataset.explore;
     }
-    card.hidden = !view;
+    // The first-run guide speaks first; while it has something to say the connect card steps aside
+    // (except for the proxy's step 2, where the connect card IS the step).
+    const guide = renderGuide();
+    card.hidden = !view || guide.hideConnectCard;
     if (view) {
         card.dataset.tone = view.tone;
         if (view.key !== 'checking' && stepsFor !== view.key) { stepsFor = view.key; stepsOpen = false; }
@@ -275,7 +279,7 @@ function buildStatusBar(showTab) {
     cloud.hidden = true;
     cloud.append(el('small', 'cm-hint', '云端酒馆里的 127.0.0.1 是服务器自己。可以：改用 API 密钥直连；在服务器上运行代理；或用内网穿透暴露代理，并设访问密码。'));
 
-    block.append(bar, card, cloud);
+    block.append(bar, buildGuideCard(), card, cloud);
     return block;
 }
 

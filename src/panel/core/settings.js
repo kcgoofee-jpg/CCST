@@ -38,6 +38,8 @@ export const defaultSettings = {
     compactScriptButtons: true, // 输入栏上方的脚本按钮并排显示
     quietRender: 'auto',     // 省电显示：'auto'（手机 / TauriTavern 上开）| 'on' | 'off'
     checkupMuted: {},        // 体检提示被点掉的次数（按问题类型）；两次后不再弹
+    onboarded: false,        // 首次引导：走完、跳过、或打开时已经连上了
+    guideSource: '',         // 引导里选的来源：'' 没开始 | 'choose' 还没选 | proxy / claude / openrouter / relay
     cardAudit: false,        // 切卡时检查角色卡（未成年相关内容）；默认关，体检页可开
 };
 

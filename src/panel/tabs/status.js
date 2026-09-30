@@ -276,6 +276,11 @@ export function renderCacheCard() {
         box.replaceChildren(stateLine('error', '没加载（扩展文件不完整），重装扩展即可。'));
         return;
     }
+    box.replaceChildren(directCacheCard(kind, where));
+}
+
+/** The recommended-cache card for a direct source (also shown on the last step of the first-run guide). */
+export function directCacheCard(kind, where) {
     const advice = libs.sources.cacheAdvice(kind);
     const card = note(advice.tone, `${where} · 酒馆自带缓存`);
     for (const line of advice.lines) card.append(el('small', 'cm-hint', line));
@@ -296,5 +301,5 @@ export function renderCacheCard() {
         if (IS_TAURI) card.append(el('small', 'cm-hint', 'TauriTavern 不是酒馆的 Node 服务器，config.yaml 这几项它认不认要看 TauriTavern 自己。'));
     }
     card.append(el('small', 'cm-hint', '上一轮命中没有：酒馆不把缓存用量传给页面，面板看不到；到 Anthropic / OpenRouter 后台的用量记录里看。'));
-    box.replaceChildren(card);
+    return card;
 }
