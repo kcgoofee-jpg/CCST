@@ -48,14 +48,14 @@ export function mismatchHelp({ side, proxyVersion, panelVersion, runtime = null 
 ${impact}
 怎么办：`,
             steps: [
-                { text: '酒馆里点「扩展 → 管理扩展」，找到 CCST，点它的更新按钮（手机用「手机同步」）。' },
+                { text: '酒馆里点「扩展 → 管理扩展」，找到 CCST，点它的更新按钮。' },
                 { text: REFRESH },
             ],
             downloads: [], hint: '',
         };
     }
     const pluginSteps = [
-        { text: '双击之前下载的「CCST安装」再运行一次，它会把代理更新到最新。找不到了，点下面的按钮重新下载。已经在酒馆「扩展」里更新过 CCST 的，这一步可以跳过。' },
+        { text: '双击之前下载的「CCST安装」再运行一次，它会把代理更新到最新。找不到了，点下面的按钮重新下载。' },
         { text: '关掉酒馆的黑色窗口，重新打开酒馆。' },
     ];
     const standaloneSteps = [
