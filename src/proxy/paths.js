@@ -13,4 +13,6 @@ import { fileURLToPath } from 'node:url';
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 /** Runtime data (stats, caches, debug dumps). Local only, never committed. */
-export const DATA_DIR = join(ROOT, 'data');
+export const DATA_DIR = process.env.CLAUDE_SUBSCRIPTION_DATA_DIR
+    ? resolve(process.env.CLAUDE_SUBSCRIPTION_DATA_DIR) // Docker: a mounted volume outside the image
+    : join(ROOT, 'data');

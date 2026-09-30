@@ -57,7 +57,7 @@
 | Mac + TauriTavern 或酒馆（最省事） | [Mac 一键安装](#mac-一键安装) |
 | 用 API 密钥 / Bedrock / Vertex / OpenRouter / 兼容网关，不想用订阅 | 照常装代理，在面板「设置 → 代理后端」选好填上（见[使用指南](docs/使用指南.md#使用)）：按 token 计费，用量页显示估算花费 |
 | 已直连 Claude API / OpenRouter，不想跑代理 | 只装扩展，见[不用代理也能用](#no-proxy) |
-| 云酒馆（酒馆装在服务器上） | 订阅代理跑在你自己的电脑上，云端连不到：用 API 密钥直连，或把代理装到同一台服务器 |
+| 云酒馆 / Linux 服务器 / Docker | 服务器上一条命令装代理并自动生成访问密码，或用 Docker 镜像：见[使用指南 · 服务器与 Docker](docs/使用指南.md#服务器与-docker) |
 | 安卓手机上的 TauriTavern | 先装好 Mac，再看[使用指南 · 手机](docs/使用指南.md#手机) |
 | Windows / 只有安卓 Termux | [实验性脚本](docs/使用指南.md#实验性windows-与安卓-termux未经实测) |
 

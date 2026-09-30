@@ -1,0 +1,11 @@
+.git
+.github
+.githooks
+node_modules
+data
+docs
+test
+launcher
+scripts
+deploy
+*.md
