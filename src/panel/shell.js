@@ -7,7 +7,7 @@
 import { store } from './core/store.js';
 import { getSettings, saveSettingsDebounced, EFFORT_LABEL } from './core/settings.js';
 import { connectHelp } from './core/connect-help.js';
-import { IS_TAURI, cloudHosted } from './core/capabilities.js';
+import { IS_TAURI, cloudHosted, normalizeEndpoint } from './core/capabilities.js';
 import { libs } from './core/libs.js';
 import { connectionInfo, shortModel } from './core/connection.js';
 import { effectiveEffort } from './core/inject.js';
@@ -25,21 +25,43 @@ import { buildGuideCard, renderGuide } from './guide.js';
 
 // ── One-click connect (same selector path as ST's /api-url command) ──
 
-export function connect(settings) {
+/** What ST is connected to right now, in words (for the confirm dialog). */
+function currentConnectionText() {
+    const src = $('#chat_completion_source').val();
+    const url = src === 'custom' ? $('#custom_api_url_text').val() : '';
+    const model = $('#custom_model_id').val() || $('#model_claude_select').val() || '';
+    const profile = $('#connection_profiles option:selected').text?.() || '';
+    return [profile && `连接配置「${profile}」`, src && `来源 ${src}`, url, model].filter(Boolean).join(' · ');
+}
+
+// One-click connect rewrites SillyTavern's LIVE connection fields (source, URL, post-processing, and
+// on a LAN the key). It never edits saved connection profiles, but it does replace whatever the user
+// is connected to now — so it always asks first unless ST already points at this proxy.
+export async function connect(settings) {
     try {
-        $('#main_api').val('openai').trigger('change');
-        // Endpoint + key MUST be set before the source change: ST's
-        // change handler auto-reconnects immediately, and firing it with
-        // the stale custom_url would race a status check against the
-        // wrong endpoint.
-        $('#custom_api_url_text').val(settings.endpoint).trigger('input');
-        const keyField = $('#api_key_custom');
-        if (keyField.length && settings.accessKey) {
-            // LAN: the proxy checks this as the access key
-            keyField.val(settings.accessKey).trigger('input');
-        } else if (keyField.length && !String(keyField.val() ?? '').trim()) {
-            keyField.val('sk-no-key-needed');
+        const ours = $('#chat_completion_source').val() === 'custom'
+            && normalizeEndpoint($('#custom_api_url_text').val()) === normalizeEndpoint(settings.endpoint);
+        if (!ours) {
+            const ctx = SillyTavern.getContext();
+            const box = document.createElement('div');
+            for (const line of [
+                '一键连接会把酒馆现在的连接改成 CCST 代理：',
+                `现在：${currentConnectionText() || '（未连接）'}`,
+                `改成：自定义来源 · ${settings.endpoint}`,
+                '你保存的「连接配置」不会被改；想切回，在「API 连接」顶部把连接配置选回来即可。继续吗？',
+            ]) { const p = document.createElement('p'); p.textContent = line; box.append(p); }
+            const ok = await ctx.callGenericPopup(box, ctx.POPUP_TYPE.CONFIRM);
+            if (!ok) return;
         }
+        $('#main_api').val('openai').trigger('change');
+        // Endpoint (and the LAN key) MUST be set before the source change: ST's change handler
+        // auto-reconnects immediately, and firing it with the stale custom_url would race a status
+        // check against the wrong endpoint.
+        $('#custom_api_url_text').val(settings.endpoint).trigger('input');
+        // Only a LAN proxy needs a key (its access key). Otherwise the key field is left alone: it may
+        // hold the user's key for another service.
+        const keyField = $('#api_key_custom');
+        if (keyField.length && settings.accessKey) keyField.val(settings.accessKey).trigger('input');
         $('#chat_completion_source').val('custom').trigger('change');
         // The proxy sorts out roles itself. ST's merge/strict post-processing
         // turns the whole preset into a user message (after the first
