@@ -91,7 +91,7 @@ export function guardRemote(req, res, next) {
         return res.status(403).json({ error: { message: '这台电脑上的代理没有开启局域网访问（需要访问密码）。在 Mac 的「酒馆工具」里切到「手机模式」。' } });
     }
     if (keyMatches(presentedKey(req), expected)) return next();
-    res.status(401).json({ error: { message: '访问密码不对。在 CCST 面板的状态卡片（连不上代理时会出现）或「更多 → 调试选项 → 连接」里填 Mac 上「酒馆工具 → 手机模式」显示的访问密码，再点一键连接。' } });
+    res.status(401).json({ error: { message: '访问密码不对。在 CCST 面板「其他 → 手机连接」里填 Mac 上「酒馆工具 → 其他 → 手机 → 手机模式」显示的访问密码，再点一键连接。' } });
 }
 
 /** Async route handler → rejections go to the error handler (express 4 does

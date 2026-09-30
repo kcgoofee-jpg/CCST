@@ -41,7 +41,7 @@ export function startStandaloneListener({ port, host }) {
             serverInstance = server;
             if (host === '0.0.0.0' || host === '::') {
                 console.warn(process.env.CLAUDE_SUBSCRIPTION_LAN_KEY
-                    ? '[claude-subscription] 局域网访问已开启：其他设备要带访问密码才能用（手机 TauriTavern 在 CCST 面板的状态卡片——连不上代理时出现——或「更多 → 调试选项 → 连接」里填）。'
+                    ? '[claude-subscription] 局域网访问已开启：其他设备要带访问密码才能用（手机 TauriTavern 在 CCST 面板「其他 → 手机连接」里填）。'
                     : '[claude-subscription] listening on every network interface, but no CLAUDE_SUBSCRIPTION_LAN_KEY is set: requests from other machines are refused.');
             }
             console.log(
