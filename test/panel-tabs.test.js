@@ -23,11 +23,11 @@ test('saved tab keys: current ones stay, old ones map to their successors, junk 
 
 test('其他 holds the moved sections; 设置 keeps 连接 / 代理后端 / 思考 / 高级 only', () => {
     const other = src('tabs/other.js') + src('tabs/mac.js');
-    for (const title of ['Mac 遥控', '手机连接', '省电显示', '性能诊断', '脚本按钮并排', '查看发给模型的请求 / 调试选项']) {
+    for (const title of ['Mac 遥控', '手机连接', '省电显示', '性能诊断', '脚本按钮并排', '查看发给模型的请求']) {
         assert.ok(other.includes(`'${title}'`), `其他 lacks ${title}`);
     }
     const settings = src('tabs/settings.js');
-    const sections = [...settings.matchAll(/section\('([^']+)'\)/g)].map((m) => m[1]);
+    const sections = [...settings.matchAll(/group\('([^']+)'/g)].map((m) => m[1]);
     assert.deepEqual(sections, ['连接', '代理后端', '思考']);
     assert.match(settings, /collapsible\('高级'/);
     // cache & context switches sit inside 高级, the moved ones are gone from 设置 and 体检

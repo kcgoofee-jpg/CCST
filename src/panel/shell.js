@@ -10,7 +10,7 @@ import { IS_TAURI, cloudHosted } from './core/capabilities.js';
 import { libs } from './core/libs.js';
 import { connectionInfo, shortModel } from './core/connection.js';
 import { effectiveEffort } from './core/inject.js';
-import { el, note, iconButton } from './core/dom.js';
+import { el, note } from './core/dom.js';
 import { notify, ui, flushIsland } from './core/notify.js';
 import { refreshAll, refreshStatus, refreshStats, refreshQuota } from './core/live.js';
 import { buildReasonTab } from './tabs/reason.js';
@@ -64,23 +64,15 @@ function setDot(state) {
 export const SUBSCRIPTION_LABELS = { max: 'Max', pro: 'Pro', team: 'Team', enterprise: 'Enterprise' };
 export const SOURCE_LABELS = { keychain: '钥匙串', file: '凭据文件', env: '环境变量' };
 
-/** Card title once the proxy is up: whether SillyTavern is pointed at it, and with which model. */
-function statusTitleOnline() {
-    const { connected, model } = connectionInfo();
-    if (!connected) {
-        return connectionInfo().direct
-            ? '代理在线，酒馆直连 Claude：连上代理可用缓存排布、防丢回复、额度'
-            : '代理在线，酒馆还没连上';
-    }
-    return model ? `已连接 · ${shortModel(model)}` : '已连接 · 请选 Claude 模型';
-}
+const planOf = (cred) => SUBSCRIPTION_LABELS[cred?.subscriptionType] ?? cred?.subscriptionType ?? '订阅';
 
-/** The status bar (dot · model · effort · 5h quota) and the collapsed drawer's header say the same thing. */
+/** The header summary of the collapsed drawer and the status bar say the same thing:
+ *  dot · model · where/billing · 5h quota. Clicking the bar opens 状态. */
 export function renderGlance() {
-    const settings = getSettings();
     const { nextEffort, glance } = store.get();
     const { connected, direct, model, where, billing } = connectionInfo();
     const linked = connected || direct;
+    const settings = getSettings();
     const effort = effectiveEffort(settings);
     const parts = [];
     if (linked && model) parts.push(shortModel(model));
@@ -92,19 +84,10 @@ export function renderGlance() {
     const bar = document.getElementById('claude_max_bar_sum');
     if (bar) {
         const q = glance.quota;
-        bar.replaceChildren(
-            el('b', 'cm-bar-model', linked ? (model ? shortModel(model) : '未选模型') : '未连接'),
-        );
-        // 走哪 · 按什么计费
-        if (linked && where) {
-            const src = el('span', 'cm-bar-src', `${where} · ${billing}`);
-            src.title = '现在走哪 · 按什么计费';
-            bar.append(src);
-        }
-        // The panel's thinking settings reach Claude only through the proxy.
-        if (connected || nextEffort) {
-            bar.append(el('span', 'cm-bar-effort', nextEffort ? `下一轮${EFFORT_LABEL[effort]}` : `思考 ${settings.thinking === 'off' ? '关' : EFFORT_LABEL[effort]}`));
-        }
+        bar.replaceChildren(el('b', 'cm-bar-model', linked ? (model ? shortModel(model) : '未选模型') : '未连接'));
+        if (linked && where) bar.append(el('span', 'cm-bar-src', `${where} · ${billing}`));
+        // One-off boost: the only effort worth a place in the bar, because it expires by itself.
+        if (connected && nextEffort) bar.append(el('span', 'cm-bar-effort', `下一轮${EFFORT_LABEL[effort]}`));
         // The 5h window is the subscription's: beside an API key or OpenRouter it says nothing.
         if (q != null && !direct) {
             const quota = el('span', 'cm-bar-quota', `5h ${q}%`);
@@ -120,65 +103,180 @@ export function renderGlance() {
     }
 }
 
-/** Status bar + the one note that says what needs doing (proxy down, not logged in,
- *  SillyTavern not connected, cloud-hosted SillyTavern). Everything fine: just the bar. */
-function buildStatusBar(showTab) {
-    const block = el('div', 'cm-status-block');
-    const bar = el('div', 'cm-bar');
-    const sum = el('div', 'cm-bar-sum');
-    sum.id = 'claude_max_bar_sum';
-    bar.append(el('span', 'cm-dot'), sum, iconButton('fa-rotate', '重新检测', refreshAll));
+// ── The connect card ──
+// One card says what is missing and offers ONE button. Until SillyTavern is on a Claude connection the
+// card is all the panel shows (the tabs stay reachable, dimmed); afterwards it only appears for a
+// problem (proxy down, not logged in, wrong password) and is gone when everything is fine.
 
-    const alert = note('warn');
-    alert.id = 'claude_max_status_block';
-    const statusTitle = el('div', 'cm-note-title');
-    statusTitle.id = 'claude_max_status_title';
-    const statusSub = el('small', 'cm-hint');
-    statusSub.id = 'claude_max_status_sub';
-    const row = el('div', 'cm-btn-row');
-    const connectBtn = el('div', 'menu_button cm-connect');
-    connectBtn.id = 'claude_max_connect';
-    connectBtn.append(el('i', 'fa-solid fa-plug'), document.createTextNode(' 一键连接'));
-    connectBtn.addEventListener('click', () => connect(getSettings()));
-    // The address field lives in 设置 (and 其他 → 手机连接); this jumps to 设置.
-    const fieldsBtn = el('div', 'menu_button');
-    fieldsBtn.id = 'claude_max_status_conn';
-    fieldsBtn.append(el('i', 'fa-solid fa-gear'), document.createTextNode(' 改地址'));
-    fieldsBtn.addEventListener('click', () => showTab('settings'));
-    row.append(connectBtn, fieldsBtn);
-    alert.append(statusTitle, statusSub, row);
+const STEPS = {
+    start: [
+        '打开「酒馆工具」（Mac：酒馆工具.command，Windows：酒馆工具.bat），按回车启动。',
+        '或在代理目录运行 npm start。',
+    ],
+    login: [
+        '「酒馆工具」按 3 登录 Claude，在浏览器里完成登录。',
+        '或在代理目录运行 npm run login。',
+    ],
+};
 
-    const cloud = note('info', '酒馆在云端，连不到你电脑上的代理');
-    cloud.id = 'claude_max_cloud';
-    cloud.hidden = true;
-    cloud.append(el('small', 'cm-hint', '云端酒馆里的 127.0.0.1 是服务器自己。可以：改用 API 密钥直连；在服务器上运行代理；或用内网穿透暴露代理，并设访问密码。'));
+let stepsOpen = false;   // the steps under the card's button
+let stepsFor = '';       // which situation they belong to (a new situation closes them)
+let prevSetup = false;   // was the panel in the first-run state at the last render
+let flashUntil = 0;      // the success card shows until then
 
-    block.append(bar, alert, cloud);
-    return block;
+/** What the card should say right now: null = no card. */
+function describeCard() {
+    const { connected, direct, model } = connectionInfo();
+    const { proxyState, status } = store.get();
+    const online = proxyState === 'online';
+    const setup = !connected && !direct;
+    const remote = status.phase === 'offline' && status.remote;
+    const base = { setup };
+
+    if (status.phase === 'denied') {
+        return { ...base, tone: 'error', dot: 'offline', key: 'denied', title: status.code === 401 ? '访问密码不对' : '代理拒绝连接', sub: status.message,
+            action: { label: '去改访问密码', run: () => showTab('other') } };
+    }
+    if (status.phase === 'offline') {
+        if (!setup && direct) return null; // direct to Claude without the proxy: nothing is wrong
+        const where = status.where;
+        return {
+            ...base, tone: setup ? 'info' : 'error', dot: 'offline', key: remote ? 'remote' : 'start',
+            title: setup ? '还没连上代理' : '连不上代理',
+            sub: remote
+                ? `连不上 ${where}。确认那台电脑开着、开了「手机模式」、同一个 Wi-Fi（换过 Wi-Fi 地址可能变了）。`
+                : 'CCST 靠本机的代理连接 Claude，它现在没在运行。',
+            steps: remote ? null : STEPS.start,
+            action: remote ? { label: '重新检测', run: refreshAll } : { label: '启动代理的说明', again: '我启动好了，重新检测', run: refreshAll },
+            edit: true,
+        };
+    }
+    if (status.phase === 'nologin') {
+        return { ...base, tone: 'warn', dot: 'warning', key: 'login', title: setup ? '代理在线，还差登录 Claude' : '代理在线，但没登录 Claude',
+            sub: '登录一次后，聊天走你的订阅额度。', steps: STEPS.login,
+            action: { label: '登录说明', again: '我登录好了，重新检测', run: refreshAll } };
+    }
+    if (status.phase === 'pending' || status.phase === 'idle') {
+        return setup ? { ...base, tone: 'info', dot: 'pending', key: 'checking', title: '正在检测代理…', sub: '' } : null;
+    }
+    if (status.phase === 'online') {
+        const mismatch = status.mismatch;
+        if (connected) {
+            if (Date.now() < flashUntil) {
+                return { ...base, tone: 'ok', dot: 'online', key: 'ok', title: model ? `已连接 · ${shortModel(model)}` : '已连接 · 请选 Claude 模型', sub: '可以开始聊了。模型和思考深度在「推理」页。' };
+            }
+            return mismatch ? { ...base, tone: 'warn', dot: 'warning', key: 'mismatch', title: '面板和代理版本不一致', sub: mismatch } : null;
+        }
+        // Proxy is fine, SillyTavern isn't on it (yet).
+        const sub = direct ? '连上代理才有缓存排布、防丢回复和额度；现在酒馆直连 Claude，本地功能照常。'
+            : `${planOf(status.cred)} 订阅 · 代理 v${status.version}。点一下让酒馆改用它，再在「API 连接」里选 Claude 模型。`;
+        return { ...base, tone: 'info', dot: mismatch ? 'warning' : 'online', key: 'connect', title: direct ? '代理在线，可以连上它' : '代理已就绪，酒馆还没接上',
+            sub: mismatch ? `${sub}\n${mismatch}` : sub, action: { label: '一键连接', icon: 'fa-plug', primary: true, run: () => connect(getSettings()) } };
+    }
+    return null;
 }
 
-/** Show the status note only while something needs doing; connect button only when ST isn't connected. */
+/** Draw the connect card and the stage of the whole panel from the store + SillyTavern's settings. */
 export function renderConnect() {
-    const block = document.getElementById('claude_max_status_block');
-    const btn = document.getElementById('claude_max_connect');
-    if (!block || !btn) return;
-    const { connected, direct } = connectionInfo();
+    const card = document.getElementById('claude_max_status_block');
+    if (!card) return;
+    const before = prevSetup;
+    let view = describeCard();
+    const { connected } = connectionInfo();
+    // Just left the first-run state: show the success card for a few seconds.
+    if (before && connected && store.get().proxyState === 'online' && !view?.setup && Date.now() >= flashUntil && view === null) {
+        flashUntil = Date.now() + 7000;
+        setTimeout(renderConnect, 7100);
+        view = describeCard();
+    }
+    prevSetup = !!view?.setup;
+    const body = card.closest('.cm-body');
+    if (body) {
+        body.dataset.stage = view?.setup ? 'setup' : 'ready';
+        if (!view?.setup) delete body.dataset.explore;
+    }
+    card.hidden = !view;
+    if (view) {
+        card.dataset.tone = view.tone;
+        if (view.key !== 'checking' && stepsFor !== view.key) { stepsFor = view.key; stepsOpen = false; }
+        card.querySelector('#claude_max_status_title').textContent = view.title;
+        const sub = card.querySelector('#claude_max_status_sub');
+        sub.textContent = view.sub ?? '';
+        sub.hidden = !view.sub;
+        const steps = card.querySelector('#claude_max_steps');
+        steps.replaceChildren(...(view.steps ?? []).map((t) => el('li', null, t)));
+        steps.hidden = !view.steps || !stepsOpen;
+        const btn = card.querySelector('#claude_max_status_action');
+        btn.hidden = !view.action;
+        if (view.action) {
+            const label = stepsOpen && view.action.again ? view.action.again : view.action.label;
+            btn.replaceChildren(...(view.action.icon ? [el('i', `fa-solid ${view.action.icon}`), document.createTextNode(` ${label}`)] : [document.createTextNode(label)]));
+            btn.classList.toggle('cm-primary', true);
+            btn.onclick = () => {
+                if (view.steps && view.action.again && !stepsOpen) { stepsOpen = true; renderConnect(); return; }
+                view.action.run();
+            };
+        }
+        card.querySelector('#claude_max_status_conn').hidden = !view.edit;
+    }
     const { proxyState } = store.get();
-    btn.hidden = connected;
-    // Direct to Claude with no proxy running: nothing needs doing, the proxy is optional.
-    block.hidden = (connected && proxyState === 'online') || (direct && proxyState !== 'online' && proxyState !== 'warning');
-    block.dataset.tone = proxyState === 'offline' ? 'error' : proxyState === 'online' && !connected ? 'info' : 'warn';
-    if (direct) setDot(proxyState === 'online' || proxyState === 'warning' ? 'online' : 'direct');
-    const conn = document.getElementById('claude_max_status_conn');
-    if (conn) conn.hidden = proxyState !== 'offline';
-    const title = document.getElementById('claude_max_status_title');
-    if (title && proxyState === 'online') title.textContent = statusTitleOnline();
+    const { direct } = connectionInfo();
+    const up = proxyState === 'online' || proxyState === 'warning';
+    // Direct to Claude with the proxy not running is not a fault: a hollow dot.
+    setDot(direct && !connected && !up ? 'direct' : view?.dot ?? (proxyState ?? 'pending'));
+    // The bar is for a working connection; during first-run the card is the only thing to look at.
+    const bar = document.getElementById('claude_max_bar');
+    if (bar) bar.hidden = !!view?.setup;
     // Cloud SillyTavern + loopback address + proxy unreachable: say why instead of "start the proxy".
     const cloud = document.getElementById('claude_max_cloud');
     if (cloud) {
         cloud.hidden = direct || proxyState !== 'offline' || !cloudHosted(libs.hostCheck, { hostname: location.hostname, endpoint: getSettings().endpoint, tauri: IS_TAURI });
     }
     renderGlance();
+}
+
+/** Status bar + the connect card. Everything fine: just the bar. */
+function buildStatusBar(showTab) {
+    const block = el('div', 'cm-status-block');
+    const bar = el('button', 'cm-bar');
+    bar.type = 'button';
+    bar.id = 'claude_max_bar';
+    bar.title = '打开「状态」';
+    const sum = el('div', 'cm-bar-sum');
+    sum.id = 'claude_max_bar_sum';
+    bar.append(el('span', 'cm-dot'), sum, el('i', 'fa-solid fa-chevron-right cm-bar-go'));
+    bar.addEventListener('click', () => { showTab('status'); refreshStats(); refreshQuota(); });
+
+    const card = note('info');
+    card.id = 'claude_max_status_block';
+    card.classList.add('cm-setup');
+    const head = el('div', 'cm-setup-head');
+    const title = el('div', 'cm-note-title');
+    title.id = 'claude_max_status_title';
+    head.append(title);
+    const sub = el('small', 'cm-hint');
+    sub.id = 'claude_max_status_sub';
+    const steps = el('ol', 'cm-notes');
+    steps.id = 'claude_max_steps';
+    const row = el('div', 'cm-btn-row');
+    const action = el('button', 'menu_button cm-btn cm-primary');
+    action.type = 'button';
+    action.id = 'claude_max_status_action';
+    // The address field lives in 设置 (and 其他 → 手机连接); this jumps to 设置.
+    const edit = el('button', 'cm-link-btn', '改地址');
+    edit.type = 'button';
+    edit.id = 'claude_max_status_conn';
+    edit.addEventListener('click', () => showTab('settings'));
+    row.append(action, edit);
+    card.append(head, sub, steps, row);
+
+    const cloud = note('info', '酒馆在云端，连不到你电脑上的代理');
+    cloud.id = 'claude_max_cloud';
+    cloud.hidden = true;
+    cloud.append(el('small', 'cm-hint', '云端酒馆里的 127.0.0.1 是服务器自己。可以：改用 API 密钥直连；在服务器上运行代理；或用内网穿透暴露代理，并设访问密码。'));
+
+    block.append(bar, card, cloud);
+    return block;
 }
 
 const TAB_STORE = 'ccst.panelTab';
@@ -239,7 +337,11 @@ export function addExtensionSettings(settings) {
             b.classList.toggle('active', b.dataset.tab === key);
             b.setAttribute('aria-selected', String(b.dataset.tab === key));
         });
-        if (remember) { try { localStorage.setItem(TAB_STORE, key); } catch { /* storage blocked: not remembered */ } }
+        if (remember) {
+            try { localStorage.setItem(TAB_STORE, key); } catch { /* storage blocked: not remembered */ }
+            // First-run: the card is all there is until the user goes looking on purpose.
+            if (content.dataset.stage === 'setup') content.dataset.explore = '1';
+        }
     };
     for (const [k, label] of TABS) {
         const b = el('button', 'cm-tab', label);
@@ -286,56 +388,14 @@ export function rebuildPanel() {
     refreshStatus();
 }
 
-/** Draw the proxy status (dot, title, sub-line) from the store. */
-export function renderStatus(status) {
-    const title = document.getElementById('claude_max_status_title');
-    const sub = document.getElementById('claude_max_status_sub');
-    if (!title || !sub) return;
-    switch (status.phase) {
-        case 'pending':
-            setDot('pending');
-            title.textContent = '正在检测代理…';
-            sub.textContent = '';
-            return;
-        case 'denied':
-            // Reached the proxy, which turned us away (access key / LAN not on)
-            setDot('offline');
-            title.textContent = status.code === 401 ? '访问密码不对' : '代理拒绝连接';
-            sub.textContent = status.message;
-            break;
-        case 'online': {
-            const { cred, version, mismatch } = status;
-            setDot('online');
-            title.textContent = statusTitleOnline();
-            const plan = SUBSCRIPTION_LABELS[cred.subscriptionType] ?? cred.subscriptionType ?? '订阅';
-            sub.textContent = `${plan} 订阅 · 代理 v${version}`;
-            if (mismatch) {
-                setDot('warning');
-                sub.textContent = `${plan} 订阅 · ${mismatch}`; // the mismatch names both versions
-            }
-            break;
-        }
-        case 'nologin':
-            setDot('warning');
-            title.textContent = '代理在线，但未登录';
-            sub.textContent = '「酒馆工具」选「登录 Claude」，或在代理目录运行 npm run login。';
-            break;
-        case 'offline':
-            setDot('offline');
-            title.textContent = '连接不到代理';
-            sub.textContent = status.remote
-                ? `连不上 ${status.where}。确认那台电脑开着、开了「手机模式」、两边同一个 Wi-Fi（换过 Wi-Fi 地址可能变了）。`
-                : `连不上 ${status.where}。「酒馆工具」选「启动」，或在代理目录运行 npm start。`;
-            break;
-        default:
-            return;
-    }
+/** Draw the proxy status: the connect card follows the store's `status` (see describeCard). */
+export function renderStatus() {
     renderConnect();
 }
 
 /** Subscribe the shell's own drawing to the store (once; the drawing looks its DOM up by id, so a rebuilt panel needs nothing). */
 export function initShell() {
-    store.subscribe('status', ({ status }) => renderStatus(status));
+    store.subscribe('status', () => renderStatus());
     store.subscribe(['glance', 'nextEffort'], () => renderGlance());
     // A full refresh: re-read what SillyTavern is connected to (the connect note; the tabs' own pulse
     // listeners draw the cache card, lore box, check-up and card check).

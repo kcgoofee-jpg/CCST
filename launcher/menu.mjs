@@ -45,6 +45,10 @@ const paint = (code) => (s) => (COLOR ? `\x1b[${code}m${s}\x1b[0m` : s);
 const c = { dim: paint('2'), bold: paint('1'), ok: paint('32'), warn: paint('33'), bad: paint('31'), key: paint('36'), inv: paint('7') };
 const RULE_W = 56;
 const RULE = ' ' + '─'.repeat(RULE_W - 2);
+// 每一屏底部的按键说明用同一套说法，子菜单只多一个「0 返回」
+const HINT_HOME = '按键直接执行 · ↑↓ 选、回车执行 · h 说明 · q 退出';
+const HINT_SUB = '按键直接执行 · ↑↓ 选、回车执行 · 0 返回 · h 说明 · q 退出';
+const note = (m) => (/^(没有成功|出错|.*：(没有成功|出错|结束))/.test(m) ? c.bad(`✗ ${m}`) : c.warn(m));
 
 // ── 菜单内容：只描述「有什么、叫什么、什么时候能用」，怎么做交给 run() ──
 
@@ -223,9 +227,17 @@ async function run(id, io) {
     }
     const fn = nodeAction(id);
     if (fn) {
-        const code = await fn({ ask: io.ask, choose: io.choose });
+        let code;
+        try {
+            code = await fn({ ask: io.ask, choose: io.choose });
+        } catch (err) {
+            // 不把堆栈甩给玩家：一句话，细节在日志里
+            code = 1;
+            process.stdout.write(`\n  ${c.bad('✗')} 出错了：${String(err?.message ?? err).split('\n')[0]}\n  ${c.dim('可以在「维护 > 打开日志」里找到详情。')}\n`);
+        }
+        process.stdout.write(code === 0 ? `\n  ${c.ok('✓ 完成')}\n` : `\n  ${c.bad(`✗ 没有成功（退出码 ${code}）`)}\n`);
         await io.pause();
-        return code === 0 ? null : `结束（退出码 ${code}）`;
+        return code === 0 ? null : `没有成功（退出码 ${code}）`;
     }
     const env = { ...process.env, CM_MENU: '1' };
     let r;
@@ -240,7 +252,7 @@ async function run(id, io) {
         if (!TERMUX_ACTIONS[id] || !IS_TERMUX) return `「${id}」${MAC_ONLY}`;
         r = spawnSync('bash', [join(HERE, 'termux', 'claude-max.sh'), TERMUX_ACTIONS[id]], { stdio: 'inherit', env });
     }
-    return r.status === 0 ? null : `结束（退出码 ${r.status ?? r.signal}）`;
+    return r.status === 0 ? null : `没有成功（退出码 ${r.status ?? r.signal}）`;
 }
 
 function openHelp() {
@@ -266,11 +278,12 @@ export function renderHome(s, sel = -1, msg = '') {
     const mark = (i, text) => (sel === i ? c.inv(text) : text);
     L.push(`  ${mark(0, `${c.key('回车')}  ${home.primary.label}`)}`);
     let i = 1;
+    const colW = Math.max(...home.rows.flat().map((it) => width(`${it.key} ${it.label}`))) + 3;
     for (const row of home.rows) {
-        L.push('  ' + row.map((it) => mark(i++, pad(it.why ? c.dim(`${it.key} ${it.label}`) : `${c.key(it.key)} ${it.label}`, 15))).join('').trimEnd());
+        L.push('  ' + row.map((it) => mark(i++, pad(it.why ? c.dim(`${it.key} ${it.label}`) : `${c.key(it.key)} ${it.label}`, colW))).join('').trimEnd());
     }
-    L.push(RULE, `  ${c.dim('按键直接执行 · ↑↓ 选、回车执行 · h 说明 · q 退出')}`);
-    if (msg) L.push('', `  ${c.warn(msg)}`);
+    L.push(RULE, `  ${c.dim(HINT_HOME)}`);
+    if (msg) L.push('', `  ${note(msg)}`);
     return { text: L.join('\n'), actions: [home.primary, ...home.rows.flat()], probs };
 }
 
@@ -285,8 +298,8 @@ function renderSub(s, name, sel, msg) {
         const line = `   ${it.why ? c.dim(it.key) : c.key(it.key)}  ${pad(it.label, 16)}${c.dim(it.why ?? it.note ?? '')}`;
         L.push(sel === idx ? c.inv(line) : line);
     }
-    L.push('', RULE, `  ${c.dim('按键直接执行 · ↑↓ 选、回车执行 · 0 / Esc 返回 · q 退出')}`);
-    if (msg) L.push('', `  ${c.warn(msg)}`);
+    L.push('', RULE, `  ${c.dim(HINT_SUB)}`);
+    if (msg) L.push('', `  ${note(msg)}`);
     return { text: L.join('\n'), actions };
 }
 
@@ -396,7 +409,7 @@ async function main() {
             choose,
             pause: async () => { if (!plain) await readLine('\n按回车回到菜单…'); },
         });
-        msg = err ? `${item.label}：${err}` : '';
+        msg = err ? `${item.label.replace(/ >$/, '')}：${err}` : '';
         sel = screen === 'home' ? 0 : sel;
     }
 }

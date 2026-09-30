@@ -6,7 +6,7 @@
 import { store } from '../core/store.js';
 import { getSettings, EFFORT_LABEL, EFFORT_OPTIONS, VALID_EFFORTS } from '../core/settings.js';
 import { connectionInfo, modelKey } from '../core/connection.js';
-import { el, note, segmented } from '../core/dom.js';
+import { el, note, segmented, group } from '../core/dom.js';
 import { F } from '../core/registry.js';
 import { renderGlance } from '../shell.js';
 
@@ -17,30 +17,36 @@ export function init() {
     store.subscribe('stats', ({ stats }) => { if (stats.phase === 'ok' || stats.phase === 'error') checkInlineCot(); });
 }
 
-/** 「下一轮临时加深」：只作用于下一条回复，收到回复后自动恢复。 */
+/** 「仅下一轮」: a quiet one-off boost. Only the next reply; spent when it arrives. */
 function oneShotEffortRow(settings) {
-    const wrap = el('div', 'cm-field cm-oneshot');
+    const wrap = el('div', 'cm-oneshot');
     wrap.id = 'claude_max_oneshot';
     const row = el('div', 'cm-oneshot-row');
-    row.append(el('span', 'cm-field-label', '仅下一轮'));
+    const text = el('div', 'cm-oneshot-text');
+    text.append(el('span', 'cm-oneshot-title', '仅下一轮加深'));
     const status = el('small', 'cm-hint');
-    const group = el('div', 'cm-seg');
-    row.append(group);
+    text.append(status);
+    const group = el('div', 'cm-mini-seg');
+    row.append(text, group);
     const render = () => {
         const { nextEffort } = store.get();
-        group.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b.dataset.effort === (nextEffort ?? '')));
+        group.querySelectorAll('button').forEach((b) => {
+            const on = b.dataset.effort === (nextEffort ?? '');
+            b.classList.toggle('active', on);
+            b.setAttribute('aria-pressed', String(on));
+        });
         status.textContent = nextEffort
-            ? `下一条用「${EFFORT_LABEL[nextEffort]}」，之后恢复「${EFFORT_LABEL[settings.effort]}」。再点取消。`
-            : '关键剧情用，只影响下一条。高约慢 1/3，超高约慢 3 倍；这一轮缓存重写一次。';
+            ? `下一条用「${EFFORT_LABEL[nextEffort]}」，之后恢复「${EFFORT_LABEL[settings.effort]}」。再点一次取消。`
+            : '关键剧情用。高约慢 1/3，超高约慢 3 倍，这一轮缓存要重写一次。';
     };
     for (const [value, label] of [['high', '高'], ['xhigh', '超高']]) {
-        const b = el('button', 'cm-seg-btn', label);
+        const b = el('button', 'cm-mini-btn', label);
         b.type = 'button';
         b.dataset.effort = value;
         b.addEventListener('click', () => { store.set({ nextEffort: store.get().nextEffort === value ? null : value }); render(); });
         group.append(b);
     }
-    wrap.append(row, status);
+    wrap.append(row);
     wrap.refresh = render;
     render();
     return wrap;
@@ -88,11 +94,16 @@ export function syncThinkingControls() {
 
 export function buildReasonTab(pane, settings, save) {
     const model = F.models.modelRow();
-    if (model) pane.append(model);
+    if (model) {
+        const g = group('模型', '这次聊天用哪个 Claude；换预设时会跟着预设走。');
+        g.body.append(model);
+        pane.append(g.root);
+    }
+    const think = group('思考', '想多久再回答：越深越连贯，也越慢、越耗额度。');
     if (connectionInfo().direct) {
         const n = note('info');
-        n.append(el('small', 'cm-hint', '直连 Claude 时下面的思考设置不生效，用酒馆「AI 回复配置」的「推理强度」。'));
-        pane.append(n);
+        n.append(el('small', 'cm-hint', '直连 Claude 时这里不生效，请用酒馆「AI 回复配置」的「推理强度」。'));
+        think.body.append(n);
     }
     const depth = segmented({
         label: '思考深度',
@@ -110,10 +121,10 @@ export function buildReasonTab(pane, settings, save) {
         },
     });
     depth.id = 'claude_max_depth';
-    pane.append(depth);
-    pane.append(oneShotEffortRow(settings));
+    think.body.append(depth, oneShotEffortRow(settings));
     const cotTip = note('warn');
     cotTip.id = 'claude_max_cot_tip';
     cotTip.hidden = true;
-    pane.append(cotTip);
+    think.body.append(cotTip);
+    pane.append(think.root);
 }

@@ -5,7 +5,7 @@
 import { store } from '../core/store.js';
 import { getSettings, DEFAULT_ENDPOINT, VALID_THINKING, THINKING_OPTIONS } from '../core/settings.js';
 import { normalizeEndpoint } from '../core/capabilities.js';
-import { el, segmented, toggleRow, section, collapsible } from '../core/dom.js';
+import { el, segmented, toggleRow, group, collapsible, stateLine, button } from '../core/dom.js';
 import { notify } from '../core/notify.js';
 import { refreshStatus, refreshBackend } from '../core/live.js';
 import { connect, renderGlance, SUBSCRIPTION_LABELS, SOURCE_LABELS } from '../shell.js';
@@ -14,6 +14,8 @@ import { syncThinkingControls } from './reason.js';
 export function init() {
     // The proxy line under 连接 follows the status.
     store.subscribe('status', ({ status }) => {
+        // The proxy came up after the panel was built: the backend read that failed earlier gets another go.
+        if (status.phase === 'online' && store.get().backend.phase !== 'ok') refreshBackend();
         if (status.phase !== 'online') return;
         const { cred, version } = status;
         const plan = SUBSCRIPTION_LABELS[cred.subscriptionType] ?? cred.subscriptionType ?? '订阅';
@@ -24,20 +26,22 @@ export function init() {
 
 /** Tab 设置: connection to the local proxy, backend, thinking; the cache & context switches are folded into 高级. */
 export function buildSettingsTab(pane, settings, save) {
-    pane.append(section('连接'));
+    const conn = group('连接', '酒馆通过这个地址连本机的代理。');
     const info = el('small', 'cm-hint');
     info.id = 'claude_max_proxy_info';
-    pane.append(info, connectionFields(settings, save));
+    conn.body.append(info, connectionFields(settings, save));
+    pane.append(conn.root);
 
-    pane.append(section('代理后端'));
+    const backend = group('代理后端', '代理用哪个服务回答：订阅、API 密钥或其他。');
     const backendBox = el('div', 'cm-conn-fields');
     backendBox.id = 'claude_max_backend';
-    backendBox.append(el('small', 'cm-hint', '加载中…'));
-    pane.append(backendBox);
+    backendBox.append(stateLine('loading', '正在读取代理后端…'));
+    backend.body.append(backendBox);
+    pane.append(backend.root);
     // The pane isn't in the document yet (refreshBackend looks the box up by id): fetch once it is.
     queueMicrotask(() => setTimeout(refreshBackend, 0));
 
-    pane.append(section('思考'));
+    const think = group('思考', '深度在「推理」页；这里是模式和显示。');
     const thinking = segmented({
         label: '思考模式',
         options: THINKING_OPTIONS,
@@ -45,8 +49,8 @@ export function buildSettingsTab(pane, settings, save) {
         onChange: (v) => { settings.thinking = VALID_THINKING.includes(v) ? v : 'adaptive'; save(); renderGlance(); syncThinkingControls(); },
     });
     thinking.id = 'claude_max_thinking';
-    pane.append(thinking);
-    pane.append(segmented({
+    think.body.append(thinking);
+    think.body.append(segmented({
         label: '后台请求思考深度',
         options: [
             { value: 'low', label: '低', hint: '其他插件的后台请求（生图 tag、总结）用「低」，快、省额度。' },
@@ -55,19 +59,20 @@ export function buildSettingsTab(pane, settings, save) {
         current: settings.quietEffort === 'follow' ? 'follow' : 'low',
         onChange: (v) => { settings.quietEffort = v === 'follow' ? 'follow' : 'low'; save(); },
     }));
-    pane.append(toggleRow({
+    think.body.append(toggleRow({
         id: 'claudeMaxShowReasoning', title: '显示思考过程', desc: '跟随酒馆「显示模型思维」；关掉则总不显示。',
         checked: settings.showReasoning, onChange: (v) => { settings.showReasoning = v; save(); },
     }));
-    pane.append(toggleRow({
+    think.body.append(toggleRow({
         id: 'claudeMaxIdentity', title: '身份模式', desc: '角色扮演建议关（预设可推荐）。',
         more: '加上 Claude Code 官方前言，模型能说出型号，但多耗 token、带编程助手味。',
         checked: settings.identityMode, onChange: (v) => { settings.identityMode = v; save(); },
     }));
+    pane.append(think.root);
 
     // These decide themselves (defaults on, the preset's own recommendation, the proxy watching each
     // chat). Kept for chasing cache problems, folded away so nobody has to think about it.
-    const adv = collapsible('高级', '缓存与上下文的开关：一般不用动，默认开、代理按聊天自动决定。', { id: 'claude_max_advanced' });
+    const adv = collapsible('高级', '缓存与上下文的开关，一般不用动。', { id: 'claude_max_advanced' });
     const add = (x) => adv.body.append(x);
     add(toggleRow({
         id: 'claudeMaxResume', title: '会话续接', desc: '按真实多轮发送，能用缓存。',
@@ -122,8 +127,9 @@ export function endpointField(settings, save, { id = 'claude_max_endpoint', hint
         // Requests are only tagged when ST's own Custom URL matches this address.
         notify('info', '代理地址已改', '点「重新连接」让酒馆改用它。', { ms: 10000, replace: 'endpoint' });
         refreshStatus();
+        refreshBackend();
     });
-    field.append(input, el('small', 'cm-hint', hint ?? `默认 ${DEFAULT_ENDPOINT}，本机使用不用改。`));
+    field.append(input, el('small', 'cm-hint', hint ?? '本机使用不用改。'));
     return field;
 }
 
@@ -149,10 +155,7 @@ export function accessKeyField(settings, save) {
 }
 
 export function reconnectButton() {
-    const reconnect = el('div', 'menu_button cm-connect cm-connect-quiet');
-    reconnect.append(el('i', 'fa-solid fa-plug'), document.createTextNode(' 重新连接'));
-    reconnect.addEventListener('click', () => connect(getSettings()));
-    return reconnect;
+    return button('重新连接', () => connect(getSettings()), { icon: 'fa-plug' });
 }
 
 /** 设置 → 连接: the local proxy's address. (The LAN password lives in 其他 → 手机连接.) */

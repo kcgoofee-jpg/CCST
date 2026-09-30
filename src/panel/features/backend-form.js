@@ -6,7 +6,7 @@
 
 import { store } from '../core/store.js';
 import { fetchProxy, proxyErrorText } from '../core/proxy.js';
-import { el, segmented } from '../core/dom.js';
+import { el, segmented, stateLine, button } from '../core/dom.js';
 import { notify } from '../core/notify.js';
 import { refreshQuota, refreshBackend } from '../core/live.js';
 
@@ -19,7 +19,8 @@ export function renderBackend(state) {
     const box = document.getElementById('claude_max_backend');
     if (!box) return;
     if (state.phase === 'ok') box.replaceChildren(backendForm(state.view));
-    else if (state.phase === 'error') box.replaceChildren(el('small', 'cm-hint', proxyErrorText('代理后端', state.error)));
+    else if (state.phase === 'error') box.replaceChildren(stateLine('error', proxyErrorText('代理后端', state.error), refreshBackend));
+    else box.replaceChildren(stateLine('loading', '正在读取代理后端…'));
 }
 
 const BACKEND_SHORT = { subscription: '订阅', apikey: 'API', bedrock: 'Bedrock', vertex: 'Vertex', gateway: '网关', openrouter: 'OR' };
@@ -39,11 +40,11 @@ const BACKEND_FORM = {
 };
 
 function backendForm(view) {
-    const wrap = el('div');
+    const wrap = el('div', 'cm-conn-fields');
     let chosen = view.backend;
     const status = el('small', 'cm-hint');
     status.textContent = `现在：${view.label}${view.source === 'env' ? '（环境变量 CLAUDE_SUBSCRIPTION_BACKEND 指定，面板改不了）' : ''}${view.missing?.length ? ` · 还缺 ${view.missing.join('、')}` : ''}`;
-    const fieldsBox = el('div');
+    const fieldsBox = el('div', 'cm-conn-fields');
     const inputs = {};
     const renderFields = () => {
         fieldsBox.replaceChildren();
@@ -63,7 +64,8 @@ function backendForm(view) {
             inputs[name] = { input, secret, set: !!info.set };
             f.append(input);
             if (secret && info.set && !info.fromEnv) {
-                const clear = el('small', 'cm-hint cm-link', '清除');
+                const clear = el('button', 'cm-link-btn', '清除');
+                clear.type = 'button';
                 clear.addEventListener('click', () => saveBackend({ clear: [`${chosen}.${name}`] }));
                 f.append(clear);
             }
@@ -72,20 +74,18 @@ function backendForm(view) {
     };
     const seg = segmented({
         label: '聊天走哪个服务',
-        options: view.backends.map((b) => ({ value: b.id, label: BACKEND_SHORT[b.id] ?? b.label, hint: `${b.label}：${BACKEND_FORM[b.id]?.note ?? ''}` })),
+        options: view.backends.map((b) => ({ value: b.id, label: BACKEND_SHORT[b.id] ?? b.label, hint: '' })),
         current: chosen,
         onChange: (v) => { chosen = v; renderFields(); },
     });
-    const saveBtn = el('div', 'menu_button cm-connect cm-connect-quiet');
-    saveBtn.append(el('i', 'fa-solid fa-floppy-disk'), document.createTextNode(' 保存并切换'));
-    saveBtn.addEventListener('click', () => {
+    const saveBtn = button('保存并切换', () => {
         const vals = {};
         for (const [name, { input }] of Object.entries(inputs)) if (!input.disabled) vals[name] = input.value;
         saveBackend({ backend: chosen, fields: { [chosen]: vals } });
-    });
+    }, { icon: 'fa-floppy-disk', primary: true });
     renderFields();
     wrap.append(status, seg, fieldsBox, saveBtn,
-        el('small', 'cm-hint', '密钥只存在代理那台电脑（data/backend.json），只发给对应的服务；这里不会再显示。切换从下一条回复起生效，正在写的回复不受影响。'));
+        el('small', 'cm-hint', '密钥只存在代理那台电脑，只发给对应的服务，这里不会再显示。从下一条回复起生效。'));
     return wrap;
 }
 

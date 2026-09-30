@@ -171,6 +171,8 @@ export async function refreshStatsPage() {
 
 export async function refreshBackend() {
     if (!document.getElementById('claude_max_backend')) return;
+    // Keep the form on screen while re-reading it after a save; only a first read shows 「正在读取」.
+    if (store.get().backend.phase !== 'ok') store.set({ backend: { phase: 'loading' } });
     try {
         const res = await fetchProxy('/backend', '/v1/backend');
         if (!res.ok) throw new Error(`HTTP ${res.status}`);

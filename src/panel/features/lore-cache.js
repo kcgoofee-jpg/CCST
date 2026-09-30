@@ -4,7 +4,7 @@
 
 import { libs } from '../core/libs.js';
 import { store } from '../core/store.js';
-import { el, popupText } from '../core/dom.js';
+import { el, popupText, stateLine, button } from '../core/dom.js';
 import { currentCharKey } from '../core/st.js';
 import { notify } from '../core/notify.js';
 
@@ -18,12 +18,12 @@ export async function refreshLoreBox() {
     let box = document.getElementById('claude_max_lore');
     if (!box) return;
     if (!libs.loreConst) {
-        box.replaceChildren(el('small', 'cm-hint', '没加载（扩展文件不完整），重装扩展即可。'));
+        box.replaceChildren(stateLine('error', '没加载（扩展文件不完整），重装扩展即可。'));
         return;
     }
     const ctx = SillyTavern.getContext();
     const ch = ctx.groupId ? null : ctx.characters?.[ctx.characterId];
-    if (!ch) { box.replaceChildren(el('small', 'cm-hint', '打开角色卡聊天后可用。')); return; }
+    if (!ch) { box.replaceChildren(stateLine('empty', '打开角色卡聊天后可用。')); return; }
     // Every book that feeds this chat, not just the card's own: global
     // (selected) books and the chat's bound book cost cache the same way.
     const names = [ch.data?.extensions?.world, ctx.chatMetadata?.world_info];
@@ -32,7 +32,7 @@ export async function refreshLoreBox() {
         names.push(...(wi.selected_world_info ?? []));
     } catch { /* global lorebooks unknown in this frontend */ }
     const books = [...new Set(names.filter(Boolean))];
-    if (!books.length) { box.replaceChildren(el('small', 'cm-hint', '这个聊天没用世界书。')); return; }
+    if (!books.length) { box.replaceChildren(stateLine('empty', '这个聊天没用世界书。')); return; }
     const charKey = currentCharKey();
     const parts = [];
     for (const name of books) {
@@ -63,14 +63,10 @@ function loreRow(ctx, name, book) {
     }
     const row = el('div', 'cm-btn-row');
     if (sum.keyword) {
-        const b = el('div', 'menu_button', '设为常驻（自动备份）');
-        b.addEventListener('click', () => convertLore(name, book, backup));
-        row.append(b);
+        row.append(button('设为常驻（自动备份）', () => convertLore(name, book, backup)));
     }
     if (hasBackup) {
-        const r = el('div', 'menu_button', '恢复原样');
-        r.addEventListener('click', () => restoreLore(name, backup));
-        row.append(r);
+        row.append(button('恢复原样', () => restoreLore(name, backup)));
     }
     if (row.childElementCount) box.append(row);
     return box;

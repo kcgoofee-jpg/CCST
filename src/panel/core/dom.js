@@ -94,11 +94,79 @@ export function toggleRow({ id, title, desc, more, checked, onChange }) {
     return wrap;
 }
 
-export function section(title, extra) {
+/** Section head: title, one-line purpose under it, optional tools (icon buttons) on the right. */
+export function section(title, extra, desc) {
     const head = el('div', 'cm-section-head');
-    head.append(el('div', 'cm-section-title', title));
+    const text = el('div', 'cm-section-text');
+    text.append(el('div', 'cm-section-title', title));
+    if (desc) text.append(el('small', 'cm-hint', desc));
+    head.append(text);
     if (extra) head.append(extra);
     return head;
+}
+
+/** A section with its content: `group('上一轮', '一句话用途', { tools })` → { root, body }. Append controls to `body`. */
+export function group(title, desc, { tools, id } = {}) {
+    const root = el('section', 'cm-group');
+    if (id) root.id = id;
+    const body = el('div', 'cm-group-body');
+    root.append(section(title, tools, desc), body);
+    return { root, body };
+}
+
+/** Empty / loading / error line, the same everywhere. `retry` adds a 重试 button (errors). */
+export function stateLine(kind, text, retry) {
+    const box = el('div', 'cm-state');
+    box.dataset.kind = kind; // loading | empty | error
+    box.append(el('small', 'cm-hint', text));
+    if (retry) {
+        const b = el('button', 'cm-link-btn', '重试');
+        b.type = 'button';
+        b.addEventListener('click', retry);
+        box.append(b);
+    }
+    return box;
+}
+
+/** A button: `primary` fills with the accent colour. Same look for every action in the panel. */
+export function button(label, onClick, { icon, primary = false, id } = {}) {
+    const b = el('button', `menu_button cm-btn${primary ? ' cm-primary' : ''}`);
+    b.type = 'button';
+    if (id) b.id = id;
+    if (icon) b.append(el('i', `fa-solid ${icon}`));
+    b.append(document.createTextNode(icon ? ` ${label}` : label));
+    b.addEventListener('click', onClick);
+    return b;
+}
+
+/** Radio cards: one choice out of a few, each with a one-line trade-off. Same `.select(value)` as segmented(). */
+export function cards({ label, options, current, onChange }) {
+    const wrap = el('div', 'cm-field');
+    if (label) wrap.append(el('div', 'cm-field-label', label));
+    const list = el('div', 'cm-cards');
+    list.setAttribute('role', 'radiogroup');
+    list.setAttribute('aria-label', label);
+    const buttons = options.map((opt) => {
+        const b = el('button', 'cm-card');
+        b.type = 'button';
+        b.setAttribute('role', 'radio');
+        b.append(el('span', 'cm-card-dot'), el('span', 'cm-card-title', opt.label), el('small', 'cm-hint cm-card-hint', opt.hint));
+        b.addEventListener('click', () => select(opt.value, true));
+        list.append(b);
+        return b;
+    });
+    function select(value, fire) {
+        options.forEach((opt, i) => {
+            const on = opt.value === value;
+            buttons[i].classList.toggle('active', on);
+            buttons[i].setAttribute('aria-checked', String(on));
+        });
+        if (fire) onChange(value);
+    }
+    select(current, false);
+    wrap.append(list);
+    wrap.select = (value) => select(value, false);
+    return wrap;
 }
 
 /** A collapsed group with a one-line description under its title (visible while folded).

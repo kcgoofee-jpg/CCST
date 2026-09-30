@@ -141,3 +141,10 @@ test('TT guard screen: version vs latest, auto pull, KernelSU hint', () => {
         assert.ok(g.items.every((i) => i.why));
     }
 });
+
+test('home: key columns are CJK-aware and every line fits the rule width', () => {
+    const { text } = renderHome(base, -1, '检查状态：没有成功（退出码 1）');
+    for (const line of text.split('\n')) assert.ok(width(line) <= 60, line);
+    assert.match(text, /✗ 检查状态：没有成功/);
+    assert.match(text, /h 说明 · q 退出/);
+});

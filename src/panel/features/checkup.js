@@ -5,7 +5,7 @@
 import { libs } from '../core/libs.js';
 import { store } from '../core/store.js';
 import { getSettings, saveSettingsDebounced } from '../core/settings.js';
-import { el, note } from '../core/dom.js';
+import { el, note, stateLine } from '../core/dom.js';
 import { currentCharKey } from '../core/st.js';
 import { notify } from '../core/notify.js';
 
@@ -19,7 +19,7 @@ let lastToastKey = '';
 export function runCheckup({ toast = false } = {}) {
     const box = document.getElementById('claude_max_checkup');
     if (!libs.chatCheck) {
-        box?.replaceChildren(el('small', 'cm-hint', '没加载（扩展文件不完整），重装扩展即可。'));
+        box?.replaceChildren(stateLine('error', '没加载（扩展文件不完整），重装扩展即可。'));
         return;
     }
     const settings = getSettings();
@@ -27,7 +27,7 @@ export function runCheckup({ toast = false } = {}) {
     const chat = ctx.chat ?? [];
     const ai = chat.filter((m) => !m.is_user && !m.is_system);
     if (chat.length < 2 || !ai.length) {
-        box?.replaceChildren(el('small', 'cm-hint', '还没有 AI 回复，生成后自动体检。'));
+        box?.replaceChildren(stateLine('empty', '还没有 AI 回复，生成后自动体检。'));
         return;
     }
     const prompts = ctx.chatCompletionSettings?.prompts ?? [];
@@ -43,8 +43,13 @@ export function runCheckup({ toast = false } = {}) {
     });
     store.merge('glance', { issues: r.issues.length });
     if (box) {
-        const card = note(r.issues.length ? 'warn' : 'ok', `${r.chars} 字 / ${r.paragraphs ?? '?'} 段 · ${r.issues.length ? `${r.issues.length} 个问题` : '正常'}`);
-        for (const i of r.issues) card.append(el('small', 'cm-hint', `· ${i.text}`));
+        const card = note(r.issues.length ? 'warn' : 'ok', r.issues.length ? `${r.issues.length} 个问题` : '没有发现问题');
+        card.append(el('small', 'cm-hint', `${r.chars} 字 / ${r.paragraphs ?? '?'} 段`));
+        if (r.issues.length) {
+            const list = el('ul', 'cm-issues');
+            for (const i of r.issues) list.append(el('li', null, i.text));
+            card.append(list);
+        }
         box.replaceChildren(card);
     }
     // Toast only when the problems change: the same issue every reply is noise.

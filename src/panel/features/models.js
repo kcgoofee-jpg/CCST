@@ -7,7 +7,7 @@ import { libs } from '../core/libs.js';
 import { getSettings } from '../core/settings.js';
 import { proxyBase, timeoutSignal } from '../core/proxy.js';
 import { connectionInfo, shortModel, modelKey, modelBase } from '../core/connection.js';
-import { segmented } from '../core/dom.js';
+import { cards } from '../core/dom.js';
 import { notify } from '../core/notify.js';
 import { F } from '../core/registry.js';
 import { renderGlance, rebuildPanel } from '../shell.js';
@@ -16,9 +16,9 @@ import { renderGlance, rebuildPanel } from '../shell.js';
 // SillyTavern's own custom model field (the same path as its model dropdown), so it lasts
 // until the next preset switch — presets store their own model.
 export const MODEL_PICKS = [
-    { value: 'claude-opus-5-5', label: 'Opus 5.5', hint: '总会思考；要求把思考写进正文的条目会被拦。' },
-    { value: 'claude-opus-4-6', label: 'Opus 4.6', hint: '思考可关，思考过程完整可见。' },
-    { value: 'claude-sonnet-5-5', label: 'Sonnet 5.5', hint: '总会思考（关不掉）；原生 1M 上下文，比 Opus 快、便宜。' },
+    { value: 'claude-opus-5-5', label: 'Opus 5.5', hint: '最细腻，长篇最稳；总会思考，偏慢。' },
+    { value: 'claude-opus-4-6', label: 'Opus 4.6', hint: '思考可关，过程完整可见；老牌稳定。' },
+    { value: 'claude-sonnet-5-5', label: 'Sonnet 5.5', hint: '更快更省，原生 1M 上下文；总会思考。' },
 ];
 
 /** Add an option the dropdown lacks (ST's static Claude list lags new models). */
@@ -97,10 +97,10 @@ export function modelRow() {
     const current = modelKey(model);
     const options = [...MODEL_PICKS];
     if (current && !options.some((o) => o.value === current)) {
-        options.push({ value: current, label: shortModel(current), hint: '当前模型（在 API 连接里选的）。' });
+        options.push({ value: current, label: shortModel(current), hint: '当前模型，在「API 连接」里选的。' });
     }
-    const row = segmented({
-        label: '模型',
+    const row = cards({
+        label: '',
         options,
         current,
         onChange: (v) => {
@@ -117,6 +117,7 @@ export function modelRow() {
         },
     });
     row.id = 'claude_max_model';
+    row.setAttribute('aria-label', '模型');
     return row;
 }
 

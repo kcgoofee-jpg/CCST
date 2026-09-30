@@ -6,7 +6,7 @@
 
 import { canSyncPhone } from '../core/capabilities.js';
 import { controlFetch } from '../core/proxy.js';
-import { el, note, collapsible, popupText } from '../core/dom.js';
+import { el, note, collapsible, popupText, stateLine } from '../core/dom.js';
 import { notify } from '../core/notify.js';
 
 const SECTION_ID = 'claude_max_mac_section';
@@ -33,7 +33,7 @@ export async function refreshMac() {
     if (s && !s.supported) { setMacSection(false); return; }
     if (!s) {
         // Only worth a line when this proxy was known to be the Mac's (the section is shown already).
-        box.replaceChildren(el('small', 'cm-hint', '连不上代理，看不到 Mac 状态。'));
+        box.replaceChildren(stateLine('error', '连不上代理，看不到 Mac 状态。', refreshMac));
         return;
     }
     setMacSection(true);
@@ -49,7 +49,7 @@ export async function refreshMac() {
     for (const e of s.recentErrors ?? []) card.append(el('small', 'cm-hint cm-warn', `错误：${e}`));
     const row = el('div', 'cm-btn-row');
     const act = (label, action, confirmText) => {
-        const b = el('button', 'menu_button', label);
+        const b = el('button', 'menu_button cm-btn', label);
         b.type = 'button';
         b.addEventListener('click', async () => {
             if (confirmText) {
@@ -76,7 +76,7 @@ export async function refreshMac() {
     act(s.comfy ? '关闭本地生图' : '启动本地生图', s.comfy ? 'comfy-stop' : 'comfy-start');
     // Syncs the phone's TauriTavern: only makes sense from inside it.
     if (canSyncPhone(s)) act('同步手机', 'phone-sync', '从 Mac 同步这台手机？TauriTavern 会先关闭，同步完自动重新打开。');
-    const logBtn = el('button', 'menu_button', '看日志');
+    const logBtn = el('button', 'menu_button cm-btn', '看日志');
     logBtn.type = 'button';
     const pre = el('pre', 'cm-log');
     pre.hidden = true;
@@ -96,7 +96,7 @@ export async function refreshMac() {
 
 /** 其他 → Mac 遥控: the phone's remote for the Mac launcher. Hidden until the proxy says it runs there. */
 export function buildMacSection() {
-    const { root, body } = collapsible('Mac 遥控', '在手机上看 Mac 的电量、盖子，重启代理、同步手机（代理跑在 Mac 上时才有）', { id: SECTION_ID });
+    const { root, body } = collapsible('Mac 遥控', '看 Mac 的电量和盖子，重启代理、同步手机。', { id: SECTION_ID });
     root.hidden = true;
     const macBox = el('div', 'cm-field');
     macBox.id = 'claude_max_mac';

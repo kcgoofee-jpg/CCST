@@ -8,9 +8,9 @@ import { libs } from '../core/libs.js';
 import { IS_TAURI } from '../core/capabilities.js';
 import { connectionInfo, shortModel } from '../core/connection.js';
 import { proxyErrorText } from '../core/proxy.js';
-import { el, note, iconButton, section } from '../core/dom.js';
+import { el, note, iconButton, group, stateLine, button } from '../core/dom.js';
 import { notify } from '../core/notify.js';
-import { refreshStatsPage } from '../core/live.js';
+import { refreshAll, refreshQuota, refreshStats } from '../core/live.js';
 
 export function init() {
     store.subscribe('quota', ({ quota }) => renderQuota(quota));
@@ -41,14 +41,18 @@ function formatReset(ts) {
     return sameDay ? `${time} 重置` : `${d.getMonth() + 1}/${d.getDate()} ${time} 重置`;
 }
 
-/** The 5h / 7d windows: one line each — label · bar · percent · reset time. */
+/** The 5h / 7d windows: label + reset time on the left, percent on the right, the bar under them. */
 function renderQuota(quota) {
     const box = document.getElementById('claude_max_quota');
     if (!box) return;
-    if (quota.phase === 'loading') { box.classList.add('cm-loading'); return; }
+    if (quota.phase === 'loading') {
+        if (!box.childElementCount) box.replaceChildren(stateLine('loading', '正在读取额度…'));
+        box.classList.add('cm-loading');
+        return;
+    }
     box.classList.remove('cm-loading');
     if (quota.phase === 'error') {
-        box.replaceChildren(el('small', 'cm-hint', proxyErrorText('额度', quota.error)));
+        box.replaceChildren(stateLine('error', proxyErrorText('额度', quota.error), refreshQuota));
         return;
     }
     if (quota.phase !== 'ok') return;
@@ -57,13 +61,11 @@ function renderQuota(quota) {
     // API-type backends bill per token: no 5h / 7d windows to show.
     const quotaSec = document.getElementById('claude_max_quota_sec');
     if (quotaSec) quotaSec.hidden = !!data.notSubscription;
-    box.hidden = !!data.notSubscription;
     if (data.notSubscription) return;
     if (!data.windows?.length) {
-        box.append(el('small', 'cm-hint', '暂无额度数据'));
+        box.append(stateLine('empty', '暂无额度数据。'));
         return;
     }
-    // One line per window: label · bar · percent · reset time.
     for (const w of data.windows) {
         const pct = w.utilization !== null ? Math.round(w.utilization * 100) : null;
         const row = el('div', 'cm-qline');
@@ -73,19 +75,14 @@ function renderQuota(quota) {
         if ((pct ?? 0) >= 90) fill.classList.add('critical');
         else if ((pct ?? 0) >= 70) fill.classList.add('warning');
         bar.append(fill);
+        const label = el('span', 'cm-qline-label', WINDOW_LABELS[w.type] ?? w.type);
         const reset = formatReset(w.resetsAt);
-        row.title = reset;
-        row.append(
-            el('span', 'cm-qline-label', WINDOW_LABELS[w.type] ?? w.type),
-            bar,
-            el('b', 'cm-qline-pct', pct !== null ? `${pct}%` : '–'),
-            el('small', 'cm-hint cm-qline-reset', reset.replace(' 重置', '')),
-        );
+        if (reset) label.append(' ', el('small', 'cm-hint', reset));
+        row.append(label, el('b', 'cm-qline-pct', pct !== null ? `${pct}%` : '–'), bar);
         box.append(row);
     }
     if (data.extraUsage?.isEnabled) {
-        box.append(el('small', 'cm-hint',
-            `额外用量：${data.extraUsage.usedCredits} / ${data.extraUsage.monthlyLimit} ${data.extraUsage.currency}`));
+        box.append(el('small', 'cm-hint', `额外用量：${data.extraUsage.usedCredits} / ${data.extraUsage.monthlyLimit} ${data.extraUsage.currency}`));
     }
 }
 
@@ -100,7 +97,8 @@ const fmtWhen = (ts) => {
     return d.toDateString() === new Date().toDateString() ? `今天 ${time}` : `${d.getMonth() + 1}/${d.getDate()} ${time}`;
 };
 
-/** Today and the last 7 days side by side (one column when they are the same). */
+/** Today and the last 7 days side by side (one column when they are the same). Units live in the row
+ *  labels so no cell needs more than a number: it reads at 375px without wrapping. */
 function usageTable(today, week) {
     const cols = today.requests === week.requests ? [['今天 · 近 7 天', today]] : [['今天', today], ['近 7 天', week]];
     const table = el('table', 'cm-usage');
@@ -108,11 +106,12 @@ function usageTable(today, week) {
     head.append(el('th'), ...cols.map(([t]) => el('th', null, t)));
     table.append(head);
     const rows = [
-        ['请求', (a) => (a.failed ? `${a.requests}（失败 ${a.failed}）` : String(a.requests))],
-        ['输出', (a) => `${fmtK(a.outputTokens)} token`],
+        ['请求', (a) => String(a.requests)],
+        ...(cols.some(([, a]) => a.failed) ? [['失败', (a) => String(a.failed ?? 0)]] : []),
+        ['输出 token', (a) => fmtK(a.outputTokens)],
         ['平均耗时', (a) => fmtSec(a.avgDurationMs)],
         ['首字等待', (a) => fmtSec(a.avgTtftMs)],
-        ['缓存命中', (a) => fmtPct(a.cacheHitRate) + (a.rerolls ? `（不含重roll ${a.rerolls} 次）` : '')],
+        ['缓存命中', (a) => fmtPct(a.cacheHitRate)],
     ];
     for (const [label, fn] of rows) {
         const tr = el('tr');
@@ -132,11 +131,19 @@ function backendUsageLine(backends, pricesAsOf) {
     return el('small', 'cm-hint', `按后端（近 7 天）：${parts.join('；')}${hasCost ? `。花费为估算：token 数 × Anthropic 官方价（${pricesAsOf ?? ''}），以账单为准。` : ''}`);
 }
 
-/** The last turn: cache headline, why, where the first-token wait went. */
+/** The cache result in plain words (the proxy's headline has the numbers; this says what they mean). */
+function cacheVerdict(hitPct) {
+    if (hitPct >= 80) return { tone: 'ok', text: `缓存命中 ${hitPct}%，又快又省` };
+    if (hitPct >= 50) return { tone: 'ok', text: `缓存命中 ${hitPct}%，大半读了缓存` };
+    return { tone: 'warn', text: `缓存命中 ${hitPct}%，大部分重写了，偏慢偏耗额度` };
+}
+
+/** The last turn: cache in plain words first, then model / time / output, then why. */
 function lastTurnCard(data) {
     const c = data.lastCache;
     const last = data.lastRequest;
-    const card = note(c.hitPct >= 50 ? 'ok' : 'warn', `缓存 · ${c.headline}`);
+    const v = cacheVerdict(c.hitPct);
+    const card = note(v.tone, v.text);
     if (last) {
         card.append(el('small', 'cm-hint',
             `${shortModel(last.model)} · 用时 ${fmtSec(last.durationMs)} · 输出 ${fmtK(last.outputTokens)} token`));
@@ -167,21 +174,30 @@ function lastTurnCard(data) {
 function renderStats(stats) {
     const box = document.getElementById('claude_max_stats');
     if (!box) return;
-    if (stats.phase === 'loading') { box.classList.add('cm-loading'); return; }
+    const lastBox = document.getElementById('claude_max_lastturn');
+    if (stats.phase === 'loading') {
+        if (!box.childElementCount) box.replaceChildren(stateLine('loading', '正在读取用量…'));
+        if (lastBox && !lastBox.childElementCount) lastBox.replaceChildren(stateLine('loading', '正在读取…'));
+        box.classList.add('cm-loading');
+        return;
+    }
     box.classList.remove('cm-loading');
     if (stats.phase === 'error') {
-        box.replaceChildren(el('small', 'cm-hint', proxyErrorText('用量统计', stats.error)));
+        const msg = proxyErrorText('用量统计', stats.error);
+        box.replaceChildren(stateLine('error', msg, refreshStats));
+        lastBox?.replaceChildren(stateLine('error', msg, refreshStats));
         return;
     }
     if (stats.phase !== 'ok') return;
     const data = stats.data;
-    const lastBox = document.getElementById('claude_max_lastturn');
-    lastBox?.replaceChildren(data.lastCache ? lastTurnCard(data) : el('small', 'cm-hint', '还没有对话。'));
+    lastBox?.replaceChildren(data.lastCache ? lastTurnCard(data) : stateLine('empty', '还没有对话，发一条消息后这里显示缓存命中。'));
     box.replaceChildren();
     if (!data.week?.requests) {
-        box.append(el('small', 'cm-hint', '还没有记录（只记耗时和 token，不记内容）。'));
+        box.append(stateLine('empty', '还没有记录（只记耗时和 token，不记内容）。'));
     } else {
         box.append(usageTable(data.today, data.week));
+        const rr = data.today.rerolls || data.week.rerolls;
+        if (rr) box.append(el('small', 'cm-hint', `缓存命中不含重 roll 的请求（近 7 天 ${data.week.rerolls ?? 0} 次）。`));
         const byBackend = backendUsageLine(data.week.backends, data.pricesAsOf);
         if (byBackend) box.append(byBackend);
     }
@@ -202,40 +218,44 @@ function renderStats(stats) {
     }
 }
 
-/** Tab 状态: last-turn cache, quota, usage, world-info cache tool. */
+/** Tab 状态: last turn first, then quota, usage, cache advice, world-info cache tool. */
 export function buildStatusTab(pane) {
     const stamp = el('small', 'cm-hint');
     stamp.id = 'claude_max_stats_time';
     const tools = el('div', 'cm-section-tools');
-    tools.append(stamp, iconButton('fa-rotate', '刷新', refreshStatsPage));
-    pane.append(section('上一轮', tools));
+    tools.append(stamp, iconButton('fa-rotate', '重新检测并刷新', refreshAll));
+    const last = group('上一轮', '刚才那条回复用了多久、缓存命中多少。', { tools });
     const lastBox = el('div', 'cm-stats');
     lastBox.id = 'claude_max_lastturn';
-    pane.append(lastBox);
+    lastBox.append(stateLine('loading', '正在读取…'));
+    last.body.append(lastBox);
+    pane.append(last.root);
 
-    pane.append(section('缓存'));
-    const cacheBox = el('div', 'cm-field');
-    cacheBox.id = 'claude_max_cache';
-    pane.append(cacheBox);
-
-    const quotaHead = section('订阅额度');
-    quotaHead.id = 'claude_max_quota_sec';
-    pane.append(quotaHead);
+    const quota = group('订阅额度', '5 小时和 7 天的用量窗口，到点自动重置。', { id: 'claude_max_quota_sec' });
     const quotaBox = el('div', 'cm-quota');
     quotaBox.id = 'claude_max_quota';
-    quotaBox.append(el('small', 'cm-hint', '加载中…'));
-    pane.append(quotaBox);
+    quotaBox.append(stateLine('loading', '正在读取额度…'));
+    quota.body.append(quotaBox);
+    pane.append(quota.root);
 
-    pane.append(section('用量'));
+    const usage = group('用量', '今天和近 7 天，只记耗时和 token，不记内容。');
     const statsBox = el('div', 'cm-stats');
     statsBox.id = 'claude_max_stats';
-    statsBox.append(el('small', 'cm-hint', '加载中…'));
-    pane.append(statsBox);
+    statsBox.append(stateLine('loading', '正在读取用量…'));
+    usage.body.append(statsBox);
+    pane.append(usage.root);
 
-    pane.append(section('世界书缓存'));
+    const cache = group('缓存建议', '这个连接怎么缓存最省。');
+    const cacheBox = el('div', 'cm-field');
+    cacheBox.id = 'claude_max_cache';
+    cache.body.append(cacheBox);
+    pane.append(cache.root);
+
+    const lore = group('世界书缓存', '按关键词触发的条目会让缓存每轮重写，设为常驻即可。');
     const loreBox = el('div', 'cm-field');
     loreBox.id = 'claude_max_lore';
-    pane.append(loreBox);
+    lore.body.append(loreBox);
+    pane.append(lore.root);
 }
 
 /** 状态 → 缓存: how this source caches. Direct sources: SillyTavern's own settings, which
@@ -245,15 +265,15 @@ export function renderCacheCard() {
     if (!box) return;
     const { connected, direct, kind, where } = connectionInfo();
     if (connected) {
-        box.replaceChildren(el('small', 'cm-hint', '走本机代理：缓存由代理排布，命中情况看上面「上一轮」。'));
+        box.replaceChildren(stateLine('empty', '走本机代理：缓存由代理排布，不用设置。命中情况看「上一轮」。'));
         return;
     }
     if (!direct) {
-        box.replaceChildren(el('small', 'cm-hint', '酒馆现在没在用 Claude。'));
+        box.replaceChildren(stateLine('empty', '酒馆现在没在用 Claude。'));
         return;
     }
     if (!libs.sources) {
-        box.replaceChildren(el('small', 'cm-hint', '没加载（扩展文件不完整），重装扩展即可。'));
+        box.replaceChildren(stateLine('error', '没加载（扩展文件不完整），重装扩展即可。'));
         return;
     }
     const advice = libs.sources.cacheAdvice(kind);
@@ -261,7 +281,7 @@ export function renderCacheCard() {
     for (const line of advice.lines) card.append(el('small', 'cm-hint', line));
     if (advice.yaml) {
         card.append(el('pre', 'cm-log', advice.yaml));
-        const copy = el('div', 'menu_button', '复制这段');
+        const copy = button('复制这段', () => {}, { icon: 'fa-copy' });
         copy.addEventListener('click', async () => {
             try {
                 await navigator.clipboard.writeText(advice.yaml);
