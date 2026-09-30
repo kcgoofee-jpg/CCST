@@ -103,7 +103,7 @@ test('quota: a persistent 401 refreshes once and retries once — no loop; the n
         assert.equal(await fetchQuota({ force: true }), null);
         assert.deepEqual(calls, { usage: 2, token: 1 });
         assert.equal(JSON.parse(readFileSync(file, 'utf8')).claudeAiOauth.refreshToken, 'r2');
-        assert.equal(statSync(file).mode & 0o777, 0o600);
+        if (process.platform !== 'win32') assert.equal(statSync(file).mode & 0o777, 0o600); // Windows has no POSIX modes
     } finally {
         globalThis.fetch = saved.fetch; console.log = saved.log; console.warn = saved.warn;
         if (saved.cfg === undefined) delete process.env.CLAUDE_CONFIG_DIR; else process.env.CLAUDE_CONFIG_DIR = saved.cfg;

@@ -125,7 +125,7 @@ test('POST /v1/backend stores the file 0600, refuses an incomplete backend, answ
         const ok = call({ backend: 'openrouter', fields: { openrouter: { authToken: 'sk-or-SECRET' } } });
         assert.equal(ok.status, 200);
         assert.ok(!JSON.stringify(ok.out).includes('sk-or-SECRET'));
-        assert.equal(statSync(file).mode & 0o777, 0o600);
+        if (process.platform !== 'win32') assert.equal(statSync(file).mode & 0o777, 0o600); // Windows has no POSIX modes
         assert.equal(JSON.parse(readFileSync(file, 'utf8')).openrouter.authToken, 'sk-or-SECRET');
         assert.equal(resolveBackendConfig().backend, 'openrouter');
     } finally {

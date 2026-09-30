@@ -94,6 +94,6 @@ test('inside SillyTavern (plugin mode) restart-proxy is refused: it would stop S
 });
 
 test('the lid pause file lives in launcher/ and is git-ignored (*.local)', () => {
-    assert.match(LID_PAUSE_FILE, /launcher\/lid-pause\.local$/);
+    assert.match(LID_PAUSE_FILE, /launcher[\/\\]lid-pause\.local$/);
     assert.equal(existsSync(LID_PAUSE_FILE), existsSync(LID_PAUSE_FILE)); // path resolves
 });
