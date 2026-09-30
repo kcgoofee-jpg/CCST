@@ -113,7 +113,7 @@ export async function refreshMac() {
 
 /** 其他 → Mac 遥控: the phone's remote for the Mac launcher. Hidden until the proxy says it runs there. */
 export function buildMacSection() {
-    const { root, body } = collapsible('Mac 遥控', '看 Mac 的电量和盖子，重启代理、同步手机。', { id: SECTION_ID });
+    const { root, body } = collapsible('Mac 遥控', '看 Mac 上代理的状态，重启代理、同步手机、看日志。', { id: SECTION_ID });
     root.hidden = true;
     const macBox = el('div', 'cm-field');
     macBox.id = 'claude_max_mac';

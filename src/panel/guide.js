@@ -13,7 +13,7 @@ import { el, note, button, cards } from './core/dom.js';
 import { refreshAll } from './core/live.js';
 import { directCacheCard } from './tabs/status.js';
 import {
-    SOURCES, STEP_TITLES, KEY_STEPS, SUMMARY, chosenSource, guideStep, shouldAutoOnboard, showsCacheCard,
+    SOURCES, STEP_TITLES, KEY_STEPS, SUMMARY, chosenSource, guideStep, shouldAutoOnboard, showsCacheCard, gateConnection, proxyUnknown,
     startGuide, pickSource, backToChoose, finishGuide,
 } from './core/guide.js';
 
@@ -142,7 +142,11 @@ export function renderGuide() {
     // Without the sources helper the connection can't be told apart reliably: no guide, no auto-mark.
     if (!card || !libs.sources) return off;
     const settings = getSettings();
-    const conn = connectionInfo();
+    const raw = connectionInfo();
+    const phase = store.get().status.phase;
+    // ST's settings pointing at the proxy URL is not a connection: wait for / require the proxy's answer.
+    if (raw.connected && proxyUnknown(phase)) return off;
+    const conn = gateConnection(raw, phase);
     if ((conn.connected || conn.direct) && !settings.everConnected) {
         settings.everConnected = true;
         saveSettingsDebounced();

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
     SOURCES, chosenSource, sourceLinked, shouldAutoOnboard, guideStep, KEY_STEPS, SUMMARY, showsCacheCard,
-    startGuide, pickSource, finishGuide, backToChoose,
+    startGuide, pickSource, finishGuide, backToChoose, gateConnection, proxyUnknown, glanceLinked,
 } from '../src/panel/core/guide.js';
 
 const none = { kind: 'other', connected: false, direct: false };
@@ -107,4 +107,32 @@ test('restarting the guide (其他 → 重新引导) shows it for anyone, even a
 test('skipping or finishing ends it for good', () => {
     assert.equal(guideStep(boot({ ...finishGuide() }), none), 0);
     assert.equal(guideStep({ ...boot(), ...finishGuide() }, none), 0);
+});
+
+test('gateConnection: ST pointing at the proxy counts only once the proxy answered', () => {
+    for (const phase of ['offline', 'denied', 'pending', 'idle']) assert.equal(gateConnection(ours, phase).connected, false);
+    for (const phase of ['online', 'nologin']) assert.equal(gateConnection(ours, phase).connected, true);
+    assert.equal(gateConnection(claude, 'offline'), claude); // direct sources pass through
+});
+
+test('fresh install whose ST already points at an offline proxy still gets the guide', () => {
+    const fresh = boot();
+    assert.equal(guideStep(fresh, gateConnection(ours, 'offline')), 1);
+    assert.equal(shouldAutoOnboard(fresh, gateConnection(ours, 'offline')), false);
+    assert.equal(guideStep(fresh, gateConnection(ours, 'online')), 0); // answered: already a working user
+});
+
+test('proxyUnknown: no status check has finished yet', () => {
+    assert.equal(proxyUnknown('pending'), true);
+    assert.equal(proxyUnknown('idle'), true);
+    assert.equal(proxyUnknown('online'), false);
+    assert.equal(proxyUnknown('offline'), false);
+});
+
+test('glanceLinked: the status bar says 未连接 for a proxy connection whose proxy is offline', () => {
+    assert.equal(glanceLinked(ours, 'offline'), false);
+    assert.equal(glanceLinked(ours, 'online'), true);
+    assert.equal(glanceLinked(ours, 'pending'), true);
+    assert.equal(glanceLinked(claude, 'offline'), true);
+    assert.equal(glanceLinked(none, 'online'), false);
 });

@@ -97,3 +97,9 @@ test('the lid pause file lives in launcher/ and is git-ignored (*.local)', () =>
     assert.match(LID_PAUSE_FILE, /launcher[\/\\]lid-pause\.local$/);
     assert.equal(existsSync(LID_PAUSE_FILE), existsSync(LID_PAUSE_FILE)); // path resolves
 });
+
+test('macStatus: a proxy running inside SillyTavern (plugin mode) reports remote control as unsupported', async () => {
+    const { macStatus } = await import('../src/proxy/platform/control.js');
+    markStandalone(false);
+    assert.equal((await macStatus()).supported, false);
+});

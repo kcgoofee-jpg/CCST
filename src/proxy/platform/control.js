@@ -89,7 +89,8 @@ export const ACTIONS = {
 
 /** Mac-side state for the panel. Numbers and short lines only. */
 export async function macStatus() {
-    if (!launcherAvailable()) {
+    // Inside SillyTavern (plugin mode) there is no launcher-run proxy to remote-control.
+    if (!launcherAvailable() || !standalone) {
         return { ok: false, supported: false };
     }
     const out = await zsh([

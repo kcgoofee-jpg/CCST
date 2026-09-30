@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseProfileList, planProfile, profileNotice, ensureProfile } from '../src/panel/core/connection-profile.js';
+import { parseProfileList, planProfile, profileNotice, ensureProfile, describeCurrentConnection } from '../src/panel/core/connection-profile.js';
 
 test('no CCST profile yet: apply first, then create (which also selects it)', () => {
     const plan = planProfile('["我的 Claude","备用"]');
@@ -47,4 +47,15 @@ test('notice text', () => {
     assert.equal(profileNotice({ existed: false }), '已新建并选中连接配置『CCST』，模型 Opus 4.6。请到『API 连接』核对来源、地址和模型。');
     assert.match(profileNotice({ existed: true }), /^已更新连接配置『CCST』，模型 Opus 4\.6。/);
     assert.match(profileNotice({ existed: false, modelOk: false }), /模型没能自动选上/);
+});
+
+test('confirm popup: no profile selected ("<None>") leaves the profile part out', () => {
+    const t = describeCurrentConnection({ profile: '<None>', source: 'custom', url: 'http://127.0.0.1:8901/v1', model: 'claude-opus-4-6' });
+    assert.equal(t, '来源 custom · http://127.0.0.1:8901/v1 · claude-opus-4-6');
+    assert.equal(describeCurrentConnection({ profile: '我的 Claude', source: 'claude' }), '连接配置「我的 Claude」 · 来源 claude');
+    assert.equal(describeCurrentConnection({}), '');
+});
+
+test('confirm popup: only the given (current source) model is shown', () => {
+    assert.equal(describeCurrentConnection({ source: 'openai', model: '' }), '来源 openai');
 });

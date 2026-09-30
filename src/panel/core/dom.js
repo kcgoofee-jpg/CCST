@@ -52,6 +52,8 @@ export function segmented({ label, options, current, onChange }) {
             const on = opt.value === value;
             buttons[i].classList.toggle('active', on);
             buttons[i].setAttribute('aria-checked', String(on));
+            // A card that stops being the selected one must not keep a focus ring (it reads as selected).
+            if (!on && buttons[i].matches?.(':focus')) buttons[i].blur();
             if (on) hint.textContent = opt.hint;
         });
         if (fire) onChange(value);

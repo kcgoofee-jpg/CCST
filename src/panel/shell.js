@@ -24,7 +24,8 @@ import { buildSettingsTab } from './tabs/settings.js';
 import { buildOtherTab } from './tabs/other.js';
 import { TABS, resolveTab } from './core/tabs.js';
 import { buildGuideCard, renderGuide } from './guide.js';
-import { PROFILE_MODEL, ensureProfile, profileNotice } from './core/connection-profile.js';
+import { glanceLinked } from './core/guide.js';
+import { PROFILE_MODEL, ensureProfile, profileNotice, describeCurrentConnection } from './core/connection-profile.js';
 
 // ── One-click connect (same selector path as ST's /api-url command) ──
 
@@ -32,9 +33,10 @@ import { PROFILE_MODEL, ensureProfile, profileNotice } from './core/connection-p
 function currentConnectionText() {
     const src = $('#chat_completion_source').val();
     const url = src === 'custom' ? $('#custom_api_url_text').val() : '';
-    const model = $('#custom_model_id').val() || $('#model_claude_select').val() || '';
+    // The model of the CURRENT source only (connectionInfo reads that source's own field).
+    const model = connectionInfo().model || '';
     const profile = $('#connection_profiles option:selected').text?.() || '';
-    return [profile && `连接配置「${profile}」`, src && `来源 ${src}`, url, model].filter(Boolean).join(' · ');
+    return describeCurrentConnection({ profile, source: src, url, model });
 }
 
 /** Point SillyTavern's live connection fields at the proxy. */
@@ -79,7 +81,7 @@ export async function connect(settings) {
             if (!ok) return;
         }
         applyConnection(settings);
-        notify('ok', '正在连接', '会自动选 Opus 4.6，并保存成「CCST」连接配置。', { replace: 'connect' });
+        notify('info', '正在保存连接配置『CCST』…', '酒馆在等模型列表，大约要十秒，请稍候。', { ms: 0, replace: 'connect-profile' });
         await connectProfile(settings);
         setTimeout(refreshAll, 800);
     } catch (err) {
@@ -131,7 +133,7 @@ const planOf = (cred) => SUBSCRIPTION_LABELS[cred?.subscriptionType] ?? cred?.su
 export function renderGlance() {
     const { nextEffort, glance, gen } = store.get();
     const { connected, direct, model, where, billing } = connectionInfo();
-    const linked = connected || direct;
+    const linked = glanceLinked({ connected, direct }, store.get().status.phase);
     const settings = getSettings();
     const effort = effectiveEffort(settings);
     const parts = [];
@@ -226,7 +228,7 @@ function describeCard() {
         const help = connectHelp({ endpoint: getSettings().endpoint });
         return {
             ...base, tone: setup ? 'info' : 'error', dot: 'offline', key: `start-${help.key}`,
-            title: setup ? help.title : `连不上代理 · ${help.title}`,
+            title: help.title,
             sub: help.sub, steps: help.steps, showSteps: true, downloads: help.downloads, hint: help.hint,
             action: { label: '我做好了，重新检测', run: refreshAll },
             edit: true,
@@ -250,7 +252,7 @@ function describeCard() {
         }
         // Proxy is fine, SillyTavern isn't on it (yet).
         const sub = direct ? '连上代理才有缓存排布、防丢回复和额度；现在酒馆直连 Claude，本地功能照常。'
-            : `${planOf(status.cred)} 订阅 · 代理 v${status.version}。点一下让酒馆改用它，再在「API 连接」里选 Claude 模型。`;
+            : `${planOf(status.cred)} 订阅 · 代理 v${status.version}。点「一键连接」让酒馆改用它：会自动选 Opus 4.6，并保存成「CCST」连接配置。`;
         return { ...base, tone: 'info', dot: mismatch ? 'warning' : 'online', key: 'connect', title: direct ? '代理在线，可以连上它' : '代理已就绪，酒馆还没接上',
             sub: mismatch ? `${sub}\n${mismatch}` : sub, action: { label: '一键连接', icon: 'fa-plug', primary: true, run: () => connect(getSettings()) } };
     }

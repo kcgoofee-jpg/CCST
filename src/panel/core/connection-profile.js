@@ -32,6 +32,13 @@ export function planProfile(listOutput, name = PROFILE_NAME) {
         : { existed, select: null, save: `/profile-create ${name}` };
 }
 
+/** The confirm popup's 「现在：…」 line. ST's connection manager reports "<None>" for no profile: leave it out. */
+export function describeCurrentConnection({ profile = '', source = '', url = '', model = '' } = {}) {
+    const p = String(profile ?? '').trim();
+    const hasProfile = p && !/^<none>$/i.test(p);
+    return [hasProfile && `连接配置「${p}」`, source && `来源 ${source}`, url, model].filter(Boolean).join(' · ');
+}
+
 /** The notice after the profile step (plain words: where to double-check). */
 export function profileNotice({ existed, modelOk = true, name = PROFILE_NAME }) {
     const verb = existed ? '已更新' : '已新建并选中';

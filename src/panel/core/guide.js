@@ -31,6 +31,22 @@ export function sourceLinked(choice, conn) {
     return conn.kind === choice;
 }
 
+/**
+ * SillyTavern's settings pointing at the proxy is only a claim; the proxy answering is the fact.
+ * The connection as the guide and the status bar should see it: `connected` (the proxy) counts only
+ * while the last status check says the proxy answered ('online' / 'nologin'). Direct sources pass through.
+ */
+export function gateConnection(conn, phase) {
+    if (!conn?.connected) return conn;
+    return phase === 'online' || phase === 'nologin' ? conn : { ...conn, connected: false };
+}
+
+/** Is the proxy's answer still unknown (no status check has finished yet)? */
+export const proxyUnknown = (phase) => phase === 'idle' || phase === 'pending' || phase == null;
+
+/** Status bar: linked to something that works. A proxy connection whose proxy is offline is not linked. */
+export const glanceLinked = (conn, phase) => !!conn?.direct || (!!conn?.connected && phase !== 'offline' && phase !== 'denied');
+
 const linked = (conn) => !!(conn?.connected || conn?.direct);
 
 /**
