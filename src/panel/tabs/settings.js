@@ -26,7 +26,7 @@ export function init() {
 
 /** Tab 设置: connection to the local proxy, backend, thinking; the cache & context switches are folded into 高级. */
 export function buildSettingsTab(pane, settings, save) {
-    const conn = group('连接', '酒馆通过这个地址连本机的代理。');
+    const conn = group('连接', '酒馆通过这个地址连本机的代理；本机使用不用改地址。');
     const info = el('small', 'cm-hint');
     info.id = 'claude_max_proxy_info';
     conn.body.append(info, connectionFields(settings, save));
@@ -129,7 +129,8 @@ export function endpointField(settings, save, { id = 'claude_max_endpoint', hint
         refreshStatus();
         refreshBackend();
     });
-    field.append(input, el('small', 'cm-hint', hint ?? '本机使用不用改。'));
+    if (hint) field.append(input, el('small', 'cm-hint', hint));
+    else field.append(input);
     return field;
 }
 
@@ -155,7 +156,7 @@ export function accessKeyField(settings, save) {
 }
 
 export function reconnectButton() {
-    return button('重新连接', () => connect(getSettings()), { icon: 'fa-plug' });
+    return button('重新连接', () => connect(getSettings()), { icon: 'fa-plug', text: true });
 }
 
 /** 设置 → 连接: the local proxy's address. (The LAN password lives in 其他 → 手机连接.) */

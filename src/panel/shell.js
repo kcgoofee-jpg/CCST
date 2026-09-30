@@ -246,7 +246,7 @@ function describeCard() {
         const mismatch = status.mismatch;
         if (connected) {
             if (Date.now() < flashUntil) {
-                return { ...base, tone: 'ok', dot: 'online', key: 'ok', title: model ? `已连接 · ${shortModel(model)}` : '已连接 · 请选 Claude 模型', sub: '可以开始聊了。模型和思考深度在「推理」页。' };
+                return { ...base, tone: 'ok', dot: 'online', key: 'ok', title: model ? `已连接 · ${shortModel(model)}` : '已连接 · 请选 Claude 模型', sub: '模型和思考深度在「推理」页。' };
             }
             return mismatch ? { ...base, tone: 'warn', dot: 'warning', key: 'mismatch', title: '面板和代理版本不一致', sub: mismatch } : null;
         }

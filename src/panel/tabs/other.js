@@ -34,8 +34,7 @@ function usageNotes() {
 /** Tab 其他: see the header comment. Sections are folded; the description under each title says what it is. */
 export function buildOtherTab(pane, settings, save) {
     pane.classList.add('cm-list');
-    pane.append(el('small', 'cm-hint cm-lead', '主线以外的功能，都还能用，点开设置。'));
-
+    
     // Mac 遥控: hidden by default; refreshMac() shows it when the proxy reports it runs on the Mac launcher.
     pane.append(buildMacSection());
 
@@ -49,7 +48,7 @@ export function buildOtherTab(pane, settings, save) {
 
     const quiet = collapsible('省电显示', '旧楼层动画只播一遍，手机更省电不卡。', { id: 'claude_max_quiet' });
     quiet.body.append(segmented({
-        label: '省电显示',
+        label: '省电显示', hideLabel: true,
         options: [
             { value: 'auto', label: '自动', hint: '手机和 TauriTavern 上开，电脑上关。' },
             { value: 'on', label: '开', hint: '旧楼层动画只播一遍、不做毛玻璃，悬浮挂件约 20 秒后停。' },
@@ -82,7 +81,7 @@ export function buildOtherTab(pane, settings, save) {
         id: 'claudeMaxDebugDump', title: '保存最近一次完整请求', desc: '存到代理 data/debug/（本机，每次覆盖）。',
         checked: settings.debugDump, onChange: (v) => { settings.debugDump = v; save(); },
     }));
-    const viewBtn = button('查看发给模型的内容', () => F.debug.showDebugRequest(), { icon: 'fa-magnifying-glass' });
+    const viewBtn = button('查看发给模型的内容', () => F.debug.showDebugRequest(), { icon: 'fa-magnifying-glass', text: true });
     const viewHint = el('small', 'cm-hint');
     const syncView = () => {
         const st = debugViewState(settings);
@@ -95,7 +94,7 @@ export function buildOtherTab(pane, settings, save) {
     dbg.body.append(viewBtn, viewHint);
     pane.append(dbg.root);
 
-    pane.append(button('重新引导（选来源 → 连接 → 完成）', () => restartGuide(), { icon: 'fa-compass', id: 'claude_max_guide_again' }));
+    pane.append(button('重新引导（选来源 → 连接 → 完成）', () => restartGuide(), { icon: 'fa-compass', id: 'claude_max_guide_again', text: true }));
 
     pane.append(usageNotes());
 }
