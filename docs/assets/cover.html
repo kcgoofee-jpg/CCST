@@ -2,41 +2,46 @@
 <style>
 *{box-sizing:border-box;margin:0}
 html,body{width:1280px;height:640px;overflow:hidden}
-body{font-family:"Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;color:#f3ebe0;
-background:radial-gradient(900px 500px at 15% 0%,#3a2a1d 0%,transparent 60%),radial-gradient(700px 500px at 100% 100%,#2c2118 0%,transparent 60%),#15110d;position:relative}
-body:before{content:"";position:absolute;inset:0;background-image:radial-gradient(#ffffff0d 1px,transparent 1px);background-size:24px 24px}
-.wrap{position:absolute;inset:0;padding:64px 72px}
-.brand{font-size:132px;font-weight:800;letter-spacing:6px;line-height:1;background:linear-gradient(180deg,#f2d3a6,#c08a55);-webkit-background-clip:text;color:transparent}
-.tag{margin-top:22px;font-size:38px;font-weight:700;line-height:1.35}
-.en{margin-top:10px;font-size:20px;color:#b9a78f;letter-spacing:.3px}
-.flow{position:absolute;left:72px;top:336px;width:1136px;height:120px}
-.src{position:absolute;left:0;top:0;display:flex;flex-direction:column;gap:6px;width:170px}
-.src span{font-size:15px;padding:0 12px;height:19px;line-height:19px;border:1px solid #5a4632;border-radius:8px;background:#221a13;color:#d9c6ab;font-weight:500;text-align:center;white-space:nowrap}
-.node{position:absolute;top:30px;height:66px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:28px}
-.ccst{left:410px;width:190px;background:linear-gradient(135deg,#d9a566,#a8703a);color:#1b130c;box-shadow:0 0 40px #d9a56655;letter-spacing:2px}
-.st{left:830px;width:250px;background:#221a13;border:1px solid #6b5239;color:#f3ebe0;font-size:24px}
-svg.arrows{position:absolute;left:0;top:0;width:1136px;height:120px}
-.chips{position:absolute;left:72px;top:480px;display:flex;gap:14px}
-.chip{padding:10px 16px;border-radius:999px;background:#2a2017;border:1px solid #5a4632;font-size:19px;font-weight:600;color:#ecdcc3}
-.chip b{color:#e0a968;margin-right:6px}
-.bar{position:absolute;left:72px;right:72px;bottom:40px;height:48px;border-radius:12px;background:#1d1610;border:1px solid #4a3928;display:flex;align-items:center;padding:0 20px;font-size:19px;color:#d9c6ab}
-.bar i{font-style:normal;color:#6b5239;margin:0 14px}
-.bar .m{color:#f2d3a6;font-weight:700}
-.bar .w{color:#e0a968}
-.dot{width:10px;height:10px;border-radius:50%;background:#7fc08a;margin-right:12px;box-shadow:0 0 8px #7fc08a}
-.url{position:absolute;right:72px;top:70px;font-size:17px;color:#8f7d66;letter-spacing:1px}
+body{font-family:"Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;color:#3D3D3A;background:#F0EEE6;position:relative}
+body:before{content:"";position:absolute;inset:0;background:radial-gradient(800px 420px at 100% 0%,#FAF9F5 0%,transparent 70%)}
+.serif{font-family:"Noto Serif SC","Songti SC","Source Serif 4",Georgia,serif}
+.wrap{position:absolute;inset:0;padding:56px 72px}
+.brand{font-size:112px;font-weight:700;letter-spacing:4px;line-height:1;color:#141413}
+.brand em{font-style:normal;color:#C15F3C}
+.tag{margin-top:14px;font-size:36px;font-weight:700;line-height:1.35;color:#141413}
+.en{margin-top:6px;font-size:19px;color:#6b6a63;letter-spacing:.3px}
+.url{position:absolute;right:72px;top:64px;font-size:16px;color:#8a897f;letter-spacing:1px}
+.flow{position:absolute;left:72px;top:300px;width:1136px;height:170px}
+svg.arrows{position:absolute;left:0;top:0;width:1136px;height:170px}
+.main{position:absolute;left:0;top:10px;width:250px;height:62px;border-radius:999px;background:#FAF9F5;border:2px solid #D97757;color:#141413;font-weight:700;font-size:26px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px #d977571f}
+.sec{position:absolute;left:0;top:98px;width:460px;display:flex;flex-wrap:wrap;gap:8px}
+.sec span{font-size:15px;height:28px;line-height:26px;padding:0 13px;border:1px solid #E8E6DC;border-radius:999px;background:#FAF9F5;color:#5a5953}
+.cap{position:absolute;left:0;top:78px;font-size:12px;color:#8a897f;letter-spacing:1px}
+.node{position:absolute;top:20px;height:84px;border-radius:18px;display:flex;align-items:center;justify-content:center;font-weight:700}
+.ccst{left:470px;width:210px;background:#D97757;color:#FAF9F5;font-size:36px;letter-spacing:3px;box-shadow:0 10px 30px #c15f3c40}
+.st{left:880px;width:256px;background:#FAF9F5;border:1px solid #E8E6DC;color:#141413;font-size:24px}
+.chips{position:absolute;left:72px;top:492px;display:flex;gap:12px}
+.chip{padding:9px 16px;border-radius:999px;background:#FAF9F5;border:1px solid #E8E6DC;font-size:18px;font-weight:500;color:#3D3D3A;display:flex;align-items:center}
+.chip:before{content:"";width:8px;height:8px;border-radius:50%;background:#D97757;margin-right:9px}
+.bar{position:absolute;left:72px;right:72px;bottom:36px;height:46px;border-radius:12px;background:#FAF9F5;border:1px solid #E8E6DC;display:flex;align-items:center;padding:0 20px;font-size:18px;color:#5a5953}
+.bar i{font-style:normal;color:#c9c6b8;margin:0 13px}
+.bar .m{color:#141413;font-weight:700}
+.bar .w{color:#C15F3C;font-weight:500}
+.dot{width:10px;height:10px;border-radius:50%;background:#5FA873;margin-right:12px}
 </style></head><body><div class="wrap">
 <div class="url">github.com/kcgoofee-jpg/CCST</div>
-<div class="brand">CCST</div>
-<div class="tag">在 SillyTavern 里用你自己的 Claude 订阅聊天</div>
+<div class="brand serif">CC<em>ST</em></div>
+<div class="tag serif">在 SillyTavern 里用你自己的 Claude 订阅聊天</div>
 <div class="en">Chat in SillyTavern with your own Claude subscription</div>
 <div class="flow">
-<svg class="arrows" viewBox="0 0 1136 120"><defs><marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#b98550"/></marker></defs>
-<g stroke="#b98550" stroke-width="2" fill="none" marker-end="url(#a)" opacity=".9">
-<path d="M178 10C300 10 300 63 402 63"/><path d="M178 35C300 35 300 63 402 63"/><path d="M178 60H402"/><path d="M178 85C300 85 300 63 402 63"/><path d="M178 110C300 110 300 63 402 63"/>
-<path d="M608 63H822" stroke-width="3"/></g></svg>
-<div class="src"><span>Claude 订阅</span><span>API 密钥</span><span>Bedrock</span><span>Vertex</span><span>OpenRouter</span></div>
-<div class="node ccst">CCST</div><div class="node st">SillyTavern 酒馆</div></div>
-<div class="chips"><div class="chip"><b>◆</b>省额度（缓存）</div><div class="chip"><b>◆</b>回复不丢</div><div class="chip"><b>◆</b>一键切模型</div><div class="chip"><b>◆</b>回复体检</div><div class="chip"><b>◆</b>一键安装</div></div>
+<svg class="arrows" viewBox="0 0 1136 170"><defs><marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#C15F3C"/></marker></defs>
+<path d="M258 41C360 41 380 62 462 62" stroke="#D97757" stroke-width="3" fill="none" marker-end="url(#a)"/>
+<path d="M404 112C440 112 440 80 462 70" stroke="#D9C9B8" stroke-width="1.5" fill="none"/>
+<path d="M688 62H872" stroke="#C15F3C" stroke-width="3" fill="none" marker-end="url(#a)"/></svg>
+<div class="main">Claude 订阅</div>
+<div class="cap">也支持</div>
+<div class="sec" style="top:100px"><span>API 密钥</span><span>Bedrock</span><span>Vertex</span><span>OpenRouter</span></div>
+<div class="node ccst serif">CCST</div><div class="node st">SillyTavern 酒馆</div></div>
+<div class="chips"><div class="chip">省额度（缓存）</div><div class="chip">回复不丢</div><div class="chip">一键切模型</div><div class="chip">回复体检</div><div class="chip">一键安装</div></div>
 <div class="bar"><span class="dot"></span><span class="m">Opus 4.6</span><i>·</i>本机代理<i>·</i>订阅<i>·</i><span class="w">写作中 1,234 字</span></div>
 </div></body></html>
