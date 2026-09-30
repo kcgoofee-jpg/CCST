@@ -37,7 +37,7 @@ test('host guard: LAN binding accepts IP literals; extra names are opt-in', () =
     assert.equal(isAllowedHost('myhost:8901', 'myhost', ''), true);
 });
 
-import { isLoopbackAddress, keyMatches } from '../src/proxy/api/guards.js';
+import { isLoopbackAddress, keyMatches, isLocalCaller } from '../src/proxy/api/guards.js';
 
 test('LAN access: loopback needs no key, others must match it exactly', () => {
     assert.equal(isLoopbackAddress('127.0.0.1'), true);
@@ -68,4 +68,16 @@ test('ALLOWED_ORIGINS adds exact origins (trailing slash / case ignored), nothin
     assert.equal(isAllowedOrigin('https://evil.st.example.com', extra), false);
     assert.equal(isAllowedOrigin('http://st.example.com', extra), false);
     assert.equal(isAllowedOrigin('https://st.example.com', ''), false);
+});
+
+test('isLocalCaller: loopback without proxy headers is local; forwarded or REQUIRE_KEY is not', () => {
+    const lo = (headers = {}) => ({ socket: { remoteAddress: '127.0.0.1' }, headers });
+    assert.equal(isLocalCaller(lo(), {}), true);
+    assert.equal(isLocalCaller({ socket: { remoteAddress: '10.0.0.5' }, headers: {} }, {}), false);
+    for (const h of ['x-forwarded-for', 'forwarded', 'x-real-ip', 'cf-connecting-ip']) {
+        assert.equal(isLocalCaller(lo({ [h]: '1.2.3.4' }), {}), false, h);
+    }
+    assert.equal(isLocalCaller(lo({ origin: 'http://localhost:8000', host: 'localhost:8901' }), {}), true);
+    assert.equal(isLocalCaller(lo(), { CLAUDE_SUBSCRIPTION_REQUIRE_KEY: '1' }), false);
+    assert.equal(isLocalCaller(lo(), { CLAUDE_SUBSCRIPTION_REQUIRE_KEY: '0' }), true);
 });

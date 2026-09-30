@@ -305,7 +305,7 @@ fi
 say ""
 say "──────── 接下来 ────────"
 if [ -n "$OAUTH_TOKEN" ]; then
-    say "1. Claude 订阅令牌已存进 $ENV_FILE（0600），不用再登录。令牌有效期约一年，到期在有浏览器的电脑上重新 claude setup-token 再运行本脚本。"
+    say "1. Claude 订阅令牌已存进 $ENV_FILE（0600），不用再登录。令牌失效后，在有浏览器的电脑上重新 claude setup-token 再运行本脚本。"
 else
     say "1. 登录 Claude 订阅（服务器没有浏览器，二选一）："
     say "   A. 在有浏览器的电脑上运行 claude setup-token，得到令牌，然后在服务器上："
@@ -325,8 +325,8 @@ fi
 if [ "$BIND" = "0.0.0.0" ]; then
     say ""
     say "!!! 已监听 0.0.0.0（所有网卡）。拿到访问密码的人用的就是你的订阅，而且这个端口是明文 HTTP。"
-    say "!!! 防火墙只放行你自己的 IP；最好前面加 HTTPS 反向代理。注意：同机反代过来的请求在代理看来是「本机」，"
-    say "!!! 会绕过访问密码，反代自己必须做认证。不需要公网访问就别用 --public（用 SSH 隧道）。"
+    say "!!! 防火墙只放行你自己的 IP；最好前面加 HTTPS 反向代理。同机反代转来的请求带 X-Forwarded-For 等头，"
+    say "!!! 代理也会要求访问密码。不需要公网访问就别用 --public（用 SSH 隧道）。"
 fi
 if [ "$MODE" = systemd ]; then
     say ""

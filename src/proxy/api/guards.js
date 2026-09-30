@@ -83,8 +83,21 @@ export function presentedKey(req) {
     return header || auth || null;
 }
 
+// A reverse proxy on the same machine connects from 127.0.0.1, but adds one of
+// these headers (Caddy, nginx, Cloudflare all do): such a request is really
+// remote and needs the key. Direct local callers (SillyTavern's plugin, the
+// panel on localhost) don't send them. CLAUDE_SUBSCRIPTION_REQUIRE_KEY=1
+// demands the key from everyone.
+const PROXY_HEADERS = ['x-forwarded-for', 'forwarded', 'x-real-ip', 'cf-connecting-ip'];
+
+export function isLocalCaller(req, env = process.env) {
+    if (/^(1|true|yes|on)$/i.test(String(env.CLAUDE_SUBSCRIPTION_REQUIRE_KEY ?? '').trim())) return false;
+    if (!isLoopbackAddress(req.socket?.remoteAddress)) return false;
+    return !PROXY_HEADERS.some((h) => req.headers?.[h] !== undefined);
+}
+
 export function guardRemote(req, res, next) {
-    if (isLoopbackAddress(req.socket?.remoteAddress) || req.method === 'OPTIONS') return next();
+    if (isLocalCaller(req) || req.method === 'OPTIONS') return next();
     // Let the panel read why it was turned away (otherwise the browser hides
     // the response and it can only say "can't reach the proxy").
     if (isAllowedOrigin(req.headers.origin)) {
