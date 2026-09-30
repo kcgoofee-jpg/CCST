@@ -88,7 +88,7 @@ jobs:
           node launcher/core.mjs stop
           if ($LASTEXITCODE -ne 0) { exit 1 }
           Start-Sleep -Seconds 2
-          if (netstat -ano | Select-String ":$env:PROXY_PORT\s.*LISTENING") { Write-Error '端口还在监听'; exit 1 }
+          if (netstat -ano | Select-String ":$env:PROXY_PORT\s.*LISTENING") { Write-Error 'port still listening'; exit 1 }
       - name: 收尾：万一前面失败，按 PID 文件关掉代理
         if: always()
         shell: powershell
