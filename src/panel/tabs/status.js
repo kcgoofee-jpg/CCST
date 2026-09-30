@@ -52,7 +52,7 @@ function renderQuota(quota) {
     }
     box.classList.remove('cm-loading');
     if (quota.phase === 'error') {
-        box.replaceChildren(stateLine('error', proxyErrorText('额度', quota.error), refreshQuota));
+        box.replaceChildren(stateLine('error', proxyErrorText('额度', quota.error), () => refreshQuota({ force: true })));
         return;
     }
     if (quota.phase !== 'ok') return;
@@ -62,6 +62,20 @@ function renderQuota(quota) {
     const quotaSec = document.getElementById('claude_max_quota_sec');
     if (quotaSec) quotaSec.hidden = !!data.notSubscription;
     if (data.notSubscription) return;
+    if (data.unavailable === 'rate_limited') {
+        // Nothing cached yet and Anthropic is limiting: count down to the automatic retry.
+        const line = stateLine('empty', '');
+        const hint = line.querySelector('small');
+        const tick = () => {
+            const left = Math.max(0, Math.ceil((data.retryAt - Date.now()) / 1000));
+            hint.textContent = `额度暂时查不到：Anthropic 限流了，${String(Math.floor(left / 60)).padStart(2, '0')}:${String(left % 60).padStart(2, '0')} 后自动再试`;
+            if (!hint.isConnected && timer) { clearInterval(timer); timer = null; }
+        };
+        let timer = setInterval(tick, 1000);
+        tick();
+        box.append(line);
+        return;
+    }
     if (!data.windows?.length) {
         box.append(stateLine('empty', '暂无额度数据。'));
         return;
@@ -80,6 +94,10 @@ function renderQuota(quota) {
         if (reset) label.append(' ', el('small', 'cm-hint', reset));
         row.append(label, el('b', 'cm-qline-pct', pct !== null ? `${pct}%` : '–'), bar);
         box.append(row);
+    }
+    if (data.stale && data.fetchedAt) {
+        const mins = Math.max(1, Math.round((Date.now() - data.fetchedAt) / 60000));
+        box.append(el('small', 'cm-hint', `（${mins} 分钟前的数据）`));
     }
     if (data.extraUsage?.isEnabled) {
         box.append(el('small', 'cm-hint', `额外用量：${data.extraUsage.usedCredits} / ${data.extraUsage.monthlyLimit} ${data.extraUsage.currency}`));

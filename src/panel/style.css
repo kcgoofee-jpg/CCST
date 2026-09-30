@@ -32,6 +32,13 @@
     }
 }
 
+/* The whole panel sits on top of the chat: give it one opaque floor so tab bar, section headers and
+   tables are readable, not only the cards. Inner cards mix their tint into the same solid colour. */
+.claude-max .inline-drawer-content {
+    background: var(--cm-solid);
+    border-radius: var(--cm-radius);
+}
+
 .claude-max .cm-body {
     display: flex;
     flex-direction: column;

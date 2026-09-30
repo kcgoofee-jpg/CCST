@@ -205,8 +205,38 @@ const WINDOW_TYPES = [
 
 let quotaCache = null;
 
+// Upstream 429 backoff. The panel (and every phone / Mac panel open at once) asks on drawer open,
+// tab entry and after each reply; failures used to leave nothing cached, so each ask hit Anthropic
+// again and the log filled with 429s. While backing off, answer from the last good snapshot.
+const BACKOFF_MIN_MS = 60000;
+const BACKOFF_MAX_MS = 15 * 60000;
+let backoff = { until: 0, step: 0 };
+let clock = () => Date.now();
+
+/** Test hooks: a fake clock, and a clean slate. */
+export function __setQuotaClock(fn) { clock = fn; }
+export function __resetQuota() { quotaCache = null; backoff = { until: 0, step: 0 }; clock = () => Date.now(); }
+
+/** Retry-After: delta-seconds or an HTTP date → ms from now, or null. */
+function parseRetryAfter(v, now) {
+    if (v == null || v === '') return null;
+    const secs = Number(v);
+    if (Number.isFinite(secs)) return Math.max(0, secs * 1000);
+    const at = Date.parse(v);
+    return Number.isFinite(at) ? Math.max(0, at - now) : null;
+}
+
+/** What to serve while upstream is rate-limiting: the last good numbers flagged stale, or an empty
+ *  `noData` shell — both carry `retryAt` (ms epoch) so the panel can count down. */
+function backoffSnapshot() {
+    const base = quotaCache ?? { windows: [], extraUsage: null, fetchedAt: null, noData: true };
+    return { ...base, stale: true, rateLimited: true, retryAt: backoff.until };
+}
+
 export async function fetchQuota({ force = false, retried = false } = {}) {
-    if (!force && quotaCache && Date.now() - quotaCache.fetchedAt < USAGE_CACHE_TTL_MS) {
+    const now = clock();
+    if (!retried && now < backoff.until) return backoffSnapshot(); // even when forced: upstream said wait
+    if (!force && quotaCache && now - quotaCache.fetchedAt < USAGE_CACHE_TTL_MS) {
         return quotaCache;
     }
 
@@ -239,8 +269,18 @@ export async function fetchQuota({ force = false, retried = false } = {}) {
         if (!refreshed) return null;
         return fetchQuota({ force: true, retried: true });
     }
+    if (res.status === 429) {
+        const t = clock();
+        const wait = parseRetryAfter(res.headers?.get?.('retry-after'), t)
+            ?? Math.min(BACKOFF_MIN_MS * 2 ** backoff.step, BACKOFF_MAX_MS);
+        const delay = Math.min(Math.max(wait, BACKOFF_MIN_MS), BACKOFF_MAX_MS);
+        backoff = { until: t + delay, step: backoff.step + 1 };
+        // Once per backoff window: requests inside it never reach this line.
+        console.warn(`${PLUGIN_TAG} quota endpoint returned HTTP 429 (transient rate limit) — backing off ${Math.round(delay / 1000)}s, serving cached numbers`);
+        return backoffSnapshot();
+    }
     if (!res.ok) {
-        console.warn(`${PLUGIN_TAG} quota endpoint returned HTTP ${res.status} (429 = transient rate limit; retry later)`);
+        console.warn(`${PLUGIN_TAG} quota endpoint returned HTTP ${res.status}`);
         return null;
     }
 
@@ -273,7 +313,8 @@ export async function fetchQuota({ force = false, retried = false } = {}) {
         }
         : null;
 
-    quotaCache = { windows, extraUsage, fetchedAt: Date.now() };
+    backoff = { until: 0, step: 0 };
+    quotaCache = { windows, extraUsage, fetchedAt: clock() };
     return quotaCache;
 }
 
@@ -282,6 +323,10 @@ export async function handleQuota(_req, res) {
     const { backend } = resolveBackendConfig();
     if (backend !== 'subscription') return res.json({ ok: true, backend, notSubscription: true, windows: [], extraUsage: null });
     const snapshot = await fetchQuota();
+    if (snapshot?.noData) {
+        // Rate-limited and nothing cached yet: not an error, the panel counts down to retryAt.
+        return res.json({ ok: true, windows: [], extraUsage: null, unavailable: 'rate_limited', retryAt: snapshot.retryAt });
+    }
     if (!snapshot) {
         return res.status(503).json({ ok: false, message: 'Quota unavailable (no OAuth credentials or upstream error).' });
     }

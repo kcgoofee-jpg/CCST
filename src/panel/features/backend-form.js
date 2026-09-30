@@ -95,7 +95,7 @@ async function saveBackend(body) {
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data.ok) throw new Error(data.message ?? `HTTP ${res.status}`);
         notify('ok', '代理后端', data.message ?? '已保存', { ms: 8000, replace: 'backend' });
-        refreshQuota();
+        refreshQuota({ force: true });
     } catch (err) {
         notify('bad', '代理后端没改成', String(err instanceof Error ? err.message : err), { ms: 12000, replace: 'backend' });
     }

@@ -127,9 +127,23 @@ export function startHeartbeat() {
 
 // ── Quota meter ──
 
-export async function refreshQuota() {
-    if (!document.getElementById('claude_max_quota')) return;
-    store.set({ quota: { phase: 'loading' } });
+export const QUOTA_MIN_GAP_MS = 60000;
+let quotaAskedAt = 0;      // last time this panel actually asked the proxy
+let quotaNotBefore = 0;    // upstream rate limit: no ask before this
+let quotaInFlight = false;
+let quotaTimer = null;
+
+/** Ask for the quota — at most once per 60 s per panel, however often the tab / drawer / heartbeat
+ *  path calls this (Anthropic rate-limits the endpoint). `force` skips the gap for the one case where
+ *  the answer really changed (backend switched); it still respects an upstream rate limit. */
+export async function refreshQuota({ force = false } = {}) {
+    if (!document.getElementById('claude_max_quota') || quotaInFlight) return;
+    const now = Date.now();
+    if (now < quotaNotBefore) return;
+    if (!force && quotaAskedAt && now - quotaAskedAt < QUOTA_MIN_GAP_MS) return;
+    quotaAskedAt = now;
+    quotaInFlight = true;
+    if (store.get().quota.phase !== 'ok') store.set({ quota: { phase: 'loading' } }); // keep numbers on screen while re-asking
     try {
         const res = await fetchProxy('/quota', '/v1/usage/quota');
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -141,9 +155,18 @@ export async function refreshQuota() {
             const five = data.windows?.find((w) => w.type === 'five_hour');
             glancePatch({ quota: five?.utilization != null ? Math.round(five.utilization * 100) : null });
         }
+        clearTimeout(quotaTimer);
+        quotaNotBefore = 0;
+        if (data.retryAt) {
+            // The proxy is backing off: don't ask again before it says, then try once by ourselves.
+            quotaNotBefore = data.retryAt;
+            quotaTimer = setTimeout(() => refreshQuota({ force: true }), Math.max(1000, data.retryAt - Date.now() + 1000));
+        }
         store.set({ quota: { phase: 'ok', data } });
     } catch (err) {
         store.set({ quota: { phase: 'error', error: err } });
+    } finally {
+        quotaInFlight = false;
     }
 }
 

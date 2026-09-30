@@ -64,7 +64,7 @@ test('no credentials anywhere → null source', () => {
 import { mkdtempSync, writeFileSync, statSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fetchQuota, loadCredentialsCached, __resetCredentialCache } from '../src/proxy/features/oauth.js';
+import { fetchQuota, loadCredentialsCached, __resetCredentialCache, __setQuotaClock, __resetQuota } from '../src/proxy/features/oauth.js';
 
 test('"no credentials" is cached briefly (the keychain lookup blocks); file results never are', () => {
     __resetCredentialCache();
@@ -109,5 +109,47 @@ test('quota: a persistent 401 refreshes once and retries once — no loop; the n
         if (saved.cfg === undefined) delete process.env.CLAUDE_CONFIG_DIR; else process.env.CLAUDE_CONFIG_DIR = saved.cfg;
         if (saved.tok !== undefined) process.env.CLAUDE_CODE_OAUTH_TOKEN = saved.tok;
         __resetCredentialCache();
+    }
+});
+
+test('quota: 429 backs off (Retry-After, else 60s doubling to 15min), serves cache, logs once per window', async () => {
+    const saved = { tok: process.env.CLAUDE_CODE_OAUTH_TOKEN, fetch: globalThis.fetch, warn: console.warn };
+    process.env.CLAUDE_CODE_OAUTH_TOKEN = 'tok';
+    __resetCredentialCache();
+    let t = 1_000_000;
+    __setQuotaClock(() => t);
+    let mode = 'ok'; let retryAfter = null; let calls = 0;
+    const warns = [];
+    console.warn = (m) => warns.push(String(m));
+    globalThis.fetch = async () => {
+        calls++;
+        if (mode === '429') return new Response('{}', { status: 429, headers: retryAfter ? { 'retry-after': retryAfter } : {} });
+        return new Response(JSON.stringify({ five_hour: { utilization: 42, resets_at: null } }), { status: 200 });
+    };
+    try {
+        __resetQuota(); __setQuotaClock(() => t);
+        // No data yet + 429: noData shell with retryAt, no throw, one upstream call
+        mode = '429';
+        let r = await fetchQuota({ force: true });
+        assert.equal(r.noData, true); assert.equal(r.retryAt, t + 60000);
+        for (let i = 0; i < 5; i++) await fetchQuota({ force: true }); // inside the window: no upstream
+        assert.equal(calls, 1); assert.equal(warns.length, 1);
+        // Window over: second 429 doubles to 120s
+        t += 60000; r = await fetchQuota(); assert.equal(calls, 2); assert.equal(r.retryAt, t + 120000);
+        // Recovery caches the good value and resets the step
+        mode = 'ok'; t += 120000; r = await fetchQuota();
+        assert.equal(r.windows[0].utilization, 0.42); assert.equal(r.stale, undefined);
+        // Later 429 with Retry-After: 300 -> serve the cached numbers flagged stale
+        mode = '429'; retryAfter = '300'; t += 31000; r = await fetchQuota();
+        assert.equal(r.stale, true); assert.equal(r.windows[0].utilization, 0.42); assert.equal(r.retryAt, t + 300000);
+        // Cap at 15 minutes
+        t += 300000; retryAfter = '99999'; r = await fetchQuota(); assert.equal(r.retryAt, t + 900000);
+        // Step resets after success -> back to 60s
+        mode = 'ok'; t += 900000; await fetchQuota(); mode = '429'; retryAfter = null; t += 31000; r = await fetchQuota();
+        assert.equal(r.retryAt, t + 60000);
+    } finally {
+        globalThis.fetch = saved.fetch; console.warn = saved.warn;
+        if (saved.tok === undefined) delete process.env.CLAUDE_CODE_OAUTH_TOKEN; else process.env.CLAUDE_CODE_OAUTH_TOKEN = saved.tok;
+        __resetQuota(); __resetCredentialCache();
     }
 });
