@@ -148,8 +148,6 @@ jobs:
           CCST_NO_SYSTEMD: '1'
         run: |
           sh deploy/install.sh --dir "$RUNNER_TEMP/ccst-nh" --port 18972
-          set -x
-          ls -la ~/.config/ccst; cat ~/.config/ccst/proxy.pid
           test "$(curl -s http://127.0.0.1:18972/status | node -p 'JSON.parse(require("fs").readFileSync(0)).plugin')" = claude-subscription
           test -s ~/.config/ccst/proxy.pid
           sh deploy/install.sh --uninstall --remove-files

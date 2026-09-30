@@ -22,7 +22,7 @@
 #   --dry-run        只打印会做什么，不改任何东西
 #   --uninstall      停止并删除服务和配置（登录信息 ~/.claude 不动）
 #   --remove-files   配合 --uninstall：同时删除安装目录（连同其中的 data/）
-# 环境变量：CCST_REPO 覆盖仓库地址（测试用）。
+# 环境变量：CCST_REPO 覆盖仓库地址（测试用）；CCST_NO_SYSTEMD=1 强制走 nohup（测试用）。
 
 set -eu
 
@@ -71,6 +71,7 @@ case "$DIR" in *" "*) die "安装目录不能有空格：$DIR" ;; esac
 env_get() { if [ -f "$ENV_FILE" ]; then sed -n "s/^$1=//p" "$ENV_FILE" | tail -n 1; fi; }
 
 have_systemd_user() {
+    [ "${CCST_NO_SYSTEMD:-}" != 1 ] || return 1
     command -v systemctl >/dev/null 2>&1 && systemctl --user show-environment >/dev/null 2>&1
 }
 
