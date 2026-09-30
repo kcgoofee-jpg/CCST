@@ -7,5 +7,6 @@ package-lock.json
 .scratch-cwd/
 .claude/
 data/
+deploy/.env
 launcher/*.local
 launcher/*.local.*

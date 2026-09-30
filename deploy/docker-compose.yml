@@ -1,0 +1,45 @@
+# CCST 代理的 Docker Compose 示例。
+#
+#   1. 在这个文件旁边建 .env（不要提交），写一行访问密码，例如：
+#        CCST_ACCESS_KEY=$(openssl rand -hex 24) 的结果
+#   2. docker compose -f deploy/docker-compose.yml up -d --build
+#   3. 订阅登录（用 API 密钥等后端的话跳过）：
+#        docker compose -f deploy/docker-compose.yml exec ccst node bin/claude-cli.js auth login
+#      打印的网址在你自己的浏览器打开授权，授权码粘贴回终端；登录信息存在 ccst-data 卷里。
+#
+# 容器外（宿主机、其他机器）访问代理都算「远程」，必须带访问密码；端口默认只映射到 127.0.0.1。
+# 要让局域网 / 公网访问，把 ports 改成 "0.0.0.0:8901:8901"（再想想防火墙和 HTTPS，见 docs/使用指南.md）。
+services:
+  ccst:
+    build:
+      context: ..
+    image: ccst:local
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8901:8901"
+    environment:
+      # 必填：酒馆 / TauriTavern 的 Custom 端点 API 密钥栏填同一个值
+      CLAUDE_SUBSCRIPTION_LAN_KEY: ${CCST_ACCESS_KEY:?在 .env 里设置 CCST_ACCESS_KEY}
+
+      # ── 后端：不设就是订阅（需要上面第 3 步登录）。下面选一种取消注释 ──
+      # API 密钥：
+      # CLAUDE_SUBSCRIPTION_BACKEND: apikey
+      # CLAUDE_SUBSCRIPTION_API_KEY: ${ANTHROPIC_API_KEY}
+      # OpenRouter：
+      # CLAUDE_SUBSCRIPTION_BACKEND: openrouter
+      # CLAUDE_SUBSCRIPTION_OPENROUTER_KEY: ${OPENROUTER_API_KEY}
+      # AWS Bedrock（密钥方式；也可以用 CLAUDE_SUBSCRIPTION_BEDROCK_TOKEN）：
+      # CLAUDE_SUBSCRIPTION_BACKEND: bedrock
+      # CLAUDE_SUBSCRIPTION_AWS_REGION: us-east-1
+      # CLAUDE_SUBSCRIPTION_AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      # CLAUDE_SUBSCRIPTION_AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      # Google Vertex（服务账号 JSON 放进 ccst-data 卷，路径按容器内写）：
+      # CLAUDE_SUBSCRIPTION_BACKEND: vertex
+      # CLAUDE_SUBSCRIPTION_VERTEX_PROJECT: my-project
+      # CLAUDE_SUBSCRIPTION_VERTEX_REGION: us-east5
+      # CLAUDE_SUBSCRIPTION_VERTEX_CREDENTIALS: /data/vertex.json
+    volumes:
+      - ccst-data:/data
+
+volumes:
+  ccst-data:
