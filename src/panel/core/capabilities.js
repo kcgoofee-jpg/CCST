@@ -76,6 +76,17 @@ export function canSyncPhone(macStatus, p = platform) {
     return !!(macStatus?.phoneMode && p.tauri);
 }
 
+/** 同步手机 inside TauriTavern: TT has its own sync / backup; Mac-to-TT sync is untested. */
+export const PHONE_SYNC_WARNING = 'TauriTavern 自带同步和备份，建议用它；电脑酒馆和 TT 之间的同步还没测试过，可能有问题。';
+export const PHONE_SYNC_LABEL = '仍要同步（未测试）';
+
+/** 查看发给模型的内容 needs 保存最近一次完整请求 to be on; otherwise the button is greyed with this hint. */
+export function debugViewState(settings) {
+    return settings?.debugDump
+        ? { enabled: true, hint: '' }
+        : { enabled: false, hint: '先打开上面的开关，再聊一轮。' };
+}
+
 const CLAUDE_OPENROUTER = /claude/i;
 
 /**

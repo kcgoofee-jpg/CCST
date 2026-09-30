@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
     DEFAULT_ENDPOINT, normalizeEndpoint, isOurEndpoint, proxyBaseOf, detectPlatform, isPhoneLike,
-    quietRenderMode, quietRenderOn, proxyDirectOnly, cloudHosted, canSyncPhone, resolveConnection, classifyRequest,
+    quietRenderMode, quietRenderOn, proxyDirectOnly, cloudHosted, canSyncPhone, resolveConnection, classifyRequest, debugViewState, PHONE_SYNC_WARNING, PHONE_SYNC_LABEL,
 } from '../src/panel/core/capabilities.js';
 import * as hostCheck from '../src/shared/host.js';
 import * as sources from '../src/shared/sources.js';
@@ -115,4 +115,18 @@ test('versionMismatch: same major.minor is fine, otherwise names the side that i
     assert.match(versionMismatch('3.3.0', '3.4.1'), /代理 v3\.3\.0 旧于面板 v3\.4\.1/);
     assert.match(versionMismatch('3.5.0', '3.4.1'), /面板 v3\.4\.1 旧于代理 v3\.5\.0/);
     assert.match(versionMismatch('2.9.0', '3.0.0'), /代理 v2\.9\.0 旧于面板/);
+});
+
+test('debugViewState: the view button needs 保存最近一次完整请求', () => {
+    assert.deepEqual(debugViewState({ debugDump: true }), { enabled: true, hint: '' });
+    const off = debugViewState({ debugDump: false });
+    assert.equal(off.enabled, false);
+    assert.match(off.hint, /先打开上面的开关，再聊一轮/);
+    assert.equal(debugViewState(undefined).enabled, false);
+});
+
+test('phone sync in TauriTavern: untested warning and button label', () => {
+    assert.match(PHONE_SYNC_WARNING, /自带同步和备份/);
+    assert.match(PHONE_SYNC_WARNING, /还没测试过/);
+    assert.equal(PHONE_SYNC_LABEL, '仍要同步（未测试）');
 });
