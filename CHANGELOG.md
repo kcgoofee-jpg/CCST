@@ -4,6 +4,17 @@
 
 ## 未发布
 
+## 4.1.0 - 2026-09-30
+
+### 新增
+- **首次引导**：选来源（本机代理 / Claude 官方 / OpenRouter / 其他中转）→ 连接 → 完成，说明每种来源能用什么；直连附缓存设置建议。已连上的用户不打扰，「其他 → 重新引导」可再看。
+- **服务器一条命令装代理**（`deploy/install.sh`）：检查 Node、安装、生成访问密码、systemd 用户服务（没有就后台运行），默认只听本机；`--public` 必须带密码；`--uninstall` 卸载。
+- **Docker**：`Dockerfile` + `deploy/docker-compose.yml`，非 root、数据卷、健康检查，端口默认只映射到本机；各后端用环境变量配置。
+- CI 加了 Windows（真机跑测试、启动器启动 / 检查 / 关闭、PowerShell 5.1）和 Docker 镜像构建。
+
+### 修复
+- 测试在 Windows 上也能跑（没有 Unix 文件权限、反斜杠路径）。
+
 ## 4.0.0 - 2026-09-30
 
 破坏性更新：主线只适配原版 SillyTavern（酒馆服务端插件 + 面板，Chrome / Edge）。手机、TauriTavern、Mac 专用功能全部保留，但收进「其他」，不再开发（TauriTavern 已自带同步）。
