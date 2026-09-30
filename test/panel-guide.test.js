@@ -80,3 +80,31 @@ test('the cache card is for direct sources only', () => {
     assert.equal(showsCacheCard('proxy'), false);
     for (const id of ['claude', 'openrouter', 'relay']) assert.equal(showsCacheCard(id), true);
 });
+
+// ── 4.1.1: only a brand-new install sees the guide ──
+const boot = (over = {}) => ({ onboarded: false, guideSource: '', settingsExisted: false, everConnected: false, ...over });
+
+test('brand-new install (no settings when the panel booted), not connected: step 1', () => {
+    assert.equal(guideStep(boot(), none), 1);
+});
+
+test('settings existed at boot (installed before): never the guide, proxy down or not', () => {
+    for (const conn of [none, ours, claude]) assert.equal(guideStep(boot({ settingsExisted: true }), conn), 0);
+});
+
+test('once connected, a later disconnect shows no guide', () => {
+    assert.equal(guideStep(boot({ everConnected: true }), none), 0);
+    assert.equal(guideStep(boot({ everConnected: false }), none), 1);
+});
+
+test('restarting the guide (其他 → 重新引导) shows it for anyone, even after connecting before', () => {
+    const s = boot({ settingsExisted: true, everConnected: true, guideSource: 'choose' });
+    assert.equal(guideStep(s, none), 1);
+    assert.equal(guideStep({ ...s, guideSource: 'proxy' }, none), 2);
+    assert.equal(guideStep({ ...s, guideSource: 'proxy' }, ours), 3);
+});
+
+test('skipping or finishing ends it for good', () => {
+    assert.equal(guideStep(boot({ ...finishGuide() }), none), 0);
+    assert.equal(guideStep({ ...boot(), ...finishGuide() }, none), 0);
+});

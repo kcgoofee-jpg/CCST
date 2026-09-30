@@ -21,6 +21,15 @@
     --cm-fs-lg: calc(var(--mainFontSize, 15px) * 1.1);
     --cm-tap: 40px;
     --cm-radius: 8px;
+    /* Cards sit on top of the chat, so they must not be see-through: the theme's tint at full opacity
+       (relative colour syntax; older engines keep the theme's own value), else a solid fallback. */
+    --cm-solid: var(--SmartThemeBlurTintColor, var(--SmartThemeChatTintColor, #1b1b1b));
+}
+
+@supports (color: rgb(from red r g b / 1)) {
+    .claude-max {
+        --cm-solid: rgb(from var(--SmartThemeBlurTintColor, var(--SmartThemeChatTintColor, #1b1b1b)) r g b / 1);
+    }
 }
 
 .claude-max .cm-body {
@@ -104,14 +113,14 @@
     box-sizing: border-box;
     border: 0;
     border-radius: var(--cm-radius);
-    background: var(--cm-soft);
+    background: color-mix(in srgb, var(--cm-text) 8%, var(--cm-solid));
     color: inherit;
     font: inherit;
     text-align: left;
     cursor: pointer;
 }
 
-.claude-max .cm-bar:hover { background: color-mix(in srgb, var(--cm-text) 12%, transparent); }
+.claude-max .cm-bar:hover { background: color-mix(in srgb, var(--cm-text) 12%, var(--cm-solid)); }
 
 .claude-max .cm-bar-sum {
     flex: 1;
@@ -157,7 +166,7 @@
     padding: 8px 16px;
     border-radius: var(--cm-radius);
     box-shadow: inset 3px 0 0 var(--cm-tone);
-    background: color-mix(in srgb, var(--cm-tone) 10%, transparent);
+    background: color-mix(in srgb, var(--cm-tone) 10%, var(--cm-solid));
 }
 
 .claude-max .cm-note[data-tone="ok"] { --cm-tone: var(--cm-ok); }
@@ -638,6 +647,15 @@
 }
 
 .claude-max .cm-notes li + li { margin-top: 4px; }
+
+/* a copyable command inside a step */
+.claude-max .cm-cmd { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.claude-max .cm-cmd code {
+    flex: 1 1 auto; min-width: 0; padding: 6px 8px; border-radius: 6px;
+    background: color-mix(in srgb, var(--cm-text) 12%, var(--cm-solid));
+    font-size: var(--cm-fs-sm); word-break: break-all; user-select: all;
+}
+.claude-max .cm-cmd .cm-link-btn { flex: 0 0 auto; min-height: var(--cm-tap); }
 
 /* ── 状态: quota rows, usage table ── */
 

@@ -2,16 +2,16 @@
 
 # CCST
 
-**Claude Code × SillyTavern**：酒馆里用 Claude 的懒人层。不管 Claude 从哪来，装上就是最好的状态。
+**Claude Code × SillyTavern**：给原版 SillyTavern 用的 Claude 懒人层。
 
-面板对任何 Claude 连接都能用（官方 API、OpenRouter）；配上自带的代理，可以用自己的 **Claude Pro / Max 订阅**或 API 密钥玩，并获得缓存排布、手机防丢回复、Mac ↔ 手机同步。代理也能改走 API 密钥、AWS Bedrock、Google Vertex、OpenRouter 或 Anthropic 兼容网关。
+一个酒馆服务端插件 + 一个面板：插件随酒馆启动一个本地代理，让你用自己的 **Claude Pro / Max 订阅**（或 API 密钥、Bedrock、Vertex、OpenRouter）聊天，并自动做好缓存排布、防丢回复、回复体检和额度统计；面板一键连接，只有思考深度一个要调的设置。
 
 <sub>非 Anthropic 官方产品，与 Anthropic 无关。Claude 是 Anthropic 的商标。</sub>
 
 [![版本](https://img.shields.io/github/package-json/v/kcgoofee-jpg/CCST?label=%E7%89%88%E6%9C%AC&color=0d0d0d)](https://github.com/kcgoofee-jpg/CCST/releases)
 [![测试](https://github.com/kcgoofee-jpg/CCST/actions/workflows/test.yml/badge.svg)](https://github.com/kcgoofee-jpg/CCST/actions/workflows/test.yml)
 [![Node](https://img.shields.io/badge/Node-%E2%89%A518-3c873a)](https://nodejs.org)
-[![平台](https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-macOS%20%C2%B7%20Android%20TauriTavern-555)](#快速开始)
+[![平台](https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-SillyTavern%20%C2%B7%20Chrome%20%C2%B7%20Edge-555)](#快速开始)
 [![许可证](https://img.shields.io/badge/%E8%AE%B8%E5%8F%AF%E8%AF%81-AGPL--3.0-blue)](LICENSE)
 
 <img src="docs/assets/island.svg" width="620" alt="灵动岛：思考中 → 写作中 → 完成（字数 · 用时 · 缓存）→ 体检提示 → 缩回小点">
@@ -23,25 +23,12 @@
 ## 截图
 
 <p align="center">
-<img src="docs/assets/panel-reason.png" width="200" alt="推理页：模型与思考深度">
-<img src="docs/assets/panel-status.png" width="200" alt="状态页：缓存、额度、用量">
-<img src="docs/assets/panel-check.png" width="200" alt="体检页">
-<img src="docs/assets/panel-settings.png" width="200" alt="设置页">
+<img src="docs/assets/panel-desktop.png" width="420" alt="桌面面板">
+<img src="docs/assets/panel-reason.png" width="150" alt="推理页：模型与思考深度">
+<img src="docs/assets/panel-status.png" width="150" alt="状态页：缓存、额度、用量">
+<img src="docs/assets/panel-check.png" width="150" alt="体检页">
+<img src="docs/assets/panel-settings.png" width="150" alt="设置页">
 </p>
-
-<sub>从左到右：推理、状态、体检、设置（手机宽度，暗色主题）。</sub>
-
-- **本地代理**：通过官方 [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview) 调用你登录的订阅，对外提供 OpenAI 兼容接口 `http://127.0.0.1:8901/v1`。
-- **CCST 面板**：酒馆扩展，一键连接；只有一个设置项（思考深度），其余自动处理。
-
-| | |
-| --- | --- |
-| **缓存几乎全中** | 会话续接 + 世界书 / 深度注入自动挪位 + 重启后固定会话背景，长聊天每轮只写最近一楼（实测读 18 万 / 写 6.2k） |
-| **回复不丢** | 手机切后台、断网、App 被杀，代理照样写完并暂存，回来自动补回 |
-| **灵动岛** | 面板顶部：思考中 → 实时字数 → 完成（字数 · 用时 · 缓存命中）；面板开着时体检、断线、补回也在这个胶囊里 |
-| **回复体检** | 字数、段数、禁词、破折号、人称、选项格式、重复段落；角色卡未成年人物检查 |
-| **手机友好** | TauriTavern 直连 Mac 上的代理；省电显示自动开；手机上就能遥控 Mac（重启代理、合盖不睡、同步） |
-| **多模型** | Opus 5.5 / 5 / 4.x、Sonnet 5 / 4.x、Fable 5.1、Haiku 4.5，含 1M 上下文版 |
 
 > 基于 [LukaTheHero/SillyTavern-ClaudeSubscription](https://github.com/LukaTheHero/SillyTavern-ClaudeSubscription)（AGPL-3.0）独立维护，感谢原作者。
 
@@ -50,90 +37,63 @@
 
 ## 快速开始
 
-先准备：Claude **Pro / Max** 订阅，或 Anthropic API 密钥。代理跑在电脑上（目前只在 macOS 实测），酒馆 / TauriTavern 在同一台电脑，或同一 Wi-Fi 下的安卓手机。浏览器支持 Chrome / Edge。
+准备：原版 [SillyTavern](https://github.com/SillyTavern/SillyTavern)（Chrome / Edge 打开）、Node 18 以上、Claude **Pro / Max** 订阅（或 API 密钥，见下）。
 
-| 你的情况 | 看这里 |
-| --- | --- |
-| Mac + TauriTavern 或酒馆（最省事） | [Mac 一键安装](#mac-一键安装) |
-| 用 API 密钥 / Bedrock / Vertex / OpenRouter / 兼容网关，不想用订阅 | 照常装代理，在面板「设置 → 代理后端」选好填上（见[使用指南](docs/使用指南.md#使用)）：按 token 计费，用量页显示估算花费 |
-| 已直连 Claude API / OpenRouter，不想跑代理 | 只装扩展，见[不用代理也能用](#no-proxy) |
-| 云酒馆 / Linux 服务器 / Docker | 服务器上一条命令装代理并自动生成访问密码，或用 Docker 镜像：见[使用指南 · 服务器与 Docker](docs/使用指南.md#服务器与-docker) |
-| 安卓手机上的 TauriTavern | 先装好 Mac，再看[使用指南 · 手机](docs/使用指南.md#手机) |
-| Windows / 只有安卓 Termux | [实验性脚本](docs/使用指南.md#实验性windows-与安卓-termux未经实测) |
-
-<a id="no-proxy"></a>
-### 不用代理也能用
-
-酒馆直连 Claude（「API 连接」选官方 Claude 源，或 OpenRouter 上的 Claude 模型）时，只装扩展就能用这些：「推理」页一键切 Opus 5.5 / 4.6（官方 Claude 源；酒馆列表里没有的新模型会自动补上）、预设推荐模型（切预设自动换）、发送前检查（Opus 5 / 5.5 会拦的「把思考写进正文」条目）、体检、角色卡检查、灵动岛。
-缓存排布（世界书变化部分挪到后面）、手机防丢回复、额度和用量统计、手机同步和遥控要连本扩展的代理。直连 API 的缓存用酒馆自己的设置：`config.yaml` 里 `claude.cachingAtDepth`、`claude.extendedTTL`（1 小时）。
-
-### Mac 一键安装
-
-1. 下载本仓库：右上角 **Code → Download ZIP** 解压；会用 git 的话 `git clone https://github.com/kcgoofee-jpg/CCST`。
-   用原版酒馆的话，把解压出来的文件夹放在 `SillyTavern` 文件夹**旁边**（同一层），启动器会自动找到酒馆。
-2. 双击 `launcher/mac/首次安装.command`，一路按提示：检查 Node.js（没有会带你去装）→ 安装依赖 → 浏览器登录 Claude 订阅（只需一次）→ 桌面放一个「**酒馆工具**」→ 启动代理，打开 TauriTavern 或酒馆。
-   - 第一次双击提示「无法验证开发者」：在文件上**右键 → 打开**，再点「打开」（或「系统设置 → 隐私与安全性 → 仍要打开」）。只需一次。
-3. 在 TauriTavern / 酒馆里打开 **CCST** 面板，点 **一键连接**。
-   - TauriTavern：先「扩展 → 安装扩展」，地址填 `https://github.com/kcgoofee-jpg/CCST`；第一次连接会弹授权框，允许访问 `127.0.0.1:8901`。
-   - 酒馆：面板会自动出现；没出现就强制刷新（Cmd+Shift+R）。
-
-以后只用桌面上的「酒馆工具」：首页是启动 / 打开酒馆、重启、检查状态、登录，「维护」管修复依赖、日志、开机启动和关闭；手机、TauriTavern、生图这些主线以外的功能在「其他」里。
-
-### 手动装进原版酒馆
-
-1. 在酒馆的 `config.yaml` 里设置 `enableServerPlugins: true`。
-2. 在酒馆目录（有 `server.js` 的那一层）运行：
+1. 在酒馆的 `config.yaml` 里设置：
+   ```yaml
+   enableServerPlugins: true
+   ```
+2. 在 SillyTavern 文件夹（有 `server.js` 的那一层）运行：
    ```bash
    node plugins.js install https://github.com/kcgoofee-jpg/CCST
    cd plugins/CCST
    npm install
    npm run login
    ```
-   - `npm install` **不要**加 `--omit=optional`，Claude CLI 在可选依赖里。
-   - `npm run login` 会打开浏览器登录订阅账号，只需一次。
-3. 重启酒馆，强制刷新浏览器（Ctrl+F5）。面板会自动安装。
+   `npm install` **不要**加 `--omit=optional`（Claude CLI 在可选依赖里）；`npm run login` 会打开浏览器登录订阅账号，只需一次。
+3. 重启 SillyTavern，浏览器强制刷新（Ctrl+F5）。看到日志 `[claude-subscription] initialised` 就是代理启动好了。
+4. 打开「扩展」里的 **CCST** 面板，点 **一键连接**，在「API 连接」里选 Claude 模型，开聊。
 
-### 只跑代理（命令行）
+面板没连上时会按你的情况说明缺什么（没装插件、要重启酒馆……）。
 
-```bash
-git clone https://github.com/kcgoofee-jpg/CCST
-cd CCST
-npm install
-npm run login
-npm start
-```
+### 用 API 密钥 / Bedrock / Vertex / OpenRouter
 
-代理要一直开着，地址 `http://127.0.0.1:8901/v1`。面板从「扩展 → 安装扩展」安装，地址填本仓库。
+不用订阅也行：面板「设置 → 代理后端」选好后端、填上密钥或区域，按 token 计费，「状态」页显示估算花费。风险最低的用法，见[风险提示](#风险提示)。
 
-### 更新与卸载
+### 直连不跑代理
 
-- **更新代理**：用 git 的在仓库里 `git pull`；下载 ZIP 的重新下载解压，在新文件夹里双击 `launcher/mac/首次安装.command`（桌面上的「酒馆工具」会自动改指向新文件夹，旧文件夹可以删）。然后在酒馆工具里选「重启酒馆」（没在生成回复时）。「检查状态」发现代理还在跑旧版本会提醒。
-- **更新面板**：TauriTavern / 酒馆的「扩展」管理里更新 CCST；手机上的面板可以用「手机同步」一起更新。
-- **卸载**：酒馆工具里关掉「开机自动启动」，选「关闭酒馆」，删掉仓库文件夹和桌面上的「酒馆工具」；「合盖不睡」装过的话先在菜单里卸掉（会删 `/etc/sudoers.d/claudemax-lid`）。聊天记录在 TauriTavern / 酒馆自己的数据里，不受影响。
+酒馆直连 Claude（「API 连接」选官方 Claude 源，或 OpenRouter 上的 Claude 模型）时，只装扩展（酒馆「扩展 → 安装扩展」，地址填 `https://github.com/kcgoofee-jpg/CCST`）就有：模型切换、预设推荐模型、发送前检查、回复体检、角色卡检查、灵动岛。缓存排布、防丢回复、额度统计要走代理。
+
+### 服务器 / Docker
+
+云服务器或 Docker 里跑：一条命令装代理并自动生成访问密码，或用镜像。见[使用指南 · 服务器与 Docker](docs/使用指南.md#服务器与-docker)。
+
+### Mac 一键脚本（可选）
+
+不想敲命令的 Mac 用户：双击 `launcher/mac/首次安装.command`，自动装依赖、登录、放一个桌面「酒馆工具」。详见[使用指南 · Mac 一键安装](docs/使用指南.md#mac-一键安装)。TauriTavern、安卓手机、命令行单跑代理、更新与卸载也在[使用指南 · 其他](docs/使用指南.md#其他mac-一键安装tauritavern-与命令行)。
 
 ## 使用
 
-打开「扩展」里的 **CCST** 面板，点 **一键连接**，开始聊天。要调的只有「推理」页的模型和思考深度，其余自动处理（缓存排布、预设推荐、体检、手机防丢回复）。桌面上的「酒馆工具」管启动、重启、检查状态、登录和关闭（手机同步等在「其他」里）。面板五页：推理 / 状态 / 体检 / 设置 / 其他。
+面板五页：
 
-面板各页、菜单、缓存原理、手机设置、常见问题和环境变量：**[使用指南](docs/使用指南.md)**。
+- **推理**：选模型（Opus 5.5 / 4.6 / Sonnet 5.5 等）和思考深度，其余自动处理。
+- **状态**：上一轮缓存命中、额度、用量。
+- **体检**：回复字数、禁词、重复段落、预设问题，发送前检查。
+- **设置**：代理地址、后端、思考与高级开关。
+- **其他**：重新引导、手机连接、省电显示、调试。
+
+顶部「灵动岛」实时显示思考 / 写作 / 完成（字数 · 用时 · 缓存）。全部细节、缓存原理、环境变量：**[使用指南](docs/使用指南.md)**。
 
 ## 路线图
 
-目标是**所有来源的 Claude 都能一键用好**：
-
-- **3.2** 所有来源一个面板：识别 Claude 官方源 / OpenRouter / Bedrock / Vertex / OpenAI 兼容中转，一键套用各自的缓存设置，模型切换和按模型自动切思维链覆盖所有来源。
-- **3.3（已完成）** 代理多后端：订阅、API 密钥、Bedrock、Vertex、OpenRouter、兼容网关任选，缓存排布和防丢回复对所有后端生效。
-- **3.4** 一键部署：首次引导、Windows / Linux / Termux 转正、云酒馆一条命令装代理、Docker。
-- **3.5** 手机与多客户端：TauriTavern、SillyDroid、Termux 版酒馆；不需要 root 的同步。
-
-详细见 [docs/路线图.md](docs/路线图.md)。
+4.0 主线收敛到原版酒馆，4.1 首次引导与一键部署（服务器 / Docker / Windows CI）已完成。之后的计划见 [docs/路线图.md](docs/路线图.md)。
 
 ## 利弊
 
 **好处**
 
 - 用包月订阅额度，不另外按 token 付费，重度使用比 API 便宜得多。
-- 聊天记录按真实多轮对话发送，角色区分更准，能用上提示缓存。
+- 聊天记录按真实多轮对话发送，角色区分更准，能用上提示缓存（长聊天每轮只写最近一楼）。
 - 能直接设置原生思考深度（酒馆自带的「推理强度」对这种连接无效）。
 - 不带编程助手提示词，也不读本机的 CLAUDE.md 和工具。
 - 聊天内容不落盘；用量日志只记耗时和 token 数。代理只监听本机，并拒绝其他网站发来的请求。
@@ -157,8 +117,17 @@ npm start
 - **异常用量更容易被注意到。** 不要把代理开放给别人用，不要共享账号。
 - **被拦截的请求也计入额度。** 例如 Opus 5 / 5.5 会拦截要求把思维链写进正文的预设（面板会提前提醒）。
 
-作者不对账号被限制、封禁或其他损失负责。介意的话请改用 [Anthropic API](https://platform.claude.com/)：在酒馆「API 连接」的 Custom API 密钥栏填入 `sk-ant-` 开头的密钥，代理就改按该密钥计费。这时缓存有效期自动设为 1 小时（写入按 2 倍价、读取 0.1 倍；订阅模式本来就是 1 小时）；想用 5 分钟就在启动代理前设 `CLAUDE_CODE_PROMPT_CACHE_TTL=5m`。
+作者不对账号被限制、封禁或其他损失负责。介意的话请改用 [Anthropic API](https://platform.claude.com/)：在面板「设置 → 代理后端」选 API 密钥，或在酒馆「API 连接」的 Custom API 密钥栏填入 `sk-ant-` 开头的密钥，代理就改按该密钥计费。这时缓存有效期自动设为 1 小时（写入按 2 倍价、读取 0.1 倍）；想用 5 分钟就在启动代理前设 `CLAUDE_CODE_PROMPT_CACHE_TTL=5m`。
 
+## 常见问题
+
+- **面板说没连上代理**：先看卡片提示。原版酒馆确认 `enableServerPlugins: true`、装了插件并已重启；单独运行代理的确认 `npm start` 在运行。
+- **「未登录」或聊天中途认证失败**：在 `plugins/CCST`（或代理目录）运行 `npm run login`，用运行酒馆的同一个系统用户；`npm run auth` 查看状态。
+- **「Failed to load @anthropic-ai/claude-agent-sdk」**：在代理目录重新 `npm install`（不加 `--omit=optional`），再重启。
+- **Opus 5.5 第一轮报「套取推理过程」**：预设或世界书里有要求把思考写进正文的条目，把它关掉即可；面板发送前会指出是哪一句。
+- **模型列表是空的**：再点一次一键连接，或在浏览器打开 `http://127.0.0.1:8901/status` 看代理状态。
+
+更多见[使用指南 · 常见问题](docs/使用指南.md#常见问题)。
 
 ## 许可证
 

@@ -8,7 +8,8 @@
 import { store } from './store.js';
 import { getSettings } from './settings.js';
 import { normalizeEndpoint } from './capabilities.js';
-import { fetchProxy } from './proxy.js';
+import { fetchProxy, timeoutSignal } from './proxy.js';
+import { IS_TAURI } from './capabilities.js';
 import { connectionInfo } from './connection.js';
 import { notify, ui, flushIsland, clearNotice } from './notify.js';
 import { F } from './registry.js';
@@ -37,6 +38,15 @@ export function versionMismatch(proxyVersion, panelV = panelVersion) {
 const glancePatch = (partial) => store.merge('glance', partial);
 
 // ── Proxy status ──
+
+/** Is CCST's server plugin installed in this SillyTavern? 404 = no; any other answer = yes; unreachable / TauriTavern = unknown. */
+async function probePlugin() {
+    if (IS_TAURI) return 'unknown';
+    try {
+        const res = await fetch('/api/plugins/claude-subscription/status', { signal: timeoutSignal(3000) });
+        return res.status === 404 ? 'missing' : 'present';
+    } catch { return 'unknown'; }
+}
 
 export async function refreshStatus() {
     if (!document.getElementById('claude_max_status_title') || !document.getElementById('claude_max_status_sub')) return;
@@ -72,9 +82,10 @@ export async function refreshStatus() {
     } catch {
         ui.island?.set({ online: false });
         const where = normalizeEndpoint(getSettings().endpoint);
+        const plugin = await probePlugin();
         store.set({
             proxyState: 'offline', proxyOnline: false,
-            status: { phase: 'offline', where, remote: !/\/\/(127\.0\.0\.1|localhost)[:/]/.test(where) },
+            status: { phase: 'offline', where, remote: !/\/\/(127\.0\.0\.1|localhost)[:/]/.test(where), plugin },
         });
     }
 }

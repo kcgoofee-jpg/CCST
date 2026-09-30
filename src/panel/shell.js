@@ -6,6 +6,7 @@
 
 import { store } from './core/store.js';
 import { getSettings, saveSettingsDebounced, EFFORT_LABEL } from './core/settings.js';
+import { connectHelp } from './core/connect-help.js';
 import { IS_TAURI, cloudHosted } from './core/capabilities.js';
 import { libs } from './core/libs.js';
 import { connectionInfo, shortModel } from './core/connection.js';
@@ -110,10 +111,6 @@ export function renderGlance() {
 // problem (proxy down, not logged in, wrong password) and is gone when everything is fine.
 
 const STEPS = {
-    start: [
-        '打开「酒馆工具」（Mac：酒馆工具.command，Windows：酒馆工具.bat），按回车启动。',
-        '或在代理目录运行 npm start。',
-    ],
     login: [
         '「酒馆工具」按 3 登录 Claude，在浏览器里完成登录。',
         '或在代理目录运行 npm run login。',
@@ -125,13 +122,31 @@ let stepsFor = '';       // which situation they belong to (a new situation clos
 let prevSetup = false;   // was the panel in the first-run state at the last render
 let flashUntil = 0;      // the success card shows until then
 
+/** One step: text, and a command (if any) in a box with a copy button. */
+function stepItem(step) {
+    const { text, cmd } = typeof step === 'string' ? { text: step } : step;
+    const li = el('li', null, text);
+    if (cmd) {
+        const row = el('div', 'cm-cmd');
+        const code = el('code', null, cmd);
+        const copy = el('button', 'cm-link-btn', '复制');
+        copy.type = 'button';
+        copy.addEventListener('click', async () => {
+            try { await navigator.clipboard.writeText(cmd); copy.textContent = '已复制'; } catch { copy.textContent = '请手动选中复制'; }
+            setTimeout(() => { copy.textContent = '复制'; }, 2000);
+        });
+        row.append(code, copy);
+        li.append(row);
+    }
+    return li;
+}
+
 /** What the card should say right now: null = no card. */
 function describeCard() {
     const { connected, direct, model } = connectionInfo();
     const { proxyState, status } = store.get();
     const online = proxyState === 'online';
     const setup = !connected && !direct;
-    const remote = status.phase === 'offline' && status.remote;
     const base = { setup };
 
     if (status.phase === 'denied') {
@@ -140,15 +155,12 @@ function describeCard() {
     }
     if (status.phase === 'offline') {
         if (!setup && direct) return null; // direct to Claude without the proxy: nothing is wrong
-        const where = status.where;
+        const help = connectHelp({ pluginState: status.plugin, tauri: IS_TAURI, endpoint: getSettings().endpoint });
         return {
-            ...base, tone: setup ? 'info' : 'error', dot: 'offline', key: remote ? 'remote' : 'start',
-            title: setup ? '还没连上代理' : '连不上代理',
-            sub: remote
-                ? `连不上 ${where}。确认那台电脑开着、开了「手机模式」、同一个 Wi-Fi（换过 Wi-Fi 地址可能变了）。`
-                : 'CCST 靠本机的代理连接 Claude，它现在没在运行。',
-            steps: remote ? null : STEPS.start,
-            action: remote ? { label: '重新检测', run: refreshAll } : { label: '启动代理的说明', again: '我启动好了，重新检测', run: refreshAll },
+            ...base, tone: setup ? 'info' : 'error', dot: 'offline', key: `start-${help.key}`,
+            title: setup ? help.title : `连不上代理 · ${help.title}`,
+            sub: help.sub, steps: help.steps, showSteps: true,
+            action: { label: '我做好了，重新检测', run: refreshAll },
             edit: true,
         };
     }
@@ -208,8 +220,8 @@ export function renderConnect() {
         sub.textContent = view.sub ?? '';
         sub.hidden = !view.sub;
         const steps = card.querySelector('#claude_max_steps');
-        steps.replaceChildren(...(view.steps ?? []).map((t) => el('li', null, t)));
-        steps.hidden = !view.steps || !stepsOpen;
+        steps.replaceChildren(...(view.steps ?? []).map(stepItem));
+        steps.hidden = !view.steps || !(stepsOpen || view.showSteps);
         const btn = card.querySelector('#claude_max_status_action');
         btn.hidden = !view.action;
         if (view.action) {

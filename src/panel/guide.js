@@ -95,7 +95,7 @@ function drawStep2(card, choice) {
             el('small', 'cm-hint', '按下面这张卡片一步步来（启动代理 → 登录 → 一键连接），连上后自动进入下一步。'),
         );
         const row = el('div', 'cm-btn-row');
-        row.append(backLink());
+        row.append(backLink(), skipLink());
         card.append(row);
         return;
     }
@@ -107,7 +107,7 @@ function drawStep2(card, choice) {
         el('small', 'cm-hint', '密钥只填在酒馆自己的框里，CCST 不经手也不保存。选好 Claude 模型后这里会自动往下走。'),
     );
     const row = el('div', 'cm-btn-row');
-    row.append(button('我填好了，重新检测', refreshAll, { icon: 'fa-rotate', primary: true }), backLink());
+    row.append(button('我填好了，重新检测', refreshAll, { icon: 'fa-rotate', primary: true }), backLink(), skipLink());
     card.append(row);
 }
 
@@ -125,7 +125,7 @@ function drawStep3(card, choice) {
         card.append(el('small', 'cm-hint', '推荐的缓存设置：'), directCacheCard(connectionInfo().kind, where));
     }
     const row = el('div', 'cm-btn-row');
-    row.append(button('完成', () => apply(finishGuide()), { icon: 'fa-check', primary: true }));
+    row.append(button('完成', () => apply(finishGuide()), { icon: 'fa-check', primary: true }), skipLink());
     card.append(row);
 }
 
@@ -143,11 +143,15 @@ export function renderGuide() {
     if (!card || !libs.sources) return off;
     const settings = getSettings();
     const conn = connectionInfo();
+    if ((conn.connected || conn.direct) && !settings.everConnected) {
+        settings.everConnected = true;
+        saveSettingsDebounced();
+    }
     if (shouldAutoOnboard(settings, conn)) {
         Object.assign(settings, finishGuide());
         saveSettingsDebounced();
     }
-    const step = guideStep(settings, conn);
+    const step = guideStep({ ...settings, settingsExisted: !settings.freshInstall }, conn);
     card.hidden = step === 0;
     if (!step) { drawn = ''; return off; }
     const choice = chosenSource(settings.guideSource);

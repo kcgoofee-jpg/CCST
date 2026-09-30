@@ -42,12 +42,16 @@ export function shouldAutoOnboard({ onboarded, guideSource }, conn) {
 }
 
 /**
- * Which step to show: 0 = no guide; 1 选来源; 2 连接; 3 完成.
- * A user who never started and is not connected begins at 1 (a fresh install).
+ * Which step to show: 0 = no guide; 1 选来源; 2 连接; 3 完成. Facts only, no guessing from setting values:
+ *   settingsExisted  the extension's settings were already saved when the panel booted (any install
+ *                    before this one): a returning user, never shown the guide on its own
+ *   everConnected    SillyTavern was on a Claude connection at least once: a later disconnect (proxy
+ *                    down, Mac asleep) shows the connect card, never the guide
+ * Only a brand-new install begins at 1. 「其他 → 重新引导」 sets guideSource, which shows it for anyone.
  */
-export function guideStep({ onboarded, guideSource }, conn) {
+export function guideStep({ onboarded, guideSource, settingsExisted = false, everConnected = false }, conn) {
     if (onboarded) return 0;
-    if (!guideSource && linked(conn)) return 0;
+    if (!guideSource && (settingsExisted || everConnected || linked(conn))) return 0;
     const choice = chosenSource(guideSource);
     if (!choice) return 1;
     return sourceLinked(choice, conn) ? 3 : 2;
