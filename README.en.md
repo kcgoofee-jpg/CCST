@@ -1,14 +1,17 @@
 <div align="center">
 
-# CCST
-
-**Chat in SillyTavern with your own Claude subscription.**
+<img src="docs/assets/cover-en.png" alt="CCST: chat in SillyTavern with your own Claude subscription" width="100%">
 
 [简体中文](README.md) · **English**
 
-[![Version](https://img.shields.io/github/package-json/v/kcgoofee-jpg/CCST?label=version&color=0d0d0d)](https://github.com/kcgoofee-jpg/CCST/releases)
+[![Version](https://img.shields.io/github/package-json/v/kcgoofee-jpg/CCST?label=version&color=c08a55)](https://github.com/kcgoofee-jpg/CCST/releases)
+[![Release](https://img.shields.io/github/v/release/kcgoofee-jpg/CCST?label=release&color=c08a55)](https://github.com/kcgoofee-jpg/CCST/releases/latest)
 [![Tests](https://github.com/kcgoofee-jpg/CCST/actions/workflows/test.yml/badge.svg)](https://github.com/kcgoofee-jpg/CCST/actions/workflows/test.yml)
+![Platform](https://img.shields.io/badge/platform-Mac%20%7C%20Windows%20%7C%20Linux-555)
+![Node](https://img.shields.io/badge/node-%E2%89%A518-339933)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
+
+[Install](#install-5-minutes) · [Guide](docs/使用指南.md) · [Roadmap](docs/路线图.md) · [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
 
 <sub>Not an official Anthropic product and not affiliated with Anthropic. Claude is a trademark of Anthropic.</sub>
 
@@ -24,10 +27,13 @@
 
 SillyTavern on its own only talks to pay-per-token APIs. CCST is a SillyTavern plugin; once installed:
 
-- **Chat on your Claude Pro / Max subscription** — no separate API credit needed (API keys, Bedrock, Vertex and OpenRouter work too).
-- **Saves usage automatically**: in long chats only the new part of each turn is processed; the rest comes from the prompt cache.
-- **Replies don't get lost**: close the browser or drop the connection and the reply still finishes; it's filled in when you come back.
-- **One panel** to switch models (Opus 5.5 / Opus 4.6 / Sonnet 5.5), set thinking depth, see your quota and per-turn usage, and check reply quality.
+| | |
+| --- | --- |
+| 🎟️ **Use your subscription**<br>Claude Pro / Max, no separate API credit; API keys, Bedrock, Vertex and OpenRouter work too | 💰 **Long chats cost less**<br>In long chats only the new part of each turn is processed; the rest comes from the prompt cache |
+| 🛟 **Replies survive disconnects**<br>Close the browser or drop the connection; the reply still finishes and is filled in later | 🔀 **Switch models in one click**<br>Opus 5.5 / Opus 4.6 / Sonnet 5.5, thinking depth on demand |
+| 🩺 **Auto reply check-up**<br>Length, banned words, repeated paragraphs, character-card issues | 📦 **Set up in 5 minutes**<br>No terminal, no file editing; double-click |
+
+The panel also shows your quota and per-turn usage.
 
 > [!CAUTION]
 > Using a subscription through third-party software is **not** permitted by Anthropic; your account may be limited or banned. If that's not acceptable, use an API key (see "Other setups"). Read the [risks](#risks).

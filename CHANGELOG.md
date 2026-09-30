@@ -10,6 +10,7 @@
 - 代理环境变量 `CLAUDE_SUBSCRIPTION_ALLOWED_ORIGINS`：酒馆放在自己的 HTTPS 域名后面时，允许该页面的浏览器请求（按完整来源精确匹配）。
 - 面板「其他 → 手机连接」新增「酒馆侧地址」：酒馆和代理分开部署（Docker 两个容器）时，浏览器用代理地址，酒馆服务器用这个地址。
 - CI：Linux 上无人值守跑安装脚本（systemd --user 和 nohup 两个分支，检查 /status、0600、`--public` 要密码、卸载），并起 compose 的两个容器验证互通。
+- 仓库门面：README 顶部加封面图（`docs/assets/cover.html` 代码绘制，渲染为 `cover.png`（中文）/ `cover-en.png`（英文）及 @2x，1280×640 可作 GitHub 社交预览）、更多徽章和导航链接，特性改为 2×3 网格；新增 `SECURITY.md`。
 
 ### 变更
 - **反向代理不再绕过访问密码**：来自 127.0.0.1 但带 `X-Forwarded-For` / `Forwarded` / `X-Real-IP` / `CF-Connecting-IP` 头的请求按远程处理，要访问密码；新增 `CLAUDE_SUBSCRIPTION_REQUIRE_KEY=1` 让所有请求都要密码。
