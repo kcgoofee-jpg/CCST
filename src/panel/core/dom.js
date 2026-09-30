@@ -32,9 +32,9 @@ export function popupText(...lines) {
 }
 
 /** Segmented control: one choice out of a few, hint text follows it. */
-export function segmented({ label, options, current, onChange }) {
+export function segmented({ label, options, current, onChange, hideLabel = false }) {
     const wrap = el('div', 'cm-field');
-    wrap.append(el('div', 'cm-field-label', label));
+    wrap.append(el('div', hideLabel ? 'cm-field-label cm-sr' : 'cm-field-label', label));
     const group = el('div', 'cm-seg');
     group.setAttribute('role', 'radiogroup');
     group.setAttribute('aria-label', label);
@@ -101,7 +101,20 @@ export function section(title, extra, desc) {
     const head = el('div', 'cm-section-head');
     const text = el('div', 'cm-section-text');
     text.append(el('div', 'cm-section-title', title));
-    if (desc) text.append(el('small', 'cm-hint', desc));
+    if (desc) {
+        // The purpose line is folded behind a「说明」link: nothing is lost, less is always on screen.
+        const d = el('small', 'cm-hint cm-section-desc', desc);
+        d.hidden = true;
+        const link = el('button', 'cm-desc-toggle', '说明');
+        link.type = 'button';
+        link.setAttribute('aria-expanded', 'false');
+        link.addEventListener('click', () => {
+            d.hidden = !d.hidden;
+            link.textContent = d.hidden ? '说明' : '收起';
+            link.setAttribute('aria-expanded', String(!d.hidden));
+        });
+        text.append(link, d);
+    }
     head.append(text);
     if (extra) head.append(extra);
     return head;
@@ -131,8 +144,8 @@ export function stateLine(kind, text, retry) {
 }
 
 /** A button: `primary` fills with the accent colour. Same look for every action in the panel. */
-export function button(label, onClick, { icon, primary = false, id } = {}) {
-    const b = el('button', `menu_button cm-btn${primary ? ' cm-primary' : ''}`);
+export function button(label, onClick, { icon, primary = false, text = false, id } = {}) {
+    const b = el('button', `menu_button cm-btn${primary ? ' cm-primary' : ''}${text ? ' cm-btn-text' : ''}`);
     b.type = 'button';
     if (id) b.id = id;
     if (icon) b.append(el('i', `fa-solid ${icon}`));
@@ -142,16 +155,17 @@ export function button(label, onClick, { icon, primary = false, id } = {}) {
 }
 
 /** Radio cards: one choice out of a few, each with a one-line trade-off. Same `.select(value)` as segmented(). */
-export function cards({ label, options, current, onChange }) {
+export function cards({ label, options, current, onChange, wrap: wrapHints = false }) {
     const wrap = el('div', 'cm-field');
     if (label) wrap.append(el('div', 'cm-field-label', label));
-    const list = el('div', 'cm-cards');
+    const list = el('div', wrapHints ? 'cm-cards cm-wrap' : 'cm-cards');
     list.setAttribute('role', 'radiogroup');
     list.setAttribute('aria-label', label);
     const buttons = options.map((opt) => {
         const b = el('button', 'cm-card');
         b.type = 'button';
         b.setAttribute('role', 'radio');
+        b.title = opt.hint;
         b.append(el('span', 'cm-card-dot'), el('span', 'cm-card-title', opt.label), el('small', 'cm-hint cm-card-hint', opt.hint));
         b.addEventListener('click', () => select(opt.value, true));
         list.append(b);

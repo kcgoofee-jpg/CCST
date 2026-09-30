@@ -77,7 +77,7 @@ function drawStep1(card) {
         el('div', 'cm-note-title', '欢迎用 CCST，你的 Claude 从哪来？'),
         el('small', 'cm-hint', '选一个，后面只给你看对应的步骤。之后随时能在「其他」里重新引导。'),
         cards({
-            label: '', current: null,
+            label: '', current: null, wrap: true,
             options: SOURCES.map((s) => ({ value: s.id, label: s.label, hint: s.who })),
             onChange: (id) => apply(pickSource(id)),
         }),

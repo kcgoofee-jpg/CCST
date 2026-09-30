@@ -37,7 +37,7 @@ function oneShotEffortRow(settings) {
         });
         status.textContent = nextEffort
             ? `下一条用「${EFFORT_LABEL[nextEffort]}」，之后恢复「${EFFORT_LABEL[settings.effort]}」。再点一次取消。`
-            : '关键剧情用。高约慢 1/3，超高约慢 3 倍，这一轮缓存要重写一次。';
+            : '关键剧情用：高约慢 1/3，超高约慢 3 倍，缓存重写一次。';
     };
     for (const [value, label] of [['high', '高'], ['xhigh', '超高']]) {
         const b = el('button', 'cm-mini-btn', label);
@@ -106,7 +106,7 @@ export function buildReasonTab(pane, settings, save) {
         think.body.append(n);
     }
     const depth = segmented({
-        label: '思考深度',
+        label: '思考深度', hideLabel: true,
         options: [...EFFORT_OPTIONS, { value: 'off', label: '不思考', hint: '回得最快。Fable、Opus 4.7 及以上总会思考，对它们无效。' }],
         current: settings.thinking === 'off' ? 'off' : settings.effort,
         onChange: (v) => {
