@@ -133,6 +133,25 @@ export function endpointField(settings, save, { id = 'claude_max_endpoint', hint
     return field;
 }
 
+/** 酒馆和代理分开部署时，酒馆服务器访问代理用的地址（浏览器用上面的代理地址）。 */
+export function stEndpointField(settings, save) {
+    const field = el('div', 'cm-field');
+    field.append(el('div', 'cm-field-label', '酒馆侧地址（可选）'));
+    const input = el('input', 'text_pole');
+    input.type = 'text';
+    input.value = settings.stEndpoint ?? '';
+    input.placeholder = '留空 = 同上';
+    input.addEventListener('change', () => {
+        const next = normalizeEndpoint(input.value);
+        if (normalizeEndpoint(settings.stEndpoint) === next) return;
+        settings.stEndpoint = next;
+        save();
+        notify('info', '酒馆侧地址已改', '点「重新连接」后生效。', { ms: 10000, replace: 'endpoint' });
+    });
+    field.append(input, el('small', 'cm-hint', 'Docker 里酒馆和代理是两个容器时填（如 http://ccst:8901/v1）：酒馆服务器用它连代理，你的浏览器用上面的代理地址。其他情况留空。'));
+    return field;
+}
+
 /** The LAN access password (only needed when the proxy is on another computer). */
 export function accessKeyField(settings, save) {
     const field = el('div', 'cm-field');

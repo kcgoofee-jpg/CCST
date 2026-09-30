@@ -32,6 +32,7 @@ export const defaultSettings = {
     tailBlockFront: false,   // 实验：预设后置条目提前（省缓存）
     loreTail: true,          // 每轮变化的世界书移到本轮消息开头（省缓存）
     foldTail: true,          // 发言后面的深度 0 注入并进发言（省缓存）
+    stEndpoint: '',          // 酒馆和代理分开部署（Docker 两个容器）时，酒馆服务器访问代理用的地址；空 = 同「代理地址」
     accessKey: '',           // 局域网访问密码（手机连 Mac 上的代理时用）
     quietEffort: 'low',      // 后台请求（其他插件的生图 tag、总结等）的思考深度；'follow' = 跟随面板
     panelTab: 'reason',      // 3.1 前记的分页；现在记在 localStorage，只用来迁移

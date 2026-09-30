@@ -14,8 +14,13 @@ import { timingSafeEqual } from 'node:crypto';
 const LOOPBACK_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
 const TAURI_ORIGIN = /^(tauri:\/\/localhost|https?:\/\/tauri\.localhost)$/i;
 
-export function isAllowedOrigin(origin) {
-    return !!origin && (LOOPBACK_ORIGIN.test(origin) || TAURI_ORIGIN.test(origin));
+// Browser pages served from your own domain (SillyTavern behind an HTTPS
+// reverse proxy) are listed by exact origin in CLAUDE_SUBSCRIPTION_ALLOWED_ORIGINS.
+export function isAllowedOrigin(origin, extra = process.env.CLAUDE_SUBSCRIPTION_ALLOWED_ORIGINS) {
+    if (!origin) return false;
+    if (LOOPBACK_ORIGIN.test(origin) || TAURI_ORIGIN.test(origin)) return true;
+    const want = String(origin).toLowerCase();
+    return String(extra ?? '').split(',').map((o) => o.trim().replace(/\/+$/, '').toLowerCase()).filter(Boolean).includes(want);
 }
 
 // DNS rebinding guard: a web page on evil.example can point its own name at

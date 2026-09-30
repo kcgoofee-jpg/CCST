@@ -7,7 +7,7 @@
 import { store } from './core/store.js';
 import { getSettings, saveSettingsDebounced, EFFORT_LABEL } from './core/settings.js';
 import { connectHelp } from './core/connect-help.js';
-import { IS_TAURI, cloudHosted, normalizeEndpoint } from './core/capabilities.js';
+import { IS_TAURI, cloudHosted, isOurEndpoint, stSideEndpoint } from './core/capabilities.js';
 import { libs } from './core/libs.js';
 import { F } from './core/registry.js';
 import { connectionInfo, shortModel } from './core/connection.js';
@@ -45,7 +45,7 @@ function applyConnection(settings) {
     // Endpoint (and the LAN key) MUST be set before the source change: ST's change handler
     // auto-reconnects immediately, and firing it with the stale custom_url would race a status
     // check against the wrong endpoint.
-    $('#custom_api_url_text').val(settings.endpoint).trigger('input');
+    $('#custom_api_url_text').val(stSideEndpoint(settings)).trigger('input');
     // Only a LAN proxy needs a key (its access key). Otherwise the key field is left alone: it may
     // hold the user's key for another service.
     const keyField = $('#api_key_custom');
@@ -67,14 +67,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export async function connect(settings) {
     try {
         const ours = $('#chat_completion_source').val() === 'custom'
-            && normalizeEndpoint($('#custom_api_url_text').val()) === normalizeEndpoint(settings.endpoint);
+            && isOurEndpoint($('#custom_api_url_text').val(), settings);
         if (!ours) {
             const ctx = SillyTavern.getContext();
             const box = document.createElement('div');
             for (const line of [
                 '一键连接会把酒馆现在的连接改成 CCST 代理：',
                 `现在：${currentConnectionText() || '（未连接）'}`,
-                `改成：自定义来源 · ${settings.endpoint}`,
+                `改成：自定义来源 · ${stSideEndpoint(settings)}`,
                 '同时会新建（或更新）一个叫「CCST」的连接配置并选中它，模型选 Opus 4.6；你别的连接配置不会被改，想切回在「API 连接」顶部选回来即可。继续吗？',
             ]) { const p = document.createElement('p'); p.textContent = line; box.append(p); }
             const ok = await ctx.callGenericPopup(box, ctx.POPUP_TYPE.CONFIRM);

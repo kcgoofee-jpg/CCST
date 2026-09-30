@@ -60,3 +60,12 @@ test('access key: X-Claude-Max-Key is trimmed; a blank one does not hide a valid
     assert.equal(presentedKey({ headers: { 'x-claude-max-key': 'k4', authorization: 'Bearer k5' } }), 'k4');
     assert.equal(presentedKey({ headers: {} }), null);
 });
+
+test('ALLOWED_ORIGINS adds exact origins (trailing slash / case ignored), nothing broader', () => {
+    const extra = 'https://st.example.com/, HTTPS://Other.example.com';
+    assert.equal(isAllowedOrigin('https://st.example.com', extra), true);
+    assert.equal(isAllowedOrigin('https://other.example.com', extra), true);
+    assert.equal(isAllowedOrigin('https://evil.st.example.com', extra), false);
+    assert.equal(isAllowedOrigin('http://st.example.com', extra), false);
+    assert.equal(isAllowedOrigin('https://st.example.com', ''), false);
+});

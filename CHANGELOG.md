@@ -4,6 +4,18 @@
 
 ## 未发布
 
+### 新增
+- **服务器部署（用法三）**：`deploy/install.sh` 新增 `--token-prompt` / `--token-from-env`，把在有浏览器的电脑上 `claude setup-token` 得到的长期令牌（`CLAUDE_CODE_OAUTH_TOKEN`）存进 0600 配置，服务器不用浏览器登录，令牌不会被打印。
+- `deploy/docker-compose.yml` 改成两个容器：官方酒馆镜像 + CCST 代理，端口只映射到 127.0.0.1，酒馆容器用 `http://ccst:8901/v1` 加访问密码连代理。
+- 代理环境变量 `CLAUDE_SUBSCRIPTION_ALLOWED_ORIGINS`：酒馆放在自己的 HTTPS 域名后面时，允许该页面的浏览器请求（按完整来源精确匹配）。
+- 面板「其他 → 手机连接」新增「酒馆侧地址」：酒馆和代理分开部署（Docker 两个容器）时，浏览器用代理地址，酒馆服务器用这个地址。
+- CI：Linux 上无人值守跑安装脚本（systemd --user 和 nohup 两个分支，检查 /status、0600、`--public` 要密码、卸载），并起 compose 的两个容器验证互通。
+
+### 变更
+- 使用指南「用法三」重写：先决条件、脚本 / Docker 步骤、三种登录办法、手机和电脑浏览器访问（SSH 隧道 / Caddy HTTPS）、安全清单、排错。
+
+Refs #18。
+
 ## 4.3.0 - 2026-10-01
 
 ### 新增

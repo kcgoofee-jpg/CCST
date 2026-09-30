@@ -16,6 +16,8 @@
 #   --local          改回只监听 127.0.0.1
 #   --branch NAME    要装的分支或标签（默认仓库默认分支）
 #   --skip-install   不跑 npm install（测试用）
+#   --token-from-env 把环境变量 CLAUDE_CODE_OAUTH_TOKEN（在有浏览器的电脑上 claude setup-token 得到）存进配置，服务器不用再登录
+#   --token-prompt   同上，但运行时从终端输入令牌（不回显；curl | sh 也能用）
 #   --no-service     只安装文件，不启动代理
 #   --dry-run        只打印会做什么，不改任何东西
 #   --uninstall      停止并删除服务和配置（登录信息 ~/.claude 不动）
@@ -34,7 +36,7 @@ UNIT_FILE="$UNIT_DIR/ccst-proxy.service"
 UNIT_NAME="ccst-proxy.service"
 
 DIR=""; PORT=""; BIND=""; BRANCH=""
-SKIP_INSTALL=0; NO_SERVICE=0; DRY=0; UNINSTALL=0; REMOVE_FILES=0
+TOKEN_MODE=""; SKIP_INSTALL=0; NO_SERVICE=0; DRY=0; UNINSTALL=0; REMOVE_FILES=0
 
 say()  { printf '%s\n' "$*"; }
 warn() { printf '警告：%s\n' "$*" >&2; }
@@ -49,12 +51,14 @@ while [ $# -gt 0 ]; do
         --branch) [ $# -ge 2 ] || die "--branch 需要一个名字"; BRANCH="$2"; shift ;;
         --public) BIND="0.0.0.0" ;;
         --local) BIND="127.0.0.1" ;;
+        --token-from-env) TOKEN_MODE=env ;;
+        --token-prompt) TOKEN_MODE=prompt ;;
         --skip-install) SKIP_INSTALL=1 ;;
         --no-service) NO_SERVICE=1 ;;
         --dry-run) DRY=1 ;;
         --uninstall) UNINSTALL=1 ;;
         --remove-files) REMOVE_FILES=1 ;;
-        -h|--help) sed -n '2,24p' "$0" 2>/dev/null | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) sed -n '2,26p' "$0" 2>/dev/null | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) die "不认识的选项：$1（--help 看用法）" ;;
     esac
     shift
@@ -175,6 +179,30 @@ else
     if [ "$DRY" = 1 ]; then say "[dry-run] (cd $DIR && npm install --no-audit --no-fund)"; else (cd "$DIR" && npm install --no-audit --no-fund --loglevel=error); fi
 fi
 
+# ───────── 订阅令牌（可选，永远不打印）─────────
+OAUTH_TOKEN=""
+if [ "$TOKEN_MODE" = env ]; then
+    OAUTH_TOKEN="${CLAUDE_CODE_OAUTH_TOKEN:-}"
+    [ -n "$OAUTH_TOKEN" ] || die "--token-from-env：环境变量 CLAUDE_CODE_OAUTH_TOKEN 是空的。先 export 它（值来自有浏览器的电脑上运行 claude setup-token）。"
+elif [ "$TOKEN_MODE" = prompt ]; then
+    [ "$DRY" = 1 ] || [ -r /dev/tty ] || die "--token-prompt 需要终端（读不到 /dev/tty）。无人值守请改用 --token-from-env。"
+    if [ "$DRY" != 1 ]; then
+        printf '粘贴 claude setup-token 得到的令牌（输入不显示）：' >/dev/tty
+        stty -echo </dev/tty 2>/dev/null || true
+        IFS= read -r OAUTH_TOKEN </dev/tty || true
+        stty echo </dev/tty 2>/dev/null || true
+        printf '\n' >/dev/tty
+    fi
+fi
+if [ -n "$OAUTH_TOKEN" ]; then
+    case "$OAUTH_TOKEN" in
+        *[!A-Za-z0-9._~+/=-]*) die "令牌里有不该出现的字符（空格、引号等）。请只粘贴令牌本身。" ;;
+    esac
+    case "$OAUTH_TOKEN" in sk-ant-*) ;; *) warn "令牌不是 sk-ant- 开头，确认它来自 claude setup-token。" ;; esac
+elif [ "$TOKEN_MODE" = prompt ] && [ "$DRY" != 1 ]; then
+    die "没有输入令牌。"
+fi
+
 # ───────── 配置文件与访问密码 ─────────
 NEW_KEY=""
 KEY=$(env_get CLAUDE_SUBSCRIPTION_LAN_KEY)
@@ -192,7 +220,12 @@ else
     TMP="$ENV_FILE.tmp.$$"
     # 保留用户自己加的行（后端密钥等），只重写我们管的四项
     if [ -f "$ENV_FILE" ]; then grep -v -E '^(CCST_DIR|CLAUDE_SUBSCRIPTION_HOST|CLAUDE_SUBSCRIPTION_PORT|CLAUDE_SUBSCRIPTION_LAN_KEY)=' "$ENV_FILE" > "$TMP" || true; else : > "$TMP"; fi
+    if [ -n "$OAUTH_TOKEN" ]; then
+        grep -v '^CLAUDE_CODE_OAUTH_TOKEN=' "$TMP" > "$TMP.2" || true
+        mv "$TMP.2" "$TMP"
+    fi
     {
+        if [ -n "$OAUTH_TOKEN" ]; then echo "CLAUDE_CODE_OAUTH_TOKEN=$OAUTH_TOKEN"; fi
         echo "CCST_DIR=$DIR"
         echo "CLAUDE_SUBSCRIPTION_HOST=$BIND"
         echo "CLAUDE_SUBSCRIPTION_PORT=$PORT"
@@ -270,9 +303,14 @@ fi
 # ───────── 收尾说明 ─────────
 say ""
 say "──────── 接下来 ────────"
-say "1. 登录 Claude 订阅（订阅登录要浏览器，服务器上没有）："
-say "     cd $DIR && npm run login"
-say "   它会打印一个网址：在你自己电脑的浏览器打开、授权，把网页给的授权码粘贴回终端。登录信息存在 ~/.claude，只需一次。"
+if [ -n "$OAUTH_TOKEN" ]; then
+    say "1. Claude 订阅令牌已存进 $ENV_FILE（0600），不用再登录。令牌有效期约一年，到期在有浏览器的电脑上重新 claude setup-token 再运行本脚本。"
+else
+    say "1. 登录 Claude 订阅（服务器没有浏览器，二选一）："
+    say "   A. 在有浏览器的电脑上运行 claude setup-token，得到令牌，然后在服务器上："
+    say "        sh $DIR/deploy/install.sh --token-prompt      （粘贴令牌，不回显）"
+    say "   B. cd $DIR && npm run login ：它打印网址，在你自己电脑的浏览器打开授权，把授权码粘贴回终端，存在 ~/.claude。"
+fi
 say "   不想用订阅、用 API 密钥 / Bedrock / Vertex / OpenRouter：把对应环境变量加到 $ENV_FILE，然后重启代理"
 say "   （变量名和例子见 $DIR/docs/使用指南.md 的「服务器与 Docker」；也可以在面板「设置 → 代理后端」里填）。"
 if [ -n "$ST_DIR" ]; then

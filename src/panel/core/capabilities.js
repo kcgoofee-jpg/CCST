@@ -21,8 +21,12 @@ export function normalizeEndpoint(url) {
 /** ST's Custom URL is this proxy's address. */
 export function isOurEndpoint(customUrl, settings) {
     const a = normalizeEndpoint(customUrl);
-    const b = normalizeEndpoint(settings.endpoint);
-    return a !== '' && a === b;
+    return a !== '' && (a === normalizeEndpoint(settings.endpoint) || a === normalizeEndpoint(settings.stEndpoint));
+}
+
+/** The address SillyTavern's server uses for the proxy: differs from the browser's only when they are deployed apart. */
+export function stSideEndpoint(settings) {
+    return normalizeEndpoint(settings.stEndpoint) || normalizeEndpoint(settings.endpoint);
 }
 
 /** The proxy's own base URL: the endpoint without its /v1. */

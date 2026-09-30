@@ -13,7 +13,7 @@ import { el, segmented, toggleRow, collapsible, button } from '../core/dom.js';
 import { F } from '../core/registry.js';
 import { buildMacSection } from './mac.js';
 import { restartGuide } from '../guide.js';
-import { endpointField, accessKeyField, reconnectButton } from './settings.js';
+import { endpointField, stEndpointField, accessKeyField, reconnectButton } from './settings.js';
 
 function usageNotes() {
     const { root, body } = collapsible('使用说明', '代理、连接、思考深度、直连 Claude 的要点。');
@@ -43,6 +43,7 @@ export function buildOtherTab(pane, settings, save) {
     lan.body.append(
         endpointField(settings, save, { id: 'claude_max_endpoint_lan', hint: `填「酒馆工具」标题栏的地址，形如 http://电脑的局域网地址:8901/v1（手机同步会自动填）。本机保持 ${DEFAULT_ENDPOINT}。` }),
         accessKeyField(settings, save),
+        stEndpointField(settings, save),
         reconnectButton(),
     );
     pane.append(lan.root);

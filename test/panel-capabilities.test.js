@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-    DEFAULT_ENDPOINT, normalizeEndpoint, isOurEndpoint, proxyBaseOf, detectPlatform, isPhoneLike,
+    DEFAULT_ENDPOINT, normalizeEndpoint, isOurEndpoint, stSideEndpoint, proxyBaseOf, detectPlatform, isPhoneLike,
     quietRenderMode, quietRenderOn, proxyDirectOnly, cloudHosted, canSyncPhone, resolveConnection, classifyRequest, debugViewState, PHONE_SYNC_WARNING, PHONE_SYNC_LABEL,
 } from '../src/panel/core/capabilities.js';
 import * as hostCheck from '../src/shared/host.js';
@@ -139,4 +139,13 @@ test('genLine: the status bar text for thinking, writing, done, idle', async () 
     assert.equal(genLine({ kind: 'writing', chars: 1234 }), '写作中 1,234 字');
     assert.equal(genLine({ kind: 'done', chars: 1850, seconds: 38, cache: 94 }), '完成 · 1,850 字 · 38 秒 · 缓存 94%');
     assert.equal(genLine({ kind: 'done', chars: 900, seconds: null, cache: null }), '完成 · 900 字');
+});
+
+test('split deployment: SillyTavern-side address also counts as ours', () => {
+    const st = { endpoint: 'https://ccst.example.com/v1', stEndpoint: 'http://ccst:8901/v1/' };
+    assert.equal(isOurEndpoint('http://ccst:8901/v1', st), true);
+    assert.equal(isOurEndpoint('https://ccst.example.com/v1', st), true);
+    assert.equal(isOurEndpoint('http://other/v1', st), false);
+    assert.equal(stSideEndpoint(st), 'http://ccst:8901/v1');
+    assert.equal(stSideEndpoint({ endpoint: DEFAULT_ENDPOINT }), DEFAULT_ENDPOINT);
 });
