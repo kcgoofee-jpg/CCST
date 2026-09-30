@@ -23,13 +23,14 @@ svg.arrows{position:absolute;left:0;top:0;width:1136px;height:170px}
 .node{position:absolute;top:43px;height:84px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-weight:500}
 .ccst{left:478px;width:200px;background:#D97757;color:#FAF9F5;font-family:var(--serif);font-size:34px;letter-spacing:.02em}
 .st{left:860px;width:248px;background:#FAF9F5;border:1px solid #E8E6DC;font-size:22px}
-.chips{position:absolute;left:72px;top:486px;display:flex;gap:10px}
-.chip{padding:9px 16px;border-radius:999px;background:#EFEEE9;font-size:17px;font-weight:500;display:flex;align-items:center}
+.chips{position:absolute;left:72px;top:486px;display:flex;gap:9px;white-space:nowrap}
+.chip{padding:9px 14px;border-radius:999px;background:#EFEEE9;font-size:16px;font-weight:500;display:flex;align-items:center}
 .chip:before{content:"";width:7px;height:7px;border-radius:50%;background:#D97757;margin-right:9px}
 .bar{position:absolute;left:72px;right:72px;bottom:34px;height:46px;border-radius:12px;background:#0D0C0B;display:flex;align-items:center;padding:0 20px;font-size:17px;color:#b9b8ae}
 .bar i{font-style:normal;color:#55544d;margin:0 13px}
 .bar .m{color:#FAF9F5;font-weight:500}
 .bar .w{color:#E8A78D}
+.slogan{margin-left:auto;font-family:var(--serif);font-size:22px;font-weight:500;color:#FAF9F5;letter-spacing:-.01em}
 .dot{width:9px;height:9px;border-radius:50%;background:#6FBF85;margin-right:12px}
 </style></head><body><div class="wrap">
 <div class="url">github.com/kcgoofee-jpg/CCST</div>
@@ -49,8 +50,8 @@ svg.arrows{position:absolute;left:0;top:0;width:1136px;height:170px}
 <div class="bar" id="bar"></div>
 </div>
 <script>
-const T={zh:{tag:"在 SillyTavern 里用你自己的 Claude 订阅聊天",sub:"Chat in SillyTavern with your own Claude subscription",main:"Claude 订阅",cap:"也支持",sec:["API 密钥","Bedrock","Vertex","OpenRouter"],one:false,st:"SillyTavern 酒馆",chips:["省额度（缓存）","回复不丢","一键切模型","回复体检","一键安装"],bar:["Opus 4.6","本机代理","订阅","写作中 1,234 字"]},
-en:{tag:"Chat in SillyTavern with your own Claude subscription",sub:"在 SillyTavern 里用你自己的 Claude 订阅聊天",main:"Claude subscription",cap:"Also works with",sec:["API key","Bedrock","Vertex","OpenRouter"],one:false,st:"SillyTavern",chips:["Saves usage (cache)","Replies never lost","One-click model switch","Reply check-up","One-click install"],bar:["Opus 4.6","local proxy","subscription","writing 1,234 chars"]}};
+const T={zh:{tag:"在 SillyTavern 里用你自己的 Claude 订阅聊天",sub:"Chat in SillyTavern with your own Claude subscription",main:"Claude 订阅",cap:"也支持",sec:["API 密钥","Bedrock","Vertex","OpenRouter"],one:false,st:"SillyTavern 酒馆",chips:["长聊更省额度","断线回复不丢","一键切换模型","回复自动体检","五分钟装好"],slogan:"你的订阅，你的酒馆。",bar:["Opus 4.6","本机代理","订阅","写作中 1,234 字"]},
+en:{tag:"Chat in SillyTavern with your own Claude subscription",sub:"在 SillyTavern 里用你自己的 Claude 订阅聊天",main:"Claude subscription",cap:"Also works with",sec:["API key","Bedrock","Vertex","OpenRouter"],one:false,st:"SillyTavern",chips:["Long chats cost less","Replies survive disconnects","Switch models in one click","Auto reply check-up","Set up in 5 minutes"],slogan:"Your subscription. Your tavern.",bar:["Opus 4.6","local proxy","subscription","writing 1,234 chars"]}};
 const q=new URLSearchParams(location.search).get("lang");
 const L=(q==="zh"||q==="en")?q:((navigator.language||"").toLowerCase().startsWith("zh")?"zh":"en");
 const t=T[L];document.documentElement.lang=L==="zh"?"zh-CN":"en";
@@ -58,5 +59,5 @@ const $=id=>document.getElementById(id);
 $("tag").textContent=t.tag;$("sub").textContent=t.sub;$("main").textContent=t.main;$("cap").textContent=t.cap;$("st").textContent=t.st;
 $("sec").innerHTML=t.sec.map(s=>"<span>"+s+"</span>").join("");
 $("chips").innerHTML=t.chips.map(s=>'<div class="chip">'+s+"</div>").join("");
-const b=t.bar;$("bar").innerHTML='<span class="dot"></span><span class="m">'+b[0]+"</span><i>·</i>"+b[1]+"<i>·</i>"+b[2]+'<i>·</i><span class="w">'+b[3]+"</span>";
+const b=t.bar;$("bar").innerHTML='<span class="dot"></span><span class="m">'+b[0]+"</span><i>·</i>"+b[1]+"<i>·</i>"+b[2]+'<i>·</i><span class="w">'+b[3]+'</span><span class="slogan">'+t.slogan+"</span>";
 </script></body></html>
