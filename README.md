@@ -30,45 +30,67 @@
 
 ## 你需要
 
-- 一台电脑（Mac / Windows / Linux），装好 [SillyTavern](https://github.com/SillyTavern/SillyTavern) 和 [Node.js](https://nodejs.org) 18 以上。
+- 一台电脑（Mac / Windows / Linux），装好 [SillyTavern](https://github.com/SillyTavern/SillyTavern)。[Node.js](https://nodejs.org) 18 以上（没有的话一键安装会提醒你）。
 - Claude Pro 或 Max 订阅（或 API 密钥）。
 - 浏览器用 Chrome 或 Edge。
 
 ## 安装（5 分钟）
 
-**1. 打开插件开关。** 用记事本打开酒馆文件夹里的 `config.yaml`，找到这一行改成 `true`：
+不用打开终端、不用改任何文件。
 
-```yaml
-enableServerPlugins: true
+**1. 在酒馆里装面板。** 酒馆顶部「扩展」（积木图标）→「安装扩展」，粘贴下面的链接，点安装：
+
+```
+https://github.com/kcgoofee-jpg/CCST
 ```
 
-**2. 下载 CCST。** 在酒馆文件夹（有 `server.js` 的那一层）打开终端，运行：
+**2. 下载一键安装。** 装好后打开 **CCST** 面板，会看到一张「连不上 CCST 代理」的卡片，点里面的 **下载一键安装（Mac）** 或 **下载一键安装（Windows）**。
 
-```bash
-node plugins.js install https://github.com/kcgoofee-jpg/CCST
-```
+**3. 双击，跟着提示登录 Claude。** 双击下载的文件（Mac 下载的是压缩包，先双击解压，再双击里面的「CCST安装」）。它会自己找到酒馆、装好需要的东西，中间会打开浏览器让你登录 Claude 账号（只需一次）。全部完成时窗口里会写「装好了」。
 
-**3. 安装依赖并登录 Claude。** 接着运行（会打开浏览器让你登录 Claude 账号，只需一次）：
+- Mac 第一次打开可能提示「无法验证开发者」：在文件上**右键 →「打开」→ 再点「打开」**。
+- Windows 可能弹出蓝色的「Windows 已保护你的电脑」：点「更多信息」→「仍要运行」。
+- 电脑里没有 Node.js 的话，它会替你打开下载页；装好后再双击一次就行。
 
-```bash
-cd plugins/CCST
-npm install
-npm run login
-```
+**4. 重启酒馆。** 关掉酒馆再打开，浏览器按 `Ctrl+F5`（Mac 是 `Cmd+Shift+R`）刷新。面板会自动连上，之后就能聊天了。
 
-**4. 重启酒馆。** 关掉酒馆再打开，浏览器按 `Ctrl+F5`（Mac 是 `Cmd+Shift+R`）强制刷新。
-
-**5. 连接。** 酒馆顶部「扩展」（积木图标）里找到 **CCST** 面板，点 **一键连接**。连上后就能聊天了。
-
-以后只要正常启动酒馆，CCST 会跟着启动，不用再做任何事。
+以后只要正常启动酒馆，CCST 会跟着启动，不用再做任何事。想更新：再双击一次同一个文件。
 
 <details>
 <summary>装不上？</summary>
 
-- **面板说「连不上 CCST 代理」**：确认第 1 步改成了 `true`，并且重启过酒馆。酒馆的黑窗口里应该有一行 `[claude-subscription] initialised`。
+一键安装其实只做了下面这几件事，卡住的话可以自己手动做：
+
+1. **打开服务端插件开关。** 用记事本打开酒馆文件夹里的 `config.yaml`，找到这一行改成 `true`：
+
+   ```yaml
+   enableServerPlugins: true
+   ```
+
+2. **下载 CCST。** 在酒馆文件夹（有 `server.js` 的那一层）打开终端，运行：
+
+   ```bash
+   node plugins.js install https://github.com/kcgoofee-jpg/CCST
+   ```
+
+3. **安装依赖并登录 Claude。** 接着运行（会打开浏览器让你登录 Claude 账号，只需一次）：
+
+   ```bash
+   cd plugins/CCST
+   npm install
+   npm run login
+   ```
+
+4. 重启酒馆，在 **CCST** 面板点 **一键连接**。
+
+常见问题：
+
+- **面板说「连不上 CCST 代理」**：确认 `config.yaml` 里是 `true`，并且重启过酒馆。酒馆的黑窗口里应该有一行 `[claude-subscription] initialised`。
+- **一键安装说找不到酒馆**：把酒馆文件夹（里面有 `server.js`）拖进安装窗口，再按回车。
 - **`npm install` 报错**：不要加 `--omit=optional`；Node 版本要 18 以上（终端运行 `node -v` 查看）。
-- **面板说「没登录 Claude」**：在 `plugins/CCST` 里再运行一次 `npm run login`。
+- **面板说「没登录 Claude」**：再双击一次一键安装，或在 `plugins/CCST` 里运行 `npm run login`。
 - **面板没出现**：强制刷新浏览器；还不行就在「扩展 → 管理扩展」里看 CCST 有没有被关掉。
+- **一键安装被安全软件拦了 / 网页里没有下载按钮**：直接从[本仓库的 installer 文件夹](installer)下载，或按上面的手动步骤做。
 
 </details>
 

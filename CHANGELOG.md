@@ -4,6 +4,14 @@
 
 ## 未发布
 
+### 新增
+- **一键安装，不用碰终端**：「连不上 CCST 代理」卡片上多了「下载一键安装（Mac）」和「下载一键安装（Windows）」两个按钮，下面一行「双击下载的文件，按提示做完后重启酒馆」。安装程序在 `installer/`：Mac 是 `CCST安装.command`（按钮下载的是带可执行权限的压缩包 `CCST-mac.zip`，因为浏览器直接下载的 .command 双击会报权限不够；用 `python3 scripts/build-installer-zip.py` 重新打包），Windows 是 `CCST安装.bat`（调用 `ccst-install.ps1`，单独下载 .bat 时会自己去 GitHub 取 .ps1）。
+- 安装程序会：找到酒馆文件夹（正在运行的、常见位置；找不到或不止一个就让你选或把文件夹拖进窗口）→ 检查 Node.js 18+（没有就打开官网并说明）→ 把 `config.yaml` 里的 `enableServerPlugins` 改成 `true`（先备份，只动这一行）→ 装到 `plugins/CCST`（有 git 用 git，没有下载 zip）→ `npm install` → 登录 Claude → 提示重启酒馆。可重复运行（相当于更新），从不删除你的数据，每个失败都会写明下一步怎么做。
+- README 安装一节改成四步（酒馆里粘贴链接、点下载一键安装、双击登录、重启）；服务端插件、`config.yaml` 等说法只留在「装不上？」里，手动步骤保留作为备用。
+
+### 测试
+- 新增 `test/installer.test.js`（在假酒馆上跑 Mac 安装程序；检查压缩包与脚本一致、.ps1 带 BOM、.bat 是 CRLF）。Windows 的 CI 里新增两步：在克隆的 SillyTavern 上跑 .bat / .ps1（含第二遍、无 git 走 zip 的路径），检查 `plugins/CCST` 和 `enableServerPlugins: true`。
+
 ## 4.1.3 - 2026-09-30
 
 ### 修复

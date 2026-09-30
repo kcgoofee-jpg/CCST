@@ -89,6 +89,47 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit 1 }
           Start-Sleep -Seconds 2
           if (netstat -ano | Select-String ":$env:PROXY_PORT\s.*LISTENING") { Write-Error 'port still listening'; exit 1 }
+      - name: 一键安装（Windows）：在克隆的 SillyTavern 上跑 .bat 和 .ps1，检查结果
+        shell: powershell
+        env:
+          CCST_YES: '1'
+          CCST_SKIP_LOGIN: '1'
+          CCST_NO_PROCESS_SCAN: '1'
+        run: |
+          git clone --depth 1 https://github.com/SillyTavern/SillyTavern "$env:RUNNER_TEMP\SillyTavern"
+          Copy-Item "$env:RUNNER_TEMP\SillyTavern\default\config.yaml" "$env:RUNNER_TEMP\SillyTavern\config.yaml"
+          $env:CCST_ST_DIR = "$env:RUNNER_TEMP\SillyTavern"
+          $env:CCST_REPO_URL = "$env:GITHUB_WORKSPACE"
+          # 用 .bat 跑（同时验证 .bat 找得到 .ps1），第二遍验证可重复运行
+          $bat = (Get-ChildItem installer -Filter *.bat).FullName
+          & $bat
+          if ($LASTEXITCODE -ne 0) { Write-Error 'installer failed'; exit 1 }
+          if (-not (Test-Path "$env:RUNNER_TEMP\SillyTavern\plugins\CCST\package.json")) { Write-Error 'plugins/CCST missing'; exit 1 }
+          if (-not (Test-Path "$env:RUNNER_TEMP\SillyTavern\plugins\CCST\node_modules")) { Write-Error 'npm install did not run'; exit 1 }
+          if (-not (Select-String -Path "$env:RUNNER_TEMP\SillyTavern\config.yaml" -Pattern '^enableServerPlugins: true' -Quiet)) { Write-Error 'config.yaml not updated'; exit 1 }
+          if (@(Get-ChildItem "$env:RUNNER_TEMP\SillyTavern" -Filter 'config.yaml.ccst-backup-*').Count -ne 1) { Write-Error 'expected one backup'; exit 1 }
+          powershell -NoProfile -ExecutionPolicy Bypass -File installer\ccst-install.ps1
+          if ($LASTEXITCODE -ne 0) { Write-Error 'second run failed'; exit 1 }
+          if (@(Get-ChildItem "$env:RUNNER_TEMP\SillyTavern" -Filter 'config.yaml.ccst-backup-*').Count -ne 1) { Write-Error 'second run made another backup'; exit 1 }
+      - name: 一键安装（Windows）：没有 git 时走下载 zip 的路径
+        shell: powershell
+        env:
+          CCST_YES: '1'
+          CCST_SKIP_LOGIN: '1'
+          CCST_NO_PROCESS_SCAN: '1'
+        run: |
+          git clone --depth 1 https://github.com/SillyTavern/SillyTavern "$env:RUNNER_TEMP\ST2"
+          Copy-Item "$env:RUNNER_TEMP\ST2\default\config.yaml" "$env:RUNNER_TEMP\ST2\config.yaml"
+          $stage = "$env:RUNNER_TEMP\zipstage"
+          New-Item -ItemType Directory "$stage\CCST-main" | Out-Null
+          Copy-Item "$env:GITHUB_WORKSPACE\package.json" "$stage\CCST-main\"
+          Compress-Archive -Path "$stage\CCST-main" -DestinationPath "$env:RUNNER_TEMP\ccst.zip"
+          $env:CCST_ST_DIR = "$env:RUNNER_TEMP\ST2"
+          $env:CCST_REPO_URL = "$env:RUNNER_TEMP\does-not-exist"
+          $env:CCST_ZIP_URL = ([Uri]"$env:RUNNER_TEMP\ccst.zip").AbsoluteUri
+          powershell -NoProfile -ExecutionPolicy Bypass -File installer\ccst-install.ps1
+          if ($LASTEXITCODE -ne 0) { Write-Error 'zip install failed'; exit 1 }
+          if (-not (Test-Path "$env:RUNNER_TEMP\ST2\plugins\CCST\package.json")) { Write-Error 'plugins/CCST missing'; exit 1 }
       - name: 收尾：万一前面失败，按 PID 文件关掉代理
         if: always()
         shell: powershell

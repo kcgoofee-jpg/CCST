@@ -159,7 +159,7 @@ function describeCard() {
         return {
             ...base, tone: setup ? 'info' : 'error', dot: 'offline', key: `start-${help.key}`,
             title: setup ? help.title : `连不上代理 · ${help.title}`,
-            sub: help.sub, steps: help.steps, showSteps: true,
+            sub: help.sub, steps: help.steps, showSteps: true, downloads: help.downloads, hint: help.hint,
             action: { label: '我做好了，重新检测', run: refreshAll },
             edit: true,
         };
@@ -222,6 +222,17 @@ export function renderConnect() {
         const steps = card.querySelector('#claude_max_steps');
         steps.replaceChildren(...(view.steps ?? []).map(stepItem));
         steps.hidden = !view.steps || !(stepsOpen || view.showSteps);
+        const dl = card.querySelector('#claude_max_downloads');
+        dl.replaceChildren(...(view.downloads ?? []).map((d) => {
+            const a = el('a', 'menu_button cm-btn', d.label);
+            a.href = d.href;
+            a.setAttribute('download', d.file);
+            return a;
+        }));
+        dl.hidden = !view.downloads?.length;
+        const dlHint = card.querySelector('#claude_max_downloads_hint');
+        dlHint.textContent = view.hint ?? '';
+        dlHint.hidden = dl.hidden || !view.hint;
         const btn = card.querySelector('#claude_max_status_action');
         btn.hidden = !view.action;
         if (view.action) {
@@ -274,6 +285,10 @@ function buildStatusBar(showTab) {
     sub.id = 'claude_max_status_sub';
     const steps = el('ol', 'cm-notes');
     steps.id = 'claude_max_steps';
+    const downloads = el('div', 'cm-btn-row');
+    downloads.id = 'claude_max_downloads';
+    const dlHint = el('small', 'cm-hint');
+    dlHint.id = 'claude_max_downloads_hint';
     const row = el('div', 'cm-btn-row');
     const action = el('button', 'menu_button cm-btn cm-primary');
     action.type = 'button';
@@ -284,7 +299,7 @@ function buildStatusBar(showTab) {
     edit.id = 'claude_max_status_conn';
     edit.addEventListener('click', () => showTab('settings'));
     row.append(action, edit);
-    card.append(head, sub, steps, row);
+    card.append(head, sub, steps, downloads, dlHint, row);
 
     const cloud = note('info', '酒馆在云端，连不到你电脑上的代理');
     cloud.id = 'claude_max_cloud';
