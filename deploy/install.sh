@@ -51,8 +51,8 @@ while [ $# -gt 0 ]; do
         --branch) [ $# -ge 2 ] || die "--branch 需要一个名字"; BRANCH="$2"; shift ;;
         --public) BIND="0.0.0.0" ;;
         --local) BIND="127.0.0.1" ;;
-        --token-from-env) TOKEN_MODE=env ;;
-        --token-prompt) TOKEN_MODE=prompt ;;
+        --token-from-env) TOKEN_MODE="env" ;;
+        --token-prompt) TOKEN_MODE="prompt" ;;
         --skip-install) SKIP_INSTALL=1 ;;
         --no-service) NO_SERVICE=1 ;;
         --dry-run) DRY=1 ;;
