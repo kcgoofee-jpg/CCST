@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/assets/cover.png" alt="CCST: chat in SillyTavern with your own Claude subscription" width="100%">
+<img src="docs/assets/cover-en.png" alt="CCST: chat in SillyTavern with your own Claude subscription" width="100%">
 
 [简体中文](README.md) · **English**
 

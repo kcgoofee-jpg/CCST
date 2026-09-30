@@ -1,47 +1,62 @@
 <!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>CCST cover</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Noto+Sans+SC:wght@400;500&family=Noto+Serif+SC:wght@500;600&family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0}
 html,body{width:1280px;height:640px;overflow:hidden}
-body{font-family:"Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;color:#3D3D3A;background:#F0EEE6;position:relative}
-body:before{content:"";position:absolute;inset:0;background:radial-gradient(800px 420px at 100% 0%,#FAF9F5 0%,transparent 70%)}
-.serif{font-family:"Noto Serif SC","Songti SC","Source Serif 4",Georgia,serif}
+body{--serif:"Source Serif 4","Noto Serif SC","Songti SC",Georgia,serif;--sans:"Inter","Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+font-family:var(--sans);color:#141413;background:#FAF9F5;position:relative;letter-spacing:-.01em}
 .wrap{position:absolute;inset:0;padding:56px 72px}
-.brand{font-size:112px;font-weight:700;letter-spacing:4px;line-height:1;color:#141413}
-.brand em{font-style:normal;color:#C15F3C}
-.tag{margin-top:14px;font-size:36px;font-weight:700;line-height:1.35;color:#141413}
-.en{margin-top:6px;font-size:19px;color:#6b6a63;letter-spacing:.3px}
-.url{position:absolute;right:72px;top:64px;font-size:16px;color:#8a897f;letter-spacing:1px}
-.flow{position:absolute;left:72px;top:300px;width:1136px;height:170px}
+.brand{font-family:var(--serif);font-size:104px;font-weight:500;letter-spacing:-.02em;line-height:1}
+.brand em{font-style:normal;color:#D97757}
+.tag{margin-top:14px;font-family:var(--serif);font-size:36px;font-weight:500;line-height:1.3}
+.sub{margin-top:8px;font-size:18px;color:#6b6a63}
+.url{position:absolute;right:72px;top:64px;font-size:15px;color:#8a897f}
+.band{position:absolute;left:72px;right:72px;top:292px;height:170px;border-radius:20px;background:#EFEEE9}
+.flow{position:absolute;left:0;top:0;width:100%;height:100%}
 svg.arrows{position:absolute;left:0;top:0;width:1136px;height:170px}
-.main{position:absolute;left:0;top:10px;width:250px;height:62px;border-radius:999px;background:#FAF9F5;border:2px solid #D97757;color:#141413;font-weight:700;font-size:26px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px #d977571f}
-.sec{position:absolute;left:0;top:98px;width:460px;display:flex;flex-wrap:wrap;gap:8px}
-.sec span{font-size:15px;height:28px;line-height:26px;padding:0 13px;border:1px solid #E8E6DC;border-radius:999px;background:#FAF9F5;color:#5a5953}
-.cap{position:absolute;left:0;top:78px;font-size:12px;color:#8a897f;letter-spacing:1px}
-.node{position:absolute;top:20px;height:84px;border-radius:18px;display:flex;align-items:center;justify-content:center;font-weight:700}
-.ccst{left:470px;width:210px;background:#D97757;color:#FAF9F5;font-size:36px;letter-spacing:3px;box-shadow:0 10px 30px #c15f3c40}
-.st{left:880px;width:256px;background:#FAF9F5;border:1px solid #E8E6DC;color:#141413;font-size:24px}
-.chips{position:absolute;left:72px;top:492px;display:flex;gap:12px}
-.chip{padding:9px 16px;border-radius:999px;background:#FAF9F5;border:1px solid #E8E6DC;font-size:18px;font-weight:500;color:#3D3D3A;display:flex;align-items:center}
-.chip:before{content:"";width:8px;height:8px;border-radius:50%;background:#D97757;margin-right:9px}
-.bar{position:absolute;left:72px;right:72px;bottom:36px;height:46px;border-radius:12px;background:#FAF9F5;border:1px solid #E8E6DC;display:flex;align-items:center;padding:0 20px;font-size:18px;color:#5a5953}
-.bar i{font-style:normal;color:#c9c6b8;margin:0 13px}
-.bar .m{color:#141413;font-weight:700}
-.bar .w{color:#C15F3C;font-weight:500}
-.dot{width:10px;height:10px;border-radius:50%;background:#5FA873;margin-right:12px}
+.main{position:absolute;left:28px;top:26px;width:260px;height:58px;border-radius:999px;background:#FAF9F5;border:1px solid #141413;font-weight:500;font-size:22px;display:flex;align-items:center;justify-content:center}
+.cap{position:absolute;left:30px;top:100px;font-size:12px;color:#8a897f}
+.sec{position:absolute;left:28px;top:120px;display:flex;gap:8px}
+.sec span{font-size:14px;height:26px;line-height:24px;padding:0 12px;border:1px solid #E8E6DC;border-radius:999px;background:#FAF9F5;color:#5a5953;white-space:nowrap}
+.sec.one span{border:0;background:none;padding:0;height:auto;line-height:1.2;font-size:15px}
+.node{position:absolute;top:43px;height:84px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-weight:500}
+.ccst{left:478px;width:200px;background:#D97757;color:#FAF9F5;font-family:var(--serif);font-size:34px;letter-spacing:.02em}
+.st{left:860px;width:248px;background:#FAF9F5;border:1px solid #E8E6DC;font-size:22px}
+.chips{position:absolute;left:72px;top:486px;display:flex;gap:10px}
+.chip{padding:9px 16px;border-radius:999px;background:#EFEEE9;font-size:17px;font-weight:500;display:flex;align-items:center}
+.chip:before{content:"";width:7px;height:7px;border-radius:50%;background:#D97757;margin-right:9px}
+.bar{position:absolute;left:72px;right:72px;bottom:34px;height:46px;border-radius:12px;background:#0D0C0B;display:flex;align-items:center;padding:0 20px;font-size:17px;color:#b9b8ae}
+.bar i{font-style:normal;color:#55544d;margin:0 13px}
+.bar .m{color:#FAF9F5;font-weight:500}
+.bar .w{color:#E8A78D}
+.dot{width:9px;height:9px;border-radius:50%;background:#6FBF85;margin-right:12px}
 </style></head><body><div class="wrap">
 <div class="url">github.com/kcgoofee-jpg/CCST</div>
-<div class="brand serif">CC<em>ST</em></div>
-<div class="tag serif">在 SillyTavern 里用你自己的 Claude 订阅聊天</div>
-<div class="en">Chat in SillyTavern with your own Claude subscription</div>
-<div class="flow">
-<svg class="arrows" viewBox="0 0 1136 170"><defs><marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#C15F3C"/></marker></defs>
-<path d="M258 41C360 41 380 62 462 62" stroke="#D97757" stroke-width="3" fill="none" marker-end="url(#a)"/>
-<path d="M404 112C440 112 440 80 462 70" stroke="#D9C9B8" stroke-width="1.5" fill="none"/>
-<path d="M688 62H872" stroke="#C15F3C" stroke-width="3" fill="none" marker-end="url(#a)"/></svg>
-<div class="main">Claude 订阅</div>
-<div class="cap">也支持</div>
-<div class="sec" style="top:100px"><span>API 密钥</span><span>Bedrock</span><span>Vertex</span><span>OpenRouter</span></div>
-<div class="node ccst serif">CCST</div><div class="node st">SillyTavern 酒馆</div></div>
-<div class="chips"><div class="chip">省额度（缓存）</div><div class="chip">回复不丢</div><div class="chip">一键切模型</div><div class="chip">回复体检</div><div class="chip">一键安装</div></div>
-<div class="bar"><span class="dot"></span><span class="m">Opus 4.6</span><i>·</i>本机代理<i>·</i>订阅<i>·</i><span class="w">写作中 1,234 字</span></div>
-</div></body></html>
+<div class="brand">CC<em>ST</em></div>
+<div class="tag" id="tag"></div>
+<div class="sub" id="sub"></div>
+<div class="band"><div class="flow">
+<svg class="arrows" viewBox="0 0 1136 170"><defs><marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#141413"/></marker></defs>
+<path d="M296 55C390 55 400 85 470 85" stroke="#141413" stroke-width="2" fill="none" marker-end="url(#a)"/>
+<path d="M520 135" stroke="#ccc" fill="none"/>
+<path d="M686 85H850" stroke="#141413" stroke-width="2" fill="none" marker-end="url(#a)"/></svg>
+<div class="main" id="main"></div>
+<div class="cap" id="cap"></div>
+<div class="sec" id="sec"></div>
+<div class="node ccst">CCST</div><div class="node st" id="st"></div></div></div>
+<div class="chips" id="chips"></div>
+<div class="bar" id="bar"></div>
+</div>
+<script>
+const T={zh:{tag:"在 SillyTavern 里用你自己的 Claude 订阅聊天",sub:"Chat in SillyTavern with your own Claude subscription",main:"Claude 订阅",cap:"也支持",sec:["API 密钥","Bedrock","Vertex","OpenRouter"],one:false,st:"SillyTavern 酒馆",chips:["省额度（缓存）","回复不丢","一键切模型","回复体检","一键安装"],bar:["Opus 4.6","本机代理","订阅","写作中 1,234 字"]},
+en:{tag:"Chat in SillyTavern with your own Claude subscription",sub:"在 SillyTavern 里用你自己的 Claude 订阅聊天",main:"Claude subscription",cap:"Also works with",sec:["API key","Bedrock","Vertex","OpenRouter"],one:false,st:"SillyTavern",chips:["Saves usage (cache)","Replies never lost","One-click model switch","Reply check-up","One-click install"],bar:["Opus 4.6","local proxy","subscription","writing 1,234 chars"]}};
+const q=new URLSearchParams(location.search).get("lang");
+const L=(q==="zh"||q==="en")?q:((navigator.language||"").toLowerCase().startsWith("zh")?"zh":"en");
+const t=T[L];document.documentElement.lang=L==="zh"?"zh-CN":"en";
+const $=id=>document.getElementById(id);
+$("tag").textContent=t.tag;$("sub").textContent=t.sub;$("main").textContent=t.main;$("cap").textContent=t.cap;$("st").textContent=t.st;
+$("sec").innerHTML=t.sec.map(s=>"<span>"+s+"</span>").join("");
+$("chips").innerHTML=t.chips.map(s=>'<div class="chip">'+s+"</div>").join("");
+const b=t.bar;$("bar").innerHTML='<span class="dot"></span><span class="m">'+b[0]+"</span><i>·</i>"+b[1]+"<i>·</i>"+b[2]+'<i>·</i><span class="w">'+b[3]+"</span>";
+</script></body></html>

@@ -5,7 +5,7 @@
 ## 未发布
 
 ### 新增
-- 仓库门面：README 顶部加封面图（`docs/assets/cover.html` 代码绘制，渲染为 `cover.png` / `cover@2x.png`，1280×640 可作 GitHub 社交预览）、更多徽章和导航链接，特性改为 2×3 网格；新增 `SECURITY.md`。
+- 仓库门面：README 顶部加封面图（`docs/assets/cover.html` 代码绘制，渲染为 `cover.png`（中文）/ `cover-en.png`（英文）及 @2x，1280×640 可作 GitHub 社交预览）、更多徽章和导航链接，特性改为 2×3 网格；新增 `SECURITY.md`。
 
 ## 4.3.0 - 2026-10-01
 
