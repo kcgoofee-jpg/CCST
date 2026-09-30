@@ -155,7 +155,7 @@ function describeCard() {
     }
     if (status.phase === 'offline') {
         if (!setup && direct) return null; // direct to Claude without the proxy: nothing is wrong
-        const help = connectHelp({ pluginState: status.plugin, tauri: IS_TAURI, endpoint: getSettings().endpoint });
+        const help = connectHelp({ endpoint: getSettings().endpoint });
         return {
             ...base, tone: setup ? 'info' : 'error', dot: 'offline', key: `start-${help.key}`,
             title: setup ? help.title : `连不上代理 · ${help.title}`,
