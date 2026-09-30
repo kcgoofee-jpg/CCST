@@ -54,7 +54,8 @@ export function buildSettingsTab(pane, settings, save) {
     backendBox.id = 'claude_max_backend';
     backendBox.append(el('small', 'cm-hint', '加载中…'));
     pane.append(backendBox);
-    refreshBackend();
+    // The pane isn't in the document yet (refreshBackend looks the box up by id): fetch once it is.
+    queueMicrotask(() => setTimeout(refreshBackend, 0));
 
     // Everything below decides itself (defaults, the preset's own
     // recommendation, the proxy watching each chat). Kept for chasing
