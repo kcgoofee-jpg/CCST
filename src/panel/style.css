@@ -711,7 +711,8 @@
     opacity: 0.85;
 }
 
-.claude-max .cm-notes li + li { margin-top: 4px; }
+.claude-max .cm-notes li { white-space: pre-line; }
+.claude-max .cm-notes li + li { margin-top: 8px; }
 
 /* a copyable command inside a step */
 .claude-max .cm-cmd { display: flex; align-items: center; gap: 8px; margin-top: 4px; }

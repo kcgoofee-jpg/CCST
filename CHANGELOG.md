@@ -2,6 +2,14 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规则见 [docs/版本规范.md](docs/版本规范.md)。
 
+## 未发布
+
+### 变更
+- **「面板和代理版本不一致」卡片重写**：按「情况 → 影响 → 怎么办」写，带编号步骤。代理在 `/status` 里新增 `runtime`（`plugin` 装成酒馆插件 | `standalone` 单独运行），面板据此给对应步骤（插件：重新运行「CCST安装」→ 重开酒馆 → 刷新；单独运行：更新代码 → 重启代理 → 刷新；面板旧：扩展管理里更新 → 刷新）；旧代理不报 `runtime` 时两种都列出，不做环境探测。提示气泡缩成一句加「详见面板」。
+
+### 文档
+- README 和使用指南新增「相关项目」：推荐 [tt-root-module](https://github.com/kcgoofee-jpg/tt-root-module)（手机 TT 的 KernelSU 守护模块）。
+
 ## 4.5.0 - 2026-10-01
 
 ### 新增

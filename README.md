@@ -145,6 +145,10 @@ https://github.com/kcgoofee-jpg/CCST
 
 > 基于 [LukaTheHero/SillyTavern-ClaudeSubscription](https://github.com/LukaTheHero/SillyTavern-ClaudeSubscription)（AGPL-3.0）独立维护，感谢原作者。
 
+## 相关项目
+
+- [tt-root-module（TT 守护）](https://github.com/kcgoofee-jpg/tt-root-module)：给已 root 的安卓手机用的 KernelSU 模块，自动备份、校验并同步手机上的 TauriTavern（及 SillyDroid、Termux 里的酒馆）数据，可一键恢复。手机上用 TauriTavern、担心聊天记录丢失的 CCST 用户可以装它。
+
 ## 许可证
 
 [GNU AGPL v3.0 或更高版本](LICENSE)

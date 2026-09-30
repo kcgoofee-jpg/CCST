@@ -26,15 +26,22 @@ fetch(new URL('../../../manifest.json', import.meta.url).href)
 const majorMinor = (v) => String(v ?? '').split('.').slice(0, 2).map(Number);
 let warnedVersions = null;
 
-export function versionMismatch(proxyVersion, panelV = panelVersion) {
+/** 哪一边旧：'proxy' | 'panel' | null（主次版本相同算一致）。 */
+export function mismatchSide(proxyVersion, panelV = panelVersion) {
     if (!panelV || !proxyVersion) return null;
     const [pa, pb] = majorMinor(panelV);
     const [xa, xb] = majorMinor(proxyVersion);
     if (pa === xa && pb === xb) return null;
-    const proxyOlder = xa < pa || (xa === pa && xb < pb);
-    return proxyOlder
-        ? `代理 v${proxyVersion} 比面板 v${panelV} 旧：更新代理后重启（装成酒馆插件的，更新后重启酒馆）。`
-        : `面板 v${panelV} 比代理 v${proxyVersion} 旧：在酒馆「扩展」里更新 CCST（手机用「手机同步」）。`;
+    return xa < pa || (xa === pa && xb < pb) ? 'proxy' : 'panel';
+}
+
+/** 一句话的情况 + 影响；具体步骤在面板卡片里（connect-help.js 的 mismatchHelp）。 */
+export function versionMismatch(proxyVersion, panelV = panelVersion) {
+    const side = mismatchSide(proxyVersion, panelV);
+    if (!side) return null;
+    return side === 'proxy'
+        ? `代理 v${proxyVersion} 比面板 v${panelV} 旧，新功能可能用不了，个别设置可能不生效。`
+        : `面板 v${panelV} 比代理 v${proxyVersion} 旧，新功能可能用不了，个别设置可能不生效。`;
 }
 
 const glancePatch = (partial) => store.merge('glance', partial);
@@ -63,13 +70,13 @@ export async function refreshStatus() {
             const key = `${panelVersion}|${data.version}`;
             if (warnedVersions !== key) {
                 warnedVersions = key;
-                notify('warn', '面板和代理版本不一致', mismatch, { ms: 15000 });
+                notify('warn', '面板和代理版本不一致', `${mismatch.split('，')[0]}。详见面板。`, { ms: 15000 });
             }
         }
         store.set({
             // A mismatch keeps the status card on screen until the versions match.
             proxyState: mismatch ? 'warning' : 'online', proxyOnline: true,
-            status: { phase: 'online', version: data.version, cred, mismatch },
+            status: { phase: 'online', version: data.version, cred, mismatch, mismatchSide: mismatchSide(data.version), panelVersion, runtime: data.runtime ?? null },
         });
     } catch {
         const where = normalizeEndpoint(getSettings().endpoint);

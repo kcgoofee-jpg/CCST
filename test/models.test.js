@@ -171,6 +171,10 @@ test('handleStatus reports the version from package.json', async () => {
     assert.ok(responseData);
     assert.equal(responseData.version, pkg.version);
     assert.equal(responseData.plugin, 'claude-subscription');
+    assert.equal(responseData.runtime, 'standalone');
+    responseData = null;
+    await handleStatus({ originalUrl: '/api/plugins/claude-subscription/status' }, mockRes);
+    assert.equal(responseData.runtime, 'plugin');
 });
 
 test('Opus 5.5 is catalogued as always-thinking with a 1M variant', () => {

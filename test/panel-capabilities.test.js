@@ -7,7 +7,8 @@ import {
 } from '../src/panel/core/capabilities.js';
 import * as hostCheck from '../src/shared/host.js';
 import * as sources from '../src/shared/sources.js';
-import { versionMismatch } from '../src/panel/core/live.js';
+import { versionMismatch, mismatchSide } from '../src/panel/core/live.js';
+import { mismatchHelp } from '../src/panel/core/connect-help.js';
 
 test('endpoint helpers: trailing slashes, ours, proxy base', () => {
     assert.equal(normalizeEndpoint('  http://127.0.0.1:8901/v1// '), 'http://127.0.0.1:8901/v1');
@@ -148,4 +149,25 @@ test('split deployment: SillyTavern-side address also counts as ours', () => {
     assert.equal(isOurEndpoint('http://other/v1', st), false);
     assert.equal(stSideEndpoint(st), 'http://ccst:8901/v1');
     assert.equal(stSideEndpoint({ endpoint: DEFAULT_ENDPOINT }), DEFAULT_ENDPOINT);
+});
+
+test('mismatchSide / mismatchHelp: steps follow what the proxy reports about how it runs', () => {
+    assert.equal(mismatchSide('4.3.0', '4.5.0'), 'proxy');
+    assert.equal(mismatchSide('4.6.0', '4.5.0'), 'panel');
+    assert.equal(mismatchSide('4.5.1', '4.5.0'), null);
+    const base = { side: 'proxy', proxyVersion: '4.3.0', panelVersion: '4.5.0' };
+    const plugin = mismatchHelp({ ...base, runtime: 'plugin' });
+    assert.match(plugin.sub, /情况：代理 v4\.3\.0 比面板 v4\.5\.0 旧/);
+    assert.match(plugin.sub, /影响：/);
+    assert.match(plugin.steps[0].text, /CCST安装/);
+    assert.equal(plugin.steps.length, 3);
+    assert.equal(plugin.downloads.length, 2);
+    const alone = mismatchHelp({ ...base, runtime: 'standalone' });
+    assert.match(alone.steps[1].text, /重启代理/);
+    assert.equal(alone.downloads.length, 0);
+    const unknown = mismatchHelp(base);
+    assert.match(unknown.steps[0].text, /装成酒馆插件/);
+    assert.match(unknown.steps[1].text, /单独运行/);
+    const panel = mismatchHelp({ ...base, side: 'panel' });
+    assert.match(panel.steps[0].text, /管理扩展/);
 });

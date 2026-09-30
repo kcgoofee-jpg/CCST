@@ -28,7 +28,12 @@ function getPluginVersion() {
     return cachedPluginVersion;
 }
 
-export async function handleStatus(_req, res) {
+/** 代理是怎么启动的：从请求走的入口看（酒馆插件挂在 /api/plugins/ 下），不探测环境。 */
+function runtimeOf(req) {
+    return String(req?.originalUrl ?? '').startsWith('/api/plugins/') ? 'plugin' : 'standalone';
+}
+
+export async function handleStatus(req, res) {
     const start = Date.now();
     const version = getPluginVersion();
     try {
@@ -37,6 +42,8 @@ export async function handleStatus(_req, res) {
             ok: true,
             plugin: 'claude-subscription',
             version,
+            // 面板靠它给「版本不一致」写对更新步骤：plugin = 装成酒馆插件，standalone = 单独运行
+            runtime: runtimeOf(req),
             // 启动器按端口关代理时用来确认「这就是代理」（Termux 没有 lsof 时只能靠它）
             pid: process.pid,
             sdk: 'loaded',

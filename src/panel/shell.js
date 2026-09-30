@@ -6,7 +6,7 @@
 
 import { store } from './core/store.js';
 import { getSettings, saveSettingsDebounced, EFFORT_LABEL } from './core/settings.js';
-import { connectHelp } from './core/connect-help.js';
+import { connectHelp, mismatchHelp } from './core/connect-help.js';
 import { IS_TAURI, cloudHosted, isOurEndpoint, stSideEndpoint } from './core/capabilities.js';
 import { libs } from './core/libs.js';
 import { F } from './core/registry.js';
@@ -211,6 +211,13 @@ function stepItem(step) {
     return li;
 }
 
+/** 版本不一致：情况 → 影响 → 编号步骤（内容见 connect-help.js 的 mismatchHelp）。 */
+function mismatchCard(base, status) {
+    const help = mismatchHelp({ side: status.mismatchSide, proxyVersion: status.version, panelVersion: status.panelVersion, runtime: status.runtime });
+    return { ...base, tone: 'warn', dot: 'warning', key: `mismatch-${status.mismatchSide}-${status.runtime ?? 'unknown'}`, title: '面板和代理版本不一致',
+        sub: help.sub, steps: help.steps, showSteps: true, downloads: help.downloads, hint: help.hint };
+}
+
 /** What the card should say right now: null = no card. */
 function describeCard() {
     const { connected, direct, model } = connectionInfo();
@@ -248,7 +255,7 @@ function describeCard() {
             if (Date.now() < flashUntil) {
                 return { ...base, tone: 'ok', dot: 'online', key: 'ok', title: model ? `已连接 · ${shortModel(model)}` : '已连接 · 请选 Claude 模型', sub: '模型和思考深度在「推理」页。' };
             }
-            return mismatch ? { ...base, tone: 'warn', dot: 'warning', key: 'mismatch', title: '面板和代理版本不一致', sub: mismatch } : null;
+            return mismatch ? mismatchCard(base, status) : null;
         }
         // Proxy is fine, SillyTavern isn't on it (yet).
         const sub = direct ? '连上代理才有缓存排布、防丢回复和额度；现在酒馆直连 Claude，本地功能照常。'

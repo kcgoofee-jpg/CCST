@@ -142,6 +142,10 @@ The author is not responsible for limited or banned accounts or any other loss.
 
 > Independently maintained fork of [LukaTheHero/SillyTavern-ClaudeSubscription](https://github.com/LukaTheHero/SillyTavern-ClaudeSubscription) (AGPL-3.0). Thanks to the original author.
 
+## Related
+
+- [tt-root-module](https://github.com/kcgoofee-jpg/tt-root-module): a KernelSU module for rooted Android phones that automatically backs up, verifies and syncs the data of TauriTavern (and SillyDroid / Termux SillyTavern) and restores it in one step. Worth installing if you run TauriTavern on a phone and don't want to lose your chats.
+
 ## License
 
 [GNU AGPL v3.0 or later](LICENSE)
