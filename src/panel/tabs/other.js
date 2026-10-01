@@ -20,7 +20,7 @@ function usageNotes() {
     const { root, body } = collapsible('使用说明', '代理、连接、思考深度、直连 Claude 的要点。');
     const list = el('ol', 'cm-notes');
     for (const line of [
-        '代理要一直开着（「酒馆工具」启动，或 npm start）。',
+        IS_TAURI ? '代理在一台电脑上单独运行，要一直开着（电脑上的「酒馆工具」启动，或 npm start）；TauriTavern 里装不了酒馆插件，也用不上一键安装。' : '代理要一直开着（「酒馆工具」启动，或 npm start）。',
         '首次使用按面板顶部的提示「一键连接」，再在「API 连接」里选 Claude 模型。',
         '酒馆自带的「推理强度」保持「自动」，思考深度在「推理」页设。',
         ...(IS_TAURI ? [] : [`默认地址 ${DEFAULT_ENDPOINT} 时，其他设备打开的酒馆经酒馆服务器读额度和状态。`]),
@@ -41,7 +41,7 @@ export function buildOtherTab(pane, settings, save) {
 
     const lan = collapsible('手机连接', '手机连电脑上的代理：填地址和访问密码。', { id: 'claude_max_lan' });
     lan.body.append(
-        endpointField(settings, save, { id: 'claude_max_endpoint_lan', hint: `填「酒馆工具」标题栏的地址，形如 http://电脑的局域网地址:8901/v1（手机同步会自动填）。本机保持 ${DEFAULT_ENDPOINT}。` }),
+        endpointField(settings, save, { id: 'claude_max_endpoint_lan', hint: `先在电脑上打开「酒馆工具」→ 其他 → 手机 → 手机模式，它会显示地址和访问密码；地址填这里，形如 http://电脑的局域网地址:8901/v1（手机同步会自动填）。本机保持 ${DEFAULT_ENDPOINT}。` }),
         accessKeyField(settings, save),
         stEndpointField(settings, save),
         reconnectButton(),

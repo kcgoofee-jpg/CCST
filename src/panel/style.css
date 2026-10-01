@@ -710,6 +710,8 @@
     font-size: var(--cm-fs-caption); word-break: break-all; user-select: all;
 }
 .claude-max .cm-cmd .cm-link-btn { flex: 0 0 auto; min-height: var(--cm-tap); }
+.claude-max .cm-dl { display: flex; flex-direction: column; flex: 1 1 100%; gap: 2px; }
+.claude-max .cm-dl .cm-cmd code { overflow-wrap: anywhere; }
 
 /* ── 状态: quota rows, usage table ── */
 

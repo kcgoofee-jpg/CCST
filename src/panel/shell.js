@@ -6,8 +6,9 @@
 
 import { store } from './core/store.js';
 import { getSettings, saveSettingsDebounced, EFFORT_LABEL } from './core/settings.js';
-import { connectHelp, mismatchHelp } from './core/connect-help.js';
-import { IS_TAURI, cloudHosted, isOurEndpoint, stSideEndpoint } from './core/capabilities.js';
+import { connectHelp, mismatchHelp, hostKind } from './core/connect-help.js';
+import { openExternal, copyText } from './core/external.js';
+import { IS_TAURI, COARSE, cloudHosted, isOurEndpoint, stSideEndpoint } from './core/capabilities.js';
 import { libs } from './core/libs.js';
 import { F } from './core/registry.js';
 import { connectionInfo, shortModel } from './core/connection.js';
@@ -190,7 +191,18 @@ const STEPS = {
         { text: '在 SillyTavern/plugins/CCST 文件夹里运行下面的命令，在弹出的浏览器里登录 Claude：', cmd: 'npm run login' },
         '用一键安装包装的：打开「酒馆工具」，按 3 登录 Claude。',
     ],
+    // TauriTavern / a phone / a remote page: the proxy is the standalone one on a computer, never in a SillyTavern plugins folder.
+    loginStandalone: [
+        '在运行代理的那台电脑上，打开「酒馆工具」，首页按 3 登录 Claude（只需一次）。',
+        { text: '没有「酒馆工具」：在 CCST 文件夹里运行下面的命令，在弹出的浏览器里登录 Claude：', cmd: 'npm run login' },
+    ],
 };
+
+/** Where this panel runs, from facts only: TauriTavern, a touch device / a page opened from beyond the home network, or a desktop browser. */
+function hostNow() {
+    const remote = libs.hostCheck?.isLocalHost ? !libs.hostCheck.isLocalHost(location.hostname) : false;
+    return hostKind({ tauri: IS_TAURI, elsewhere: COARSE || remote });
+}
 
 let stepsOpen = false;   // the steps under the card's button
 let stepsFor = '';       // which situation they belong to (a new situation closes them)
@@ -207,7 +219,7 @@ function stepItem(step) {
         const copy = el('button', 'cm-link-btn', '复制');
         copy.type = 'button';
         copy.addEventListener('click', async () => {
-            try { await navigator.clipboard.writeText(cmd); copy.textContent = '已复制'; } catch { copy.textContent = '请手动选中复制'; }
+            copy.textContent = (await copyText(cmd)) ? '已复制' : '请手动选中复制';
             setTimeout(() => { copy.textContent = '复制'; }, 2000);
         });
         row.append(code, copy);
@@ -216,9 +228,37 @@ function stepItem(step) {
     return li;
 }
 
+/**
+ * One download / link: a button that works where the panel runs (a real download for the extension's own file in a
+ * browser; the system browser for GitHub links, through TauriTavern's opener), plus the URL as text and a copy button,
+ * so there is always something to do when the button does nothing.
+ */
+function downloadItem(d) {
+    const box = el('div', 'cm-dl');
+    const a = el('a', 'menu_button cm-btn', d.label);
+    a.href = d.href;
+    if (d.download) a.setAttribute('download', d.file);
+    else {
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.addEventListener('click', (e) => { e.preventDefault(); void openExternal(d.href); });
+    }
+    const row = el('div', 'cm-cmd');
+    const code = el('code', null, d.copy ?? d.href);
+    const copy = el('button', 'cm-link-btn', '复制链接');
+    copy.type = 'button';
+    copy.addEventListener('click', async () => {
+        copy.textContent = (await copyText(d.copy ?? d.href)) ? '已复制' : '请手动选中复制';
+        setTimeout(() => { copy.textContent = '复制链接'; }, 2000);
+    });
+    row.append(code, copy);
+    box.append(a, row);
+    return box;
+}
+
 /** 版本不一致：情况 → 影响 → 编号步骤（内容见 connect-help.js 的 mismatchHelp）。 */
 function mismatchCard(base, status) {
-    const help = mismatchHelp({ side: status.mismatchSide, proxyVersion: status.version, panelVersion: status.panelVersion, runtime: status.runtime, tauri: IS_TAURI });
+    const help = mismatchHelp({ side: status.mismatchSide, proxyVersion: status.version, panelVersion: status.panelVersion, runtime: status.runtime, tauri: IS_TAURI, host: hostNow() });
     return { ...base, tone: 'warn', dot: 'warning', key: `mismatch-${status.mismatchSide}-${status.runtime ?? 'unknown'}`, title: '面板和代理版本不一致',
         sub: help.sub, steps: help.steps, showSteps: true, downloads: help.downloads, hint: help.hint };
 }
@@ -237,18 +277,18 @@ function describeCard() {
     }
     if (status.phase === 'offline') {
         if (!setup && direct) return null; // direct to Claude without the proxy: nothing is wrong
-        const help = connectHelp({ endpoint: getSettings().endpoint });
+        const help = connectHelp({ endpoint: getSettings().endpoint, host: hostNow() });
         return {
             ...base, tone: setup ? 'info' : 'error', dot: 'offline', key: `start-${help.key}`,
             title: help.title,
-            sub: help.sub, steps: help.steps, showSteps: true, downloads: help.downloads, hint: help.hint,
+            sub: help.sub, steps: help.steps, showSteps: true, downloads: help.downloads, hint: help.hint, goto: help.goto,
             action: { label: '我做好了，重新检测', run: refreshAll },
             edit: true,
         };
     }
     if (status.phase === 'nologin') {
         return { ...base, tone: 'warn', dot: 'warning', key: 'login', title: setup ? '代理在线，还差登录 Claude' : '代理在线，但没登录 Claude',
-            sub: '登录一次后，聊天走你的订阅额度。', steps: STEPS.login,
+            sub: '登录一次后，聊天走你的订阅额度。', steps: hostNow() === 'desktop' ? STEPS.login : STEPS.loginStandalone,
             action: { label: '登录说明', again: '我登录好了，重新检测', run: refreshAll } };
     }
     if (status.phase === 'pending' || status.phase === 'idle') {
@@ -305,12 +345,7 @@ export function renderConnect() {
         steps.replaceChildren(...(view.steps ?? []).map(stepItem));
         steps.hidden = !view.steps || !(stepsOpen || view.showSteps);
         const dl = card.querySelector('#claude_max_downloads');
-        dl.replaceChildren(...(view.downloads ?? []).map((d) => {
-            const a = el('a', 'menu_button cm-btn', d.label);
-            a.href = d.href;
-            a.setAttribute('download', d.file);
-            return a;
-        }));
+        dl.replaceChildren(...(view.downloads ?? []).map(downloadItem));
         dl.hidden = !view.downloads?.length;
         const dlHint = card.querySelector('#claude_max_downloads_hint');
         dlHint.textContent = view.hint ?? '';
@@ -327,6 +362,9 @@ export function renderConnect() {
             };
         }
         card.querySelector('#claude_max_status_conn').hidden = !view.edit;
+        const go = card.querySelector('#claude_max_status_goto');
+        go.hidden = !view.goto;
+        if (view.goto) { go.textContent = view.goto.label; go.onclick = () => showTab(view.goto.tab); }
     }
     const { proxyState } = store.get();
     const { direct } = connectionInfo();
@@ -380,7 +418,10 @@ function buildStatusBar(showTab) {
     edit.type = 'button';
     edit.id = 'claude_max_status_conn';
     edit.addEventListener('click', () => showTab('settings'));
-    row.append(action, edit);
+    const goto = el('button', 'cm-link-btn');
+    goto.type = 'button';
+    goto.id = 'claude_max_status_goto';
+    row.append(action, edit, goto);
     card.append(head, sub, steps, downloads, dlHint, row);
 
     const cloud = note('info', '酒馆在云端，连不到你电脑上的代理');
