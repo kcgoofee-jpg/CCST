@@ -51,6 +51,9 @@ function applyConnection(settings) {
     const keyField = $('#api_key_custom');
     if (keyField.length && settings.accessKey) keyField.val(settings.accessKey).trigger('input');
     $('#chat_completion_source').val('custom').trigger('change');
+    // '' is ST's 「无」 (the dropdown shows 「未选择」), and it is the recommended value, so the CCST
+    // profile saved from these live fields rightly has 提示词后处理 未选择 (see postProcessingCheck in
+    // inject.js, which warns on any other value).
     // The proxy sorts out roles itself. ST's merge/strict post-processing
     // turns the whole preset into a user message (after the first
     // assistant-role preset entry), which kills prompt caching.
@@ -213,7 +216,7 @@ function stepItem(step) {
 
 /** 版本不一致：情况 → 影响 → 编号步骤（内容见 connect-help.js 的 mismatchHelp）。 */
 function mismatchCard(base, status) {
-    const help = mismatchHelp({ side: status.mismatchSide, proxyVersion: status.version, panelVersion: status.panelVersion, runtime: status.runtime });
+    const help = mismatchHelp({ side: status.mismatchSide, proxyVersion: status.version, panelVersion: status.panelVersion, runtime: status.runtime, tauri: IS_TAURI });
     return { ...base, tone: 'warn', dot: 'warning', key: `mismatch-${status.mismatchSide}-${status.runtime ?? 'unknown'}`, title: '面板和代理版本不一致',
         sub: help.sub, steps: help.steps, showSteps: true, downloads: help.downloads, hint: help.hint };
 }

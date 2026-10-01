@@ -40,7 +40,9 @@ const REFRESH = '回到浏览器，按 Cmd+Shift+R（Windows 按 Ctrl+F5）刷�
  * 这时不去猜，两种做法都列出来让用户对号入座。
  * @returns {{ sub: string, steps: { text: string, cmd?: string }[], downloads: object[], hint: string }}
  */
-export function mismatchHelp({ side, proxyVersion, panelVersion, runtime = null }) {
+export function mismatchHelp({ side, proxyVersion, panelVersion, runtime = null, tauri = false }) {
+    // TauriTavern is an app, not a browser tab, and has no black server window: restart the app instead.
+    const REFRESH_STEP = tauri ? '重启 TauriTavern（完全退出再打开）。' : REFRESH;
     const impact = '影响：新功能可能用不了，个别设置可能不生效。';
     if (side === 'panel') {
         return {
@@ -49,14 +51,14 @@ ${impact}
 怎么办：`,
             steps: [
                 { text: '酒馆里点「扩展 → 管理扩展」，找到 CCST，点它的更新按钮。' },
-                { text: REFRESH },
+                { text: REFRESH_STEP },
             ],
             downloads: [], hint: '',
         };
     }
     const pluginSteps = [
         { text: '双击之前下载的「CCST安装」再运行一次，它会把代理更新到最新。找不到了，点下面的按钮重新下载。' },
-        { text: '关掉酒馆的黑色窗口，重新打开酒馆。' },
+        { text: tauri ? '重新启动代理所在的程序。' : '关掉酒馆的黑色窗口，重新打开酒馆。' },
     ];
     const standaloneSteps = [
         { text: '在 CCST 文件夹里运行下面这行命令，更新代码：', cmd: 'git pull && npm install' },
@@ -76,7 +78,7 @@ ${impact}
         sub: `情况：代理 v${proxyVersion} 比面板 v${panelVersion} 旧。
 ${impact}
 怎么办：`,
-        steps: [...steps, { text: REFRESH }],
+        steps: [...steps, { text: REFRESH_STEP }],
         downloads: runtime === 'standalone' ? [] : downloadsOf(),
         hint: runtime === 'standalone' ? '' : '双击下载的文件，按提示做完后重启酒馆',
     };

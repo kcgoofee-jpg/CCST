@@ -113,3 +113,47 @@ test('paragraphCount: blank-line blocks are paragraphs, dialogue lines inside th
     assert.equal(paragraphCount([p + '\n' + d, p, p + '\n' + d + '\n' + d].join('\n\n')), 3);
     assert.equal(paragraphCount([p, d, p].join('\n')), 3); // no blank lines: one per line
 });
+
+import { detectRefusal } from '../src/shared/chat-check.js';
+
+test('refusal: declined replies are flagged with an excerpt and the usage-policy hint', () => {
+    for (const mes of [
+        "I need to decline continuing this story. The scene involves a character who is a minor.",
+        "I can't write this scene.",
+        "I'm sorry, but I can't continue with this roleplay.",
+        'I understand the setup. I cannot continue with content like this.',
+        '我不能继续这个故事。',
+        '无法继续这个故事，抱歉。',
+        '很抱歉，我无法继续这个角色扮演。',
+        '我不能继续',
+        '**我必须拒绝这个请求。**',
+        "<content>I won't write this.</content>",
+    ]) {
+        const r = checkReply({ mes });
+        const refusal = r.issues.find((i) => i.code === 'refusal');
+        assert.ok(refusal, mes);
+        assert.match(refusal.text, /模型拒绝了这一轮：「/);
+        assert.match(refusal.text, /Anthropic 使用政策/);
+        assert.match(refusal.text, /切卡时自动检查角色卡/);
+        assert.doesNotMatch(refusal.text, /换个说法|换模型|绕过/);
+    }
+    assert.equal(checkReply({ mes: '我不能继续这个故事。', words: [1200, 1600] }).issues.length, 1, 'a refusal is not also a length problem');
+});
+
+test('refusal: in-character replies that mention refusing are not flagged', () => {
+    const long = '她把杯子放下，窗外的雨很大。'.repeat(60);
+    for (const mes of [
+        '“我拒绝！”她猛地站起来，把信摔在桌上。门外的风声越来越大。',
+        '「我不能继续了。」他靠在墙边，喘着气。',
+        '他拒绝了她的邀请，转身离开了房间，留下一杯凉掉的茶。',
+        '我无法继续忍受这种日子，她想。窗外下着雨。',
+        '女王拒绝了使节的请求。大厅里一片寂静。',
+        '她说：我不能继续留在这里了。',
+        'He refused the offer and turned away. “I can\'t write you a letter,” he said.',
+        `我不能继续这个故事。${long}`,
+        long,
+    ]) {
+        assert.ok(!checkReply({ mes }).issues.some((i) => i.code === 'refusal'), mes.slice(0, 30));
+    }
+    assert.equal(detectRefusal(''), null);
+});

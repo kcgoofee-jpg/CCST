@@ -8,6 +8,7 @@ import { getSettings } from './settings.js';
 import { F } from './registry.js';
 import { isReplyEvent, recovery } from './replies.js';
 import { onSettingsReady } from './inject.js';
+import { genStarted, genFinished } from './background.js';
 import { currentCharKey } from './st.js';
 import { connectionInfo } from './connection.js';
 import { refreshStats, refreshQuota } from './live.js';
@@ -16,6 +17,15 @@ import { clearOneShotEffort } from '../tabs/reason.js';
 import { renderCacheCard } from '../tabs/status.js';
 
 export function wireEvents({ eventSource, eventTypes }) {
+    // Registered before the settings handler: it must know a reply is under way when its request goes out.
+    const startEv = eventTypes.GENERATION_AFTER_COMMANDS ?? eventTypes.GENERATION_STARTED;
+    if (startEv) eventSource.on(startEv, (type, opts, dryRun) => genStarted(type, opts, dryRun));
+    if (eventTypes.GENERATION_ENDED) eventSource.on(eventTypes.GENERATION_ENDED, genFinished);
+    if (eventTypes.GENERATION_STOPPED) eventSource.on(eventTypes.GENERATION_STOPPED, genFinished);
+    // A check-up asked for during streaming runs now that the message is finished.
+    for (const ev of [eventTypes.GENERATION_ENDED, eventTypes.GENERATION_STOPPED]) {
+        if (ev) eventSource.on(ev, () => setTimeout(() => F.checkup.flushCheckup(), 300));
+    }
     eventSource.on(eventTypes.CHAT_COMPLETION_SETTINGS_READY, onSettingsReady);
     // Keep stats fresh while the panel is open.
     const refreshIfOpen = () => {

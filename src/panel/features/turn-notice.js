@@ -6,6 +6,8 @@ import { fetchProxy } from '../core/proxy.js';
 import { shortModel } from '../core/connection.js';
 import { notify } from '../core/notify.js';
 import { F } from '../core/registry.js';
+import { libs } from '../core/libs.js';
+import { chatKeyOf } from '../core/chat-key.js';
 
 // After a reply: tell the user when the proxy served something other
 // than what was asked for (base model instead of 1M, a reply cut off by a
@@ -13,7 +15,9 @@ import { F } from '../core/registry.js';
 let lastNoticeAt = 0;
 export async function noticeLastTurn() {
     try {
-        const res = await fetchProxy('/stats', '/v1/usage/stats');
+        // This chat's own reply only: never a background call, never another chat.
+        const chat = encodeURIComponent(chatKeyOf(SillyTavern.getContext()) ?? 'none');
+        const res = await fetchProxy(`/stats?chat=${chat}`, `/v1/usage/stats?chat=${chat}`);
         if (!res.ok) return;
         const data = await res.json();
         const last = data.lastRequest;
@@ -25,7 +29,8 @@ export async function noticeLastTurn() {
         if (fallback) {
             notify('warn', `换了模型：${shortModel(fallback)} 重写`, `${shortModel(last.model)} 写到一半被安全机制拦下，改由 ${shortModel(fallback)} 重写了整条，文风和格式可能和前文不一样。`, { ms: 15000 });
         } else if (notices.includes('refusal') || last.finish === 'content_filter') {
-            notify('warn', '回复被安全机制截断', '这条回复写到一半被安全机制拦下，结尾缺了内容（变量、状态栏可能出错）。重新生成，或改一下上一条再发。', { ms: 15000 });
+            const r = libs.chatCheck?.refusalNotice(last);
+            notify('warn', r?.title ?? '回复被安全机制截断', r?.text ?? '这条回复写到一半被安全机制拦下，结尾缺了内容（变量、状态栏可能出错）。重新生成，或改一下上一条再发。', { ms: 15000 });
         } else if (last.finish === 'length') {
             notify('warn', '回复写到最大长度被截断', '调大酒馆的「最大回复长度」后重新生成。', { ms: 12000 });
         }

@@ -11,6 +11,7 @@ import { store } from './store.js';
 import { notify } from './notify.js';
 import { F } from './registry.js';
 import { chatKeyOf } from './chat-key.js';
+import { isBackgroundRequest } from './background.js';
 
 // Opus 5.5's safeguards refuse prompts that make the model write its
 // reasoning into the reply (category reasoning_extraction). Presets that
@@ -115,9 +116,12 @@ export function onSettingsReady(data) {
             .replace(/\n{3,}/g, '\n\n')
             .trim();
         // The reply keeper hands out the reply's slot (null for quiet / impersonate / continue).
-        const slot = F.keeper.openSlot(data) ?? null;
+        // Background calls (type quiet, generateRaw, a second request during the reply) are tagged
+        // purpose: quiet so the proxy never files them as the chat's 「上一轮」.
+        const quiet = isBackgroundRequest(data);
+        const slot = quiet ? null : (F.keeper.openSlot(data) ?? null);
 
-        data.custom_include_body = (cleaned ? cleaned + '\n' : '') + buildIncludeBodyYaml(settings, data.type === 'quiet', slot);
+        data.custom_include_body = (cleaned ? cleaned + '\n' : '') + buildIncludeBodyYaml(settings, quiet, slot);
         preflightCheck(data);
         postProcessingCheck(data);
     } catch (err) {

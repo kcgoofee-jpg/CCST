@@ -171,3 +171,18 @@ test('mismatchSide / mismatchHelp: steps follow what the proxy reports about how
     const panel = mismatchHelp({ ...base, side: 'panel' });
     assert.match(panel.steps[0].text, /管理扩展/);
 });
+
+test('mismatchHelp in TauriTavern: restart the app, never 浏览器 / 黑色窗口', () => {
+    const base = { side: 'proxy', proxyVersion: '4.3.0', panelVersion: '4.5.0', tauri: true };
+    for (const runtime of ['plugin', 'standalone', null]) {
+        const h = mismatchHelp({ ...base, runtime });
+        const all = h.steps.map((s) => s.text).join('\n');
+        assert.match(h.steps.at(-1).text, /重启 TauriTavern（完全退出再打开）/, String(runtime));
+        assert.doesNotMatch(all, /黑色窗口|回到浏览器|Cmd\+Shift\+R/, String(runtime));
+    }
+    const panel = mismatchHelp({ ...base, side: 'panel' });
+    assert.match(panel.steps.at(-1).text, /重启 TauriTavern/);
+    // Browsers keep the old wording.
+    assert.match(mismatchHelp({ ...base, tauri: false, runtime: 'plugin' }).steps.map((s) => s.text).join('\n'), /黑色窗口/);
+    assert.equal(mismatchHelp({ ...base, runtime: 'standalone' }).downloads.length, 0);
+});

@@ -51,11 +51,22 @@ test('notice text', () => {
 
 test('confirm popup: no profile selected ("<None>") leaves the profile part out', () => {
     const t = describeCurrentConnection({ profile: '<None>', source: 'custom', url: 'http://127.0.0.1:8901/v1', model: 'claude-opus-4-6' });
-    assert.equal(t, '来源 custom · http://127.0.0.1:8901/v1 · claude-opus-4-6');
-    assert.equal(describeCurrentConnection({ profile: '我的 Claude', source: 'claude' }), '连接配置「我的 Claude」 · 来源 claude');
+    assert.equal(t, '来源 自定义（兼容 OpenAI） · http://127.0.0.1:8901/v1 · claude-opus-4-6');
+    assert.equal(describeCurrentConnection({ profile: '我的 Claude', source: 'claude' }), '连接配置「我的 Claude」 · 来源 Claude');
     assert.equal(describeCurrentConnection({}), '');
 });
 
 test('confirm popup: only the given (current source) model is shown', () => {
-    assert.equal(describeCurrentConnection({ source: 'openai', model: '' }), '来源 openai');
+    assert.equal(describeCurrentConnection({ source: 'openai', model: '' }), '来源 OpenAI');
+});
+
+import { sourceLabel } from '../src/panel/core/connection-profile.js';
+
+test('source ids map to the names in ST\'s 来源 dropdown; unknown ids stay raw', () => {
+    assert.equal(sourceLabel('custom'), '自定义（兼容 OpenAI）');
+    assert.equal(sourceLabel('claude'), 'Claude');
+    assert.equal(sourceLabel('openrouter'), 'OpenRouter');
+    assert.equal(sourceLabel('makersuite'), 'Google AI Studio');
+    assert.equal(sourceLabel('some-new-source'), 'some-new-source');
+    assert.doesNotMatch(describeCurrentConnection({ source: 'custom' }), /\bcustom\b/);
 });

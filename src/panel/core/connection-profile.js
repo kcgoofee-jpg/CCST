@@ -32,11 +32,22 @@ export function planProfile(listOutput, name = PROFILE_NAME) {
         : { existed, select: null, save: `/profile-create ${name}` };
 }
 
+/** ST's chat_completion_source ids → names the user sees in the 来源 dropdown (unknown ids stay raw). */
+export const SOURCE_NAMES = {
+    custom: '自定义（兼容 OpenAI）', claude: 'Claude', openai: 'OpenAI', openrouter: 'OpenRouter',
+    makersuite: 'Google AI Studio', vertexai: 'Google Vertex AI', mistralai: 'MistralAI', deepseek: 'DeepSeek',
+    cohere: 'Cohere', perplexity: 'Perplexity', groq: 'Groq', ai21: 'AI21', xai: 'xAI (Grok)',
+    aimlapi: 'AI/ML API', electronhub: 'Electron Hub', nanogpt: 'NanoGPT', pollinations: 'Pollinations',
+    moonshot: 'Moonshot AI', fireworks: 'Fireworks AI', cometapi: 'CometAPI', azure_openai: 'Azure OpenAI',
+    zai: 'Z.AI (GLM)', siliconflow: 'SiliconFlow', chutes: 'Chutes',
+};
+export const sourceLabel = (id) => SOURCE_NAMES[id] ?? id;
+
 /** The confirm popup's 「现在：…」 line. ST's connection manager reports "<None>" for no profile: leave it out. */
 export function describeCurrentConnection({ profile = '', source = '', url = '', model = '' } = {}) {
     const p = String(profile ?? '').trim();
     const hasProfile = p && !/^<none>$/i.test(p);
-    return [hasProfile && `连接配置「${p}」`, source && `来源 ${source}`, url, model].filter(Boolean).join(' · ');
+    return [hasProfile && `连接配置「${p}」`, source && `来源 ${sourceLabel(source)}`, url, model].filter(Boolean).join(' · ');
 }
 
 /** The notice after the profile step (plain words: where to double-check). */

@@ -6,7 +6,8 @@ import { libs } from '../core/libs.js';
 import { store } from '../core/store.js';
 import { getSettings, saveSettingsDebounced } from '../core/settings.js';
 import { el, note, stateLine } from '../core/dom.js';
-import { currentCharKey } from '../core/st.js';
+import { currentCharKey, generating } from '../core/st.js';
+import { makeCheckupGate } from '../core/checkup-gate.js';
 import { notify } from '../core/notify.js';
 
 export function init() {
@@ -16,7 +17,13 @@ export function init() {
 
 let lastToastKey = '';
 
-export function runCheckup({ toast = false } = {}) {
+// Never while a reply is streaming (half a message trips checks and flashes the badge): asked
+// meanwhile, it runs once the generation ended (events.js calls flushCheckup).
+const gate = makeCheckupGate({ isGenerating: generating, run: (o) => runCheckupNow(o) });
+export const runCheckup = (opts) => { gate.request(opts); };
+export const flushCheckup = () => { gate.flush(); };
+
+function runCheckupNow({ toast = false } = {}) {
     const box = document.getElementById('claude_max_checkup');
     if (!libs.chatCheck) {
         store.merge('glance', { issues: 0 });

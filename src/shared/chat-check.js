@@ -150,6 +150,55 @@ function gaugeNames(mes) {
     return new Set(m ? [...m[1].matchAll(/([一-鿿A-Za-z]{1,6})[:：]?\s*\d+\s*\//g)].map((x) => x[1]) : []);
 }
 
+// ── Refusal: the model declined this turn (Anthropic usage policy), instead of writing the scene ──
+// Conservative on purpose: a short reply whose first sentences open with a first-person refusal. A
+// character who says「我拒绝！」in dialogue, or narration that merely mentions 拒绝, is not flagged:
+// the phrase must START a sentence outside any quotation (an opening quote breaks the anchor).
+const REFUSAL_EN = /(?:I(?:'|’)?m sorry,? (?:but )?(?:I )?(?:can(?:'|’)?t|cannot|won(?:'|’)?t|am unable|(?:'|’)m unable)|Sorry,? (?:but )?I (?:can(?:'|’)?t|cannot|won(?:'|’)?t)|I apologi[sz]e,? but I (?:can(?:'|’)?t|cannot|won(?:'|’)?t)|I (?:need|have|want|must|will have) to (?:decline|stop here|pause here|step out|refuse)|I (?:can(?:'|’)?t|cannot|won(?:'|’)?t|am not able to|am unable to|(?:'|’)m not able to|(?:'|’)m unable to|(?:'|’)m not going to|am not going to) (?:continue|write|help|assist|create|generate|produce|engage|roleplay|role-play|proceed|go on|do that|provide|take this))/i;
+const REFUSAL_ZH = /(?:(?:很抱歉|抱歉|对不起|十分抱歉|非常抱歉)[，,、]?\s*(?:但)?我(?:不能|无法|没法|不会|不可以)|我(?:必须|需要|只能|得)(?:要)?(?:拒绝|停下|停在这里|婉拒)|我(?:拒绝|不能|无法|没法|不会|不可以)(?:继续|接着|再)?(?:写|创作|续写|撰写|生成|提供|协助|参与|描写|扮演|进行)?(?:这个|这段|这场|该|本|下去的|此)?(?:故事|剧情|角色扮演|扮演|创作|写作|内容|请求|场景|情节|描写|设定|方向)|我(?:不能|无法|没法)(?:继续|再)(?:写|创作|续写|扮演|这个|这样|这类)|我(?:不能|无法)继续(?=[。.！!，,]?\s*$)|无法继续(?:这个|这段|这场|该|本|此)?(?:故事|剧情|角色扮演|扮演|创作|写作|内容|请求|场景|情节))/;
+const REFUSAL_HEAD_CHARS = 300;   // the refusal sits at the head of the reply
+const REFUSAL_MAX_BODY = 700;     // a refusal is short; a long scene that mentions one is not
+
+/** One-line excerpt of the refusal, or null when the reply does not look like one. */
+export function detectRefusal(mes) {
+    const body = bodyOf(String(mes ?? ''));
+    if (!body || body.length > REFUSAL_MAX_BODY) return null;
+    const head = body.slice(0, REFUSAL_HEAD_CHARS);
+    // Sentence starts: the very beginning, after a line break, after 。！？.!?
+    const starts = [0];
+    for (const m of head.matchAll(/[\n。！？!?.]+\s*/g)) starts.push(m.index + m[0].length);
+    for (const at of starts) {
+        // Leading markdown (bold / blockquote marks) is not dialogue.
+        const rest = body.slice(at).replace(/^[\s*_>#-]+/, '');
+        const m = REFUSAL_EN.exec(rest) ?? REFUSAL_ZH.exec(rest);
+        if (m && m.index === 0) {
+            const line = rest.split('\n')[0];
+            return line.length > 60 ? `${line.slice(0, 60)}…` : line;
+        }
+    }
+    return null;
+}
+
+/** The 体检 text for a refusal (plain words; what to do, nothing about getting around it). */
+export function refusalIssueText(excerpt) {
+    return `模型拒绝了这一轮：「${excerpt}」。${REFUSAL_HINT}`;
+}
+
+/**
+ * The proxy's definitive signal (stop_reason "refusal", recorded as notice 'refusal' / finish
+ * 'content_filter'): a reply that is nearly empty was a refusal of the whole turn; one with real text
+ * was cut off part-way. Returns { title, text } or null when the request carries no refusal.
+ */
+export function refusalNotice(last) {
+    if (!last || !(last.notices?.includes('refusal') || last.finish === 'content_filter')) return null;
+    if ((last.textChars ?? 0) < 300) {
+        return { declined: true, title: '模型拒绝了这一轮', text: `Claude 的安全机制没有让这一轮写出来（接口返回 stop_reason: refusal）。${REFUSAL_HINT}` };
+    }
+    return { declined: false, title: '回复被安全机制截断', text: '这条回复写到一半被安全机制拦下，结尾缺了内容（变量、状态栏可能出错）。重新生成，或改一下上一条再发。' };
+}
+
+export const REFUSAL_HINT ='多半是角色卡或世界书里的内容触发了 Anthropic 使用政策（例如未成年人相关）。可在体检里打开『切卡时自动检查角色卡』看具体是哪段。';
+
 const OPTION_RE = /^\s*(?:[*_#>-]+\s*)?[（(【[]?([A-Ja-j])[）)】\]]?\s*[.．、,，:：\-—]\s*(.*\S)\s*$/;
 
 /**
@@ -169,6 +218,13 @@ export function checkReply({ mes, prevMes = null, words = null, banned = DEFAULT
     const body = bodyOf(mes);
     const narr = narrationOnly(body);
     const chars = body.replace(/\s/g, '').length;
+
+    // A refusal is the whole story of this turn: length / format complaints about it are noise.
+    const refused = detectRefusal(mes);
+    if (refused) {
+        add('refusal', refusalIssueText(refused));
+        return { chars, paragraphs: paragraphCount(body), issues };
+    }
 
     if (words) {
         const [lo, hi] = words;
