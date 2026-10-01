@@ -8,6 +8,7 @@ import { canSyncPhone, PHONE_SYNC_WARNING, PHONE_SYNC_LABEL } from '../core/capa
 import { controlFetch } from '../core/proxy.js';
 import { el, note, collapsible, popupText, stateLine } from '../core/dom.js';
 import { notify } from '../core/notify.js';
+import { copyText } from '../core/external.js';
 
 const SECTION_ID = 'claude_max_mac_section';
 
@@ -79,10 +80,9 @@ export async function refreshMac() {
     copyBtn.type = 'button';
     copyBtn.style.display = 'none'; // .menu_button sets display, which would override [hidden]
     copyBtn.addEventListener('click', async () => {
-        try {
-            await navigator.clipboard.writeText(pre.textContent);
+        if (await copyText(pre.textContent)) {
             notify('ok', 'Mac · 看日志', '已复制');
-        } catch {
+        } else {
             // No clipboard permission (TauriTavern web view): select the text so the user can copy it by hand.
             const range = document.createRange();
             range.selectNodeContents(pre);

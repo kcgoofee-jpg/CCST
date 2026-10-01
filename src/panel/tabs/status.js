@@ -10,6 +10,7 @@ import { connectionInfo, shortModel } from '../core/connection.js';
 import { proxyErrorText } from '../core/proxy.js';
 import { el, note, iconButton, group, collapsible, stateLine, button } from '../core/dom.js';
 import { notify } from '../core/notify.js';
+import { copyText } from '../core/external.js';
 import { refreshAll, refreshQuota, refreshStats } from '../core/live.js';
 
 export function init() {
@@ -332,10 +333,9 @@ export function directCacheCard(kind, where) {
         card.append(el('pre', 'cm-log', advice.yaml));
         const copy = button('复制这段', () => {}, { icon: 'fa-copy' });
         copy.addEventListener('click', async () => {
-            try {
-                await navigator.clipboard.writeText(advice.yaml);
+            if (await copyText(advice.yaml)) {
                 notify('ok', '已复制', '粘到酒馆目录的 config.yaml（替换原来的 claude: 段里对应几行），再重启酒馆。', { ms: 8000 });
-            } catch {
+            } else {
                 notify('warn', '没能自动复制', '请手动选中上面的内容复制，粘到酒馆目录的 config.yaml，再重启酒馆。');
             }
         });

@@ -209,6 +209,29 @@ let stepsFor = '';       // which situation they belong to (a new situation clos
 let prevSetup = false;   // was the panel in the first-run state at the last render
 let flashUntil = 0;      // the success card shows until then
 
+// The connect card is redrawn whenever the store changes, which would wipe a button's "已复制" before it is seen:
+// the feedback is kept per text and re-applied to the fresh button, and a toast says it too.
+const copyFeedback = new Map(); // text -> { label, until }
+const COPY_FEEDBACK_MS = 2000;
+
+function copyButton(idle, text) {
+    const btn = el('button', 'cm-link-btn', idle);
+    btn.type = 'button';
+    const apply = () => {
+        const fb = copyFeedback.get(text);
+        btn.textContent = fb && fb.until > Date.now() ? fb.label : idle;
+    };
+    apply();
+    btn.addEventListener('click', async () => {
+        const ok = await copyText(text);
+        copyFeedback.set(text, { label: ok ? '已复制' : '请手动选中复制', until: Date.now() + COPY_FEEDBACK_MS });
+        notify(ok ? 'ok' : 'warn', ok ? '已复制' : '没能自动复制', ok ? '' : '请手动选中文字复制。', { ms: 2500, replace: 'copy' });
+        apply();
+        setTimeout(() => { if (btn.isConnected) apply(); }, COPY_FEEDBACK_MS + 50);
+    });
+    return btn;
+}
+
 /** One step: text, and a command (if any) in a box with a copy button. */
 function stepItem(step) {
     const { text, cmd } = typeof step === 'string' ? { text: step } : step;
@@ -216,12 +239,7 @@ function stepItem(step) {
     if (cmd) {
         const row = el('div', 'cm-cmd');
         const code = el('code', null, cmd);
-        const copy = el('button', 'cm-link-btn', '复制');
-        copy.type = 'button';
-        copy.addEventListener('click', async () => {
-            copy.textContent = (await copyText(cmd)) ? '已复制' : '请手动选中复制';
-            setTimeout(() => { copy.textContent = '复制'; }, 2000);
-        });
+        const copy = copyButton('复制', cmd);
         row.append(code, copy);
         li.append(row);
     }
@@ -245,12 +263,7 @@ function downloadItem(d) {
     }
     const row = el('div', 'cm-cmd');
     const code = el('code', null, d.copy ?? d.href);
-    const copy = el('button', 'cm-link-btn', '复制链接');
-    copy.type = 'button';
-    copy.addEventListener('click', async () => {
-        copy.textContent = (await copyText(d.copy ?? d.href)) ? '已复制' : '请手动选中复制';
-        setTimeout(() => { copy.textContent = '复制链接'; }, 2000);
-    });
+    const copy = copyButton('复制链接', d.copy ?? d.href);
     row.append(code, copy);
     box.append(a, row);
     return box;
