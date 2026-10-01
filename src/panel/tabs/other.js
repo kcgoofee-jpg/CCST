@@ -14,7 +14,7 @@ import { F } from '../core/registry.js';
 import { buildMacSection } from './mac.js';
 import { restartGuide } from '../guide.js';
 import { buildCheckupSection } from './check.js';
-import { endpointField, stEndpointField, accessKeyField, reconnectButton } from './settings.js';
+import { connectCodeField, stEndpointField, reconnectButton } from './settings.js';
 
 function usageNotes() {
     const { root, body } = collapsible('使用说明', '代理、连接、思考深度、直连 Claude 的要点。');
@@ -39,10 +39,10 @@ export function buildOtherTab(pane, settings, save) {
     // Mac 遥控: hidden by default; refreshMac() shows it when the proxy reports it runs on the Mac launcher.
     pane.append(buildMacSection());
 
-    const lan = collapsible('手机连接', '手机连电脑上的代理：填地址和访问密码。', { id: 'claude_max_lan' });
+    const lan = collapsible('手机连接', '手机连电脑上的代理：粘贴电脑上的手机连接码。', { id: 'claude_max_lan' });
     lan.body.append(
-        endpointField(settings, save, { id: 'claude_max_endpoint_lan', hint: `先在电脑上打开「酒馆工具」→ 其他 → 手机 → 手机模式，它会显示地址和访问密码；地址填这里，形如 http://电脑的局域网地址:8901/v1（手机同步会自动填）。本机保持 ${DEFAULT_ENDPOINT}。` }),
-        accessKeyField(settings, save),
+        connectCodeField(settings, save),
+        el('small', 'cm-hint', '电脑上打开「酒馆工具」，开手机模式，首页会显示「手机连接码」，整行粘贴到这里（手机同步会自动填）。本机使用时留空。'),
         stEndpointField(settings, save),
         reconnectButton(),
     );

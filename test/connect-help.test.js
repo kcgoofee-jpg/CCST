@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { connectHelp, mismatchHelp, hostKind, REPO_ZIP_URL } from '../src/panel/core/connect-help.js';
+import { connectHelp, mismatchHelp, hostKind, formPrefill, connectOutcome, REPO_ZIP_URL } from '../src/panel/core/connect-help.js';
+import { makeConnectCode, parseConnectCode } from '../src/panel/core/connect-code.js';
+import { submitConnect, revealGroup } from '../src/panel/core/connect-form.js';
+import { readFileSync } from 'node:fs';
 import { openExternal, copyText } from '../src/panel/core/external.js';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -13,12 +16,9 @@ test('hostKind: facts only', () => {
     assert.equal(hostKind({}), 'desktop');
 });
 
-test('desktop browser: one card, names the address, offers the two installers from the extension folder', () => {
+test('desktop installers exist in the extension folder and carry a copyable GitHub link', () => {
     const h = connectHelp({ endpoint: 'http://192.168.31.7:8901/v1/', host: 'desktop' });
     assert.equal(h.key, 'offline');
-    assert.match(h.sub, /192\.168\.31\.7:8901\/v1$/);
-    assert.equal(h.steps.length, 3);
-    assert.ok(h.steps.some((s) => /删了/.test(s.text)), 'covers a removed proxy');
     assert.deepEqual(h.downloads.map((d) => d.label), ['下载一键安装（Mac）', '下载一键安装（Windows）']);
     for (const d of h.downloads) {
         assert.ok(existsSync(fileURLToPath(d.href)), `${d.file} exists in installer/`);
@@ -28,27 +28,118 @@ test('desktop browser: one card, names the address, offers the two installers fr
     }
 });
 
-test('TauriTavern: no plugin installer; repo zip opened in the system browser; Mac launcher, Windows, phone steps', () => {
-    const h = connectHelp({ host: 'tauri' });
-    assert.deepEqual(h.downloads.map((d) => d.key), ['repo-zip']);
+const noLoopback = (h) => assert.doesNotMatch(JSON.stringify(h), /127\.0\.0\.1|localhost/);
+const cardText = (h) => [h.title, h.sub, h.hint, ...h.downloads.map((d) => d.label)].join('');
+
+test('TauriTavern: one sentence, one 连接码 box, one visible download line; no 127.0.0.1, no steps, nothing collapsed', () => {
+    const h = connectHelp({ host: 'tauri', endpoint: 'http://127.0.0.1:8901/v1' });
+    assert.equal(h.title, '连不上 CCST 代理');
+    assert.equal(h.sub, '把电脑上酒馆工具首页显示的「手机连接码」粘贴到这里');
+    assert.deepEqual(h.steps, []);
+    assert.equal(h.fold, undefined);
+    assert.deepEqual(h.form, { value: '', placeholder: 'http://192.168.x.x:8901/v1#k=…' });
+    noLoopback(h);
+    assert.deepEqual(h.downloads.map((d) => [d.key, d.label]), [['repo-zip', '电脑上还没装？下载 CCST']]);
     assert.equal(h.downloads[0].href, REPO_ZIP_URL);
-    assert.equal(h.downloads[0].download, false, 'not a webview download');
-    assert.equal(h.downloads[0].copy, REPO_ZIP_URL);
-    const t = allText(h);
-    assert.doesNotMatch(t, /下载一键安装/);
-    assert.match(t, /首次安装\.command/);
-    assert.match(t, /酒馆工具/);
-    assert.match(t, /Windows（实验性/);
-    assert.match(t, /手机模式/);
-    assert.deepEqual(h.goto, { label: '去填地址和密码', tab: 'other' });
+    assert.equal(h.downloads[0].download, false, 'opened by the system browser, not a webview download');
+    assert.ok(cardText(h).length < 80, 'short');
 });
 
-test('elsewhere (cloud / phone browser): no installer for this device; server command is copyable', () => {
-    const h = connectHelp({ host: 'elsewhere' });
+test('phone form is prefilled with the saved 连接码 (address + key), but never with a loopback address', () => {
+    const h = connectHelp({ host: 'tauri', endpoint: 'http://192.168.31.7:8901/v1/', accessKey: 'Kx9' });
+    assert.equal(h.form.value, 'http://192.168.31.7:8901/v1#k=Kx9');
+    assert.equal(formPrefill('http://localhost:8901/v1', 'k', 'elsewhere'), '');
+    assert.equal(formPrefill('http://127.0.0.1:8901/v1', '', 'desktop'), 'http://127.0.0.1:8901/v1');
+});
+
+test('elsewhere (cloud / phone browser): same box, a docs link instead of an installer', () => {
+    const h = connectHelp({ host: 'elsewhere', endpoint: 'http://127.0.0.1:8901/v1' });
     assert.ok(h.downloads.every((d) => !/CCST安装|CCST-mac/.test(d.href)));
-    assert.ok(h.steps.some((s) => /deploy\/install\.sh/.test(s.cmd ?? '')));
-    assert.match(allText(h), /运行酒馆的那台机器/);
-    assert.equal(h.goto.tab, 'other');
+    assert.equal(h.form.value, '');
+    noLoopback(h);
+    assert.equal(h.downloads.length, 1);
+});
+
+test('desktop browser ST: one sentence, installers, one visible Mac 15 line, no form, nothing collapsed', () => {
+    const h = connectHelp({ host: 'desktop' });
+    assert.deepEqual(h.steps, []);
+    assert.equal(h.form, undefined);
+    assert.equal(h.fold, undefined);
+    assert.match(h.hint, /系统设置 → 隐私与安全性 → 拉到底点「仍要打开」/);
+    assert.deepEqual(h.downloads.map((d) => d.key), ['mac', 'win']);
+});
+
+test('connectOutcome: the proxy\'s own answer decides the message', () => {
+    assert.deepEqual(connectOutcome({ phase: 'online' }), { kind: 'ok', text: '连上了' });
+    assert.equal(connectOutcome({ phase: 'nologin' }).kind, 'ok');
+    assert.deepEqual(connectOutcome({ phase: 'denied', code: 401, message: 'Invalid access key' }), { kind: 'denied', text: '连接码里的密码不对' });
+    assert.equal(connectOutcome({ phase: 'denied', code: 403, message: 'LAN access is off' }).text, 'LAN access is off');
+    assert.equal(connectOutcome({ phase: 'offline' }).text, '连不上：电脑开着酒馆工具且在同一 Wi-Fi？');
+});
+
+test('连接码: build / parse round trip, tolerant of spaces, newlines, labels and bare IP:port', () => {
+    const code = makeConnectCode('http://192.168.31.7:8901/v1/', 'Kx9mPq2');
+    assert.equal(code, 'http://192.168.31.7:8901/v1#k=Kx9mPq2');
+    const want = { endpoint: 'http://192.168.31.7:8901/v1', accessKey: 'Kx9mPq2' };
+    assert.deepEqual(parseConnectCode(code), want);
+    assert.deepEqual(parseConnectCode(`  手机连接码：${code}\n`), want);
+    assert.deepEqual(parseConnectCode('http://192.168.31.7:8901/v1#k=Kx9\n mPq2'), want, 'a soft-wrapped paste');
+    assert.deepEqual(parseConnectCode('192.168.31.7:8901#k=Kx9mPq2'), want, 'bare IP:port gets http:// and /v1');
+    assert.deepEqual(parseConnectCode('http://192.168.31.7:8901/v1'), { endpoint: 'http://192.168.31.7:8901/v1', accessKey: '' }, 'a plain address is accepted');
+    assert.deepEqual(parseConnectCode('http://10.0.0.2:8901/v1#k=a%2Fb'), { endpoint: 'http://10.0.0.2:8901/v1', accessKey: 'a/b' });
+    assert.equal(makeConnectCode('http://127.0.0.1:8901/v1', ''), 'http://127.0.0.1:8901/v1');
+    for (const bad of ['', '   ', '你好', 'abc#k=def']) assert.equal(parseConnectCode(bad), null, JSON.stringify(bad));
+});
+
+test('submitConnect: saves address + key like 其他 → 手机连接 does, re-checks, then goes on to one-click connect', async () => {
+    const calls = [];
+    const settings = { endpoint: 'http://127.0.0.1:8901/v1', accessKey: '' };
+    let status = { phase: 'pending' };
+    const deps = {
+        settings, save: () => calls.push('save'), sync: (s) => calls.push(`sync:${s.endpoint}`),
+        refresh: async () => { calls.push('refresh'); status = { phase: 'online', version: '4.6.0' }; },
+        getStatus: () => status, connect: async (s) => calls.push(`connect:${s.accessKey}`),
+    };
+    const out = await submitConnect({ code: ' 手机连接码：http://192.168.1.5:8901/v1#k=abc \n' }, deps);
+    assert.equal(out.kind, 'ok');
+    assert.equal(settings.endpoint, 'http://192.168.1.5:8901/v1');
+    assert.equal(settings.accessKey, 'abc');
+    assert.deepEqual(calls, ['sync:http://192.168.1.5:8901/v1', 'save', 'refresh', 'connect:abc']);
+});
+
+test('submitConnect: wrong password / unreachable / junk / empty do not connect', async () => {
+    const mk = (status) => { const calls = []; return { calls, settings: {}, deps: { save: () => calls.push('save'), refresh: async () => {}, getStatus: () => status, connect: () => calls.push('connect') } }; };
+    const run = (t, code) => submitConnect({ code }, { ...t.deps, settings: t.settings });
+    let t = mk({ phase: 'denied', code: 401, message: 'bad key' });
+    assert.deepEqual(await run(t, 'http://10.0.0.2:8901/v1#k=x'), { kind: 'denied', text: '连接码里的密码不对' });
+    t = mk({ phase: 'offline' });
+    assert.equal((await run(t, 'http://10.0.0.2:8901/v1#k=x')).kind, 'offline');
+    t = mk({ phase: 'nologin' });
+    assert.equal((await run(t, 'http://10.0.0.2:8901/v1#k=x')).kind, 'ok');
+    assert.ok(!t.calls.includes('connect'), 'not logged in: no one-click connect yet');
+    t = mk({ phase: 'online' });
+    assert.equal((await run(t, '')).kind, 'empty');
+    assert.equal((await run(t, '你好')).kind, 'bad');
+    assert.deepEqual(t.calls, [], 'nothing saved, nothing connected');
+    assert.deepEqual(t.settings, {});
+});
+
+test('revealGroup: opens the target tab, expands the group, focuses its first input', () => {
+    const log = [];
+    const input = { focus: () => log.push('focus') };
+    const group = { open: false, querySelector: (q) => (q === 'input' ? input : null), scrollIntoView: () => log.push('scroll') };
+    const doc = { getElementById: (id) => (id === 'claude_max_lan' ? group : null) };
+    assert.equal(revealGroup({ showTab: (t) => log.push(`tab:${t}`), tab: 'other', groupId: 'claude_max_lan', doc }), true);
+    assert.equal(group.open, true);
+    assert.deepEqual(log, ['tab:other', 'scroll', 'focus']);
+    assert.equal(revealGroup({ showTab: () => {}, tab: 'other', groupId: 'nope', doc }), false);
+});
+
+test('shell: no jump to 设置, no 改地址 / 去填地址和密码; the 其他 jump goes through revealGroup', () => {
+    const shell = readFileSync(fileURLToPath(new URL('../src/panel/shell.js', import.meta.url)), 'utf8');
+    assert.doesNotMatch(shell, /showTab\('settings'\)|改地址|去填地址和密码/);
+    assert.match(shell, /revealGroup\(\{ showTab, tab: 'other', groupId: 'claude_max_lan' \}\)/);
+    assert.doesNotMatch(shell, /<details|collapsible|cm-fold/);
 });
 
 test('every link the cards offer has a URL to copy', () => {

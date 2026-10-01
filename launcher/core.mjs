@@ -262,6 +262,8 @@ export async function readState(deps = {}) {
         lidInstalled: on('lid_installed'),
         lidOn: on('lid_on'),
         ip: local.ip || control?.ip || '',
+        // 手机模式的访问密码：菜单「手机」页要显示（只在内存里，不写日志）；没开手机模式 = ''
+        lanKey: mac && nonEmpty(cfg.lanKeyFile) ? String((deps.readKey ?? ((f) => { try { return readFileSync(f, 'utf8'); } catch { return ''; } }))(cfg.lanKeyFile)).trim() : '',
         phone, // usb | wifi | unauthorized | none | noadb；不是 Mac 时 null
         adb: local.adb || null,
         serial: local.serial || null,

@@ -5,6 +5,7 @@
 import { store } from '../core/store.js';
 import { getSettings, DEFAULT_ENDPOINT, VALID_THINKING, THINKING_OPTIONS } from '../core/settings.js';
 import { normalizeEndpoint } from '../core/capabilities.js';
+import { makeConnectCode, parseConnectCode } from '../core/connect-code.js';
 import { el, segmented, toggleRow, group, collapsible, stateLine, button } from '../core/dom.js';
 import { notify } from '../core/notify.js';
 import { refreshStatus, refreshBackend } from '../core/live.js';
@@ -107,6 +108,18 @@ function syncEndpointInputs(value) {
     for (const input of document.querySelectorAll('.cm-endpoint-input')) input.value = value;
 }
 
+/** The 手机连接码 as the fields show it: the saved address + password; empty for the plain local default. */
+function codeFor(settings) {
+    const ep = normalizeEndpoint(settings.endpoint);
+    return !ep || ep === DEFAULT_ENDPOINT ? '' : makeConnectCode(ep, settings.accessKey);
+}
+
+/** After the connect card (or a field) saved a new address / password: show them in the fields of 设置 and 其他 → 手机连接. */
+export function syncConnectionInputs(settings) {
+    syncEndpointInputs(settings.endpoint);
+    for (const input of document.querySelectorAll('.cm-code-input')) input.value = codeFor(settings);
+}
+
 /** The proxy address input. `id` differs per copy (设置 has one, 其他 → 手机连接 the other). */
 export function endpointField(settings, save, { id = 'claude_max_endpoint', hint } = {}) {
     const field = el('div', 'cm-field');
@@ -122,7 +135,7 @@ export function endpointField(settings, save, { id = 'claude_max_endpoint', hint
         const next = normalizeEndpoint(input.value) || DEFAULT_ENDPOINT;
         if (normalizeEndpoint(settings.endpoint) === next) { input.value = settings.endpoint; return; }
         settings.endpoint = next;
-        syncEndpointInputs(next);
+        syncConnectionInputs(settings);
         save();
         // Requests are only tagged when ST's own Custom URL matches this address.
         notify('info', '代理地址已改', '点「重新连接」让酒馆改用它。', { ms: 10000, replace: 'endpoint' });
@@ -153,22 +166,36 @@ export function stEndpointField(settings, save) {
     return field;
 }
 
-/** The LAN access password (only needed when the proxy is on another computer). */
-export function accessKeyField(settings, save) {
+/**
+ * 其他 → 手机连接: ONE box for the 手机连接码 (the address and the access password together, as the Mac's 酒馆工具 shows it).
+ * A plain address is accepted too. Saved to the same two settings the connect card uses.
+ */
+export function connectCodeField(settings, save, { id = 'claude_max_lan_code' } = {}) {
     const field = el('div', 'cm-field');
-    field.append(el('div', 'cm-field-label', '访问密码'));
-    const input = el('input', 'text_pole cm-key-input');
-    input.type = 'password';
+    field.append(el('div', 'cm-field-label', '手机连接码'));
+    const input = el('input', 'text_pole cm-code-input');
+    input.type = 'text';
+    input.id = id;
     input.autocomplete = 'off';
-    input.value = settings.accessKey ?? '';
-    input.placeholder = '本机使用时留空';
+    input.spellcheck = false;
+    input.value = codeFor(settings);
+    input.placeholder = 'http://192.168.x.x:8901/v1#k=…';
     input.addEventListener('change', () => {
-        const next = input.value.trim();
-        if ((settings.accessKey ?? '') === next) return;
-        settings.accessKey = next;
+        if (!input.value.trim()) {
+            // Emptied: back to the local proxy, no password.
+            settings.endpoint = DEFAULT_ENDPOINT;
+            settings.accessKey = '';
+        } else {
+            const parsed = parseConnectCode(input.value);
+            if (!parsed) { notify('warn', '没认出连接码', '请把电脑上酒馆工具首页显示的「手机连接码」整行粘贴过来。', { ms: 8000, replace: 'endpoint' }); input.value = codeFor(settings); return; }
+            settings.endpoint = parsed.endpoint;
+            settings.accessKey = parsed.accessKey;
+        }
+        syncConnectionInputs(settings);
         save();
-        notify('info', '访问密码已改', '点「重新连接」后生效。', { ms: 10000, replace: 'endpoint' });
+        notify('info', '连接码已保存', '点「重新连接」让酒馆改用它。', { ms: 10000, replace: 'endpoint' });
         refreshStatus();
+        refreshBackend();
     });
     field.append(input);
     return field;

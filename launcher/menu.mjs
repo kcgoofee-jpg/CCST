@@ -23,6 +23,7 @@ import { join } from 'node:path';
 import { emitKeypressEvents } from 'node:readline';
 
 import { ACTIONS, HERE, IS_TERMUX, MAC_ONLY, OS, VERSION, ago, clock, getJson, loadConfig, macOnly, readState, restartRefusal } from './core.mjs';
+import { makeConnectCode } from '../src/panel/core/connect-code.js';
 import { PHONE_ACTIONS, latestGuard, pullJob, versionNote } from './phone.mjs';
 
 export { readState };
@@ -162,6 +163,26 @@ export function screens(s) {
     return { home, other, phone, guard, comfy, maint };
 }
 
+/** 手机要填的代理地址：http://<这台 Mac 的局域网地址>:端口/v1；没有局域网地址时 ''。 */
+export function phoneAddress(s) {
+    return s.ip ? `http://${s.ip}:${s.port ?? 8901}/v1` : '';
+}
+
+/** 手机连接码：代理地址 + 访问密码合成一串，手机上整串粘贴（格式见 src/panel/core/connect-code.js）。没有地址或密码时 ''。 */
+export function phoneCode(s) {
+    return phoneAddress(s) && s.lanKey ? makeConnectCode(phoneAddress(s), s.lanKey) : '';
+}
+
+/** 首页上的问题用 a b c… 当按键；开着手机模式时 c 留给「复制连接码」，问题的字母跳过它。 */
+export function probLetters(s) {
+    return [...'abcdefghijklmnopqrstuvwxyz'].filter((l) => !(l === 'c' && phoneCode(s) && !macOnly()));
+}
+
+/** 复制到 macOS 剪贴板（pbcopy，内容走 stdin，不进命令行参数和日志）。 */
+export function copyToClipboard(text, run = spawnSync) {
+    try { return run('pbcopy', [], { input: text }).status === 0; } catch { return false; }
+}
+
 function phoneText(s) {
     if (phoneOn(s)) {
         const t = s.phoneTT;
@@ -185,13 +206,17 @@ export function statusLines(s, probs = problems(s)) {
     }
     const L = [`  ${pad(head, 11)}  ${facts.join(' · ')}`];
     const w = Math.max(0, ...probs.map((p) => width(p.text))) + 2;
+    const letters = probLetters(s);
     probs.forEach((p, i) => {
         const act = p.fix || p.sub ? `→ ${p.fixLabel}` : c.dim(p.fixLabel);
-        L.push(`    ${c.key(String.fromCharCode(97 + i))}  ${pad(p.text, w)}${act}`);
+        L.push(`    ${c.key(letters[i])}  ${pad(p.text, w)}${act}`);
     });
-    if (s.hasST === false) L.push(`  ${c.dim('酒馆：没找到酒馆目录（config.local 里设 ST_DIR）')}`);
-    else L.push(`  酒馆 ${s.stRunning ? `${c.ok('运行中')} · http://127.0.0.1:${s.stPort ?? 8000}` : c.dim('没运行')}`);
+    // 没配置酒馆（只用 TauriTavern 的人）：什么都不显示。
+    if (s.hasST !== false) L.push(`  酒馆 ${s.stRunning ? `${c.ok('运行中')} · http://127.0.0.1:${s.stPort ?? 8000}` : c.dim('没运行')}`);
     if (!s.phoneMode || macOnly()) return L;
+    // 手机上要粘贴的连接码：开着手机模式时首页常驻（只显示在屏幕上，不写日志）
+    L.push(`  手机连接码：${phoneCode(s) || c.dim('（没找到局域网地址：确认 Wi-Fi 已连接）')}`);
+    if (phoneCode(s)) L.push(`  ${c.key('c')}  复制连接码`);
     const tt = [s.hasTT ? `Mac TT ${s.macTTRunning ? '开着' : '没开'}` : null, phoneText(s),
         `手机模式${s.watchdog ? '' : '（守护没运行）'}`].filter(Boolean);
     L.push(`  ${tt.join(' · ')}`);
@@ -393,8 +418,12 @@ async function main() {
 
         let item = null;
         if (key.name === 'return' || k === '\r') item = view.actions[sel] ?? null;
-        else if (screen === 'home' && /^[a-z]$/.test(k) && view.probs?.[k.charCodeAt(0) - 97]) {
-            const p = view.probs[k.charCodeAt(0) - 97];
+        else if (screen === 'home' && k === 'c' && phoneCode(s) && !macOnly()) {
+            msg = copyToClipboard(phoneCode(s)) ? '已复制手机连接码' : '复制失败（没有 pbcopy？）';
+            continue;
+        }
+        else if (screen === 'home' && /^[a-z]$/.test(k) && view.probs?.[probLetters(s).indexOf(k)]) {
+            const p = view.probs[probLetters(s).indexOf(k)];
             if (p.sub) { trail.push(screen); screen = p.sub; sel = 0; continue; }
             if (!p.fix) { msg = p.fixLabel; continue; }
             item = { id: p.fix, label: p.fixLabel };

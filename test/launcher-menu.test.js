@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { width, pad, problems, renderHome, screens, statusLines } from '../launcher/menu.mjs';
+import { width, pad, problems, renderHome, screens, statusLines, phoneCode, probLetters, copyToClipboard } from '../launcher/menu.mjs';
+import { macOnly } from '../launcher/core.mjs';
 
 const base = {
     proxy: true, proxyVersion: null, loggedIn: true, plan: 'Max', busy: 0, phoneMode: false, watchdog: false,
@@ -81,7 +82,7 @@ test('home: line 1 can-play, line 2 SillyTavern; phone lines only in phone mode'
     assert.match(ok[0], /● 可以玩 +代理 \? · 订阅 · 已登录（Max）/);
     assert.match(ok[1], /酒馆 运行中 · http:\/\/127\.0\.0\.1:8000/);
     assert.match(statusLines({ ...st, stRunning: false })[1], /酒馆 没运行/);
-    assert.match(statusLines({ ...st, hasST: false })[1], /没找到酒馆目录/);
+    assert.ok(!statusLines({ ...st, hasST: false }).join('\n').includes('酒馆'), 'TT-only: no ST line');
     const down = statusLines({ ...st, proxy: false });
     assert.match(down[0], /● 还不能玩 +代理没运行/);
     assert.match(down[1], /a  代理没在运行 +→ 启动代理/);
@@ -89,9 +90,10 @@ test('home: line 1 can-play, line 2 SillyTavern; phone lines only in phone mode'
     const phoneMode = statusLines({ ...st, phoneMode: true, watchdog: true, macTTRunning: true, phone: 'usb', lastSyncAt: new Date(Date.now() - 2 * 3600e3),
         phoneTT: { ttRunning: true, generating: true, root: true, guardVersion: '1.9', guardLastBackup: new Date() } });
     if (mac) {
-        assert.equal(phoneMode.length, 4);
-        assert.match(phoneMode[2], /Mac TT 开着 · 手机 TT 在线（在生成回复） · 手机模式/);
-        assert.match(phoneMode[3], /上次同步 2 小时前 · TT 守护上次备份 \d\d:\d\d/);
+        assert.equal(phoneMode.length, 5);
+        assert.match(phoneMode[2], /手机连接码：/);
+        assert.match(phoneMode[3], /Mac TT 开着 · 手机 TT 在线（在生成回复） · 手机模式/);
+        assert.match(phoneMode[4], /上次同步 2 小时前 · TT 守护上次备份 \d\d:\d\d/);
     } else {
         assert.equal(phoneMode.length, 2);
     }
@@ -147,4 +149,34 @@ test('home: key columns are CJK-aware and every line fits the rule width', () =>
     for (const line of text.split('\n')) assert.ok(width(line) <= 60, line);
     assert.match(text, /✗ 检查状态：没有成功/);
     assert.match(text, /h 说明 · q 退出/);
+});
+
+test('home (phone mode on): shows 「手机连接码：<地址>#k=<密码>」 and a c key to copy it; the code is never on other lines', { skip: macOnly() }, () => {
+    const s = { ...base, phoneMode: true, watchdog: true, ip: '192.168.31.7', port: 8901, lanKey: 'Kx9mPq2', stRunning: false };
+    assert.equal(phoneCode(s), 'http://192.168.31.7:8901/v1#k=Kx9mPq2');
+    const lines = statusLines(s);
+    const line = lines.find((l) => l.includes('手机连接码'));
+    assert.match(line, /手机连接码：http:\/\/192\.168\.31\.7:8901\/v1#k=Kx9mPq2$/);
+    assert.ok(lines.some((l) => /\bc\b.*复制连接码/.test(l)));
+    assert.equal(lines.filter((l) => l.includes('Kx9mPq2')).length, 1);
+    assert.ok(renderHome(s).text.includes('手机连接码：http://192.168.31.7:8901/v1#k=Kx9mPq2'));
+});
+
+test('home: no 连接码 line in computer mode; no LAN address or no key = no copyable code', () => {
+    assert.ok(!statusLines(base).join('\n').includes('手机连接码'));
+    assert.equal(phoneCode({ ...base, phoneMode: true, ip: '', lanKey: 'k' }), '');
+    assert.equal(phoneCode({ ...base, phoneMode: true, ip: '10.0.0.2', lanKey: '' }), '');
+    if (!macOnly()) assert.match(statusLines({ ...base, phoneMode: true, ip: '' }).join('\n'), /手机连接码：.*没找到局域网地址/);
+});
+
+test('problem letters skip c while the copy key is on the home screen', () => {
+    assert.deepEqual(probLetters(base).slice(0, 3), ['a', 'b', 'c']);
+    if (!macOnly()) assert.deepEqual(probLetters({ ...base, phoneMode: true, ip: '10.0.0.2', port: 8901, lanKey: 'k' }).slice(0, 3), ['a', 'b', 'd']);
+});
+
+test('copyToClipboard: pbcopy gets the text on stdin, never in the arguments', () => {
+    const calls = [];
+    assert.equal(copyToClipboard('secret-code', (cmd, args, opts) => { calls.push([cmd, args, opts.input]); return { status: 0 }; }), true);
+    assert.deepEqual(calls, [['pbcopy', [], 'secret-code']]);
+    assert.equal(copyToClipboard('x', () => { throw new Error('no pbcopy'); }), false);
 });

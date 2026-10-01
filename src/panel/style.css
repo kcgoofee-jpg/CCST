@@ -829,3 +829,16 @@ body.cm-quiet #chat > .mes:not(.last_mes) * { backdrop-filter: none !important; 
 .claude-max .cm-bar[data-gen="thinking"] .cm-bar-model,
 .claude-max .cm-bar[data-gen="writing"] .cm-bar-model { color: var(--cm-accent); font-variant-numeric: tabular-nums; }
 .claude-max .cm-bar[data-gen="done"] .cm-bar-model { color: color-mix(in srgb, var(--cm-ok) 75%, var(--cm-text)); font-variant-numeric: tabular-nums; }
+
+/* 连接卡片里的地址 + 访问密码表单、折叠说明 */
+.claude-max .cm-connect-form { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.claude-max .cm-connect-form .text_pole { min-height: var(--cm-tap); margin: 0; box-sizing: border-box; width: 100%; }
+.claude-max .cm-connect-form .cm-field-label { font-weight: 600; }
+.claude-max .cm-cf-row { display: flex; align-items: center; gap: 8px; }
+.claude-max .cm-cf-row .text_pole { flex: 1 1 auto; min-width: 0; }
+.claude-max .cm-cf-row .cm-link-btn { flex: 0 0 auto; min-height: var(--cm-tap); }
+.claude-max .cm-cf-result { font-weight: 600; }
+.claude-max .cm-cf-result[data-kind="ok"] { color: var(--cm-ok); }
+.claude-max .cm-cf-result[data-kind="denied"], .claude-max .cm-cf-result[data-kind="offline"], .claude-max .cm-cf-result[data-kind="empty"] { color: var(--cm-bad); }
+.claude-max .cm-card-fold { margin-top: 8px; }
+.claude-max .cm-card-fold .cm-fold-body { display: flex; flex-direction: column; gap: 6px; }

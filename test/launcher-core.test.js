@@ -193,3 +193,13 @@ test('action routing: check is Node everywhere; start/stop/restart Node except m
     assert.ok(nodeAction('guard-restore', 'mac', false));
     assert.equal(nodeAction('guard-pull', 'linux', true), null);
 });
+
+test('readState: the phone-mode access key is read from the key file only in phone mode (kept in memory for the menu)', async () => {
+    const cfg = loadConfig({ root: ROOT, env: {}, os: 'mac', termux: false, exists: () => false, read: () => { throw new Error(); }, home: '/Users/u' });
+    const mk = (nonEmpty) => readState({
+        cfg, fetch: jsonFetch({}), exists: () => false, nonEmpty, mtime: () => null, portOpen: async () => false,
+        osStatus: () => ({ ip: '10.0.0.2' }), readKey: (f) => (f === cfg.lanKeyFile ? ' Kx9mPq2\n' : ''),
+    });
+    assert.equal((await mk((f) => f === cfg.lanKeyFile)).lanKey, 'Kx9mPq2');
+    assert.equal((await mk(() => false)).lanKey, '');
+});

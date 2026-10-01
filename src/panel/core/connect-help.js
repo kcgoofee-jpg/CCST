@@ -4,6 +4,7 @@
 // ──────────────────────────────────────────────
 
 import { DEFAULT_ENDPOINT, normalizeEndpoint } from './capabilities.js';
+import { makeConnectCode } from './connect-code.js';
 
 export const REPO_URL = 'https://github.com/kcgoofee-jpg/CCST';
 
@@ -39,55 +40,50 @@ const desktopDownloads = () => INSTALLERS.map((d) => {
     return { ...d, href, download: true, copy: d.key === 'mac' ? `${RAW_BASE}${d.file}` : REPO_URL + '/tree/main/installer' };
 });
 
-const TT_STEPS = [
-    { text: 'TauriTavern 里没有酒馆服务器插件，所以这里不用「一键安装」。代理要在一台电脑上单独运行：下载 CCST 的 zip（下面的按钮），解压。' },
-    { text: 'Mac：双击解压出来的 launcher/mac/首次安装.command（提示「无法验证开发者」就右键 → 打开）。它会装好环境、让你登录 Claude，并在桌面放一个「酒馆工具」，同时启动代理。以后用「酒馆工具」启动、重启。已经装过的：打开桌面的「酒馆工具」，首页选「重启代理」。' },
-    { text: 'Windows（实验性，没在真机上测过）：先装 Node.js LTS，再双击 launcher\\windows\\酒馆工具.bat，首页按 3 登录 Claude，回车启动。' },
-    { text: '用手机：代理仍在电脑上跑。电脑上「酒馆工具」→ 其他 → 手机 → 手机模式，会显示代理地址和访问密码；回到这里点下面的「去填地址和密码」，填好点「重新连接」。手机和电脑要在同一个 Wi-Fi。' },
-];
+const LOOPBACK = /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])([:/]|$)/i;
+export const CODE_PLACEHOLDER = 'http://192.168.x.x:8901/v1#k=…';
+
+/** What the card's box starts with: the saved connection as a 连接码, but on a phone / TauriTavern a loopback address points at the phone itself, so start empty. */
+export function formPrefill(endpoint, accessKey, host) {
+    const ep = normalizeEndpoint(endpoint) || '';
+    if (!ep || (host !== 'desktop' && LOOPBACK.test(ep))) return '';
+    return makeConnectCode(ep, accessKey);
+}
+
+/** The possible outcomes of 「连接」, from the proxy's own answer (the status after a re-check). */
+export function connectOutcome(status) {
+    const phase = status?.phase;
+    if (phase === 'online' || phase === 'nologin') return { kind: 'ok', text: '连上了' };
+    if (phase === 'denied') {
+        return { kind: 'denied', text: status.code === 401 ? '连接码里的密码不对' : (status.message || '代理拒绝了连接') };
+    }
+    return { kind: 'offline', text: '连不上：电脑开着酒馆工具且在同一 Wi-Fi？' };
+}
 
 /**
- * 「连不上代理」卡片。host 见 hostKind；每种环境只给在那儿真能做的步骤。
- * @returns {{ key: string, host: string, title: string, sub: string, steps: { text: string, cmd?: string }[], downloads: object[], hint: string, goto?: { label: string, tab: string } }}
+ * 「连不上代理」卡片。host 见 hostKind。
+ *   tauri / elsewhere：一句话 + 连接码输入框（form）+ 一行可见的下载（downloads）。
+ *   desktop：一句话 + 一键安装的下载按钮 + 一行 Mac 提示。
+ * 没有折叠、没有步骤列表。
+ * @returns {{ key: string, host: string, title: string, sub: string, steps: [], downloads: object[], hint: string, form?: { value: string, placeholder: string } }}
  */
-export function connectHelp({ endpoint = DEFAULT_ENDPOINT, host = 'desktop' } = {}) {
-    const ep = normalizeEndpoint(endpoint) || normalizeEndpoint(DEFAULT_ENDPOINT);
-    const base = { key: 'offline', host, title: '连不上 CCST 代理', sub: `地址：${ep}` };
-    if (host === 'tauri') {
+export function connectHelp({ endpoint = DEFAULT_ENDPOINT, accessKey = '', host = 'desktop' } = {}) {
+    const base = { key: 'offline', host, title: '连不上 CCST 代理', steps: [] };
+    if (host === 'tauri' || host === 'elsewhere') {
+        const tt = host === 'tauri';
         return {
             ...base,
-            steps: [
-                ...TT_STEPS,
-                { text: '代理已经在跑，还是连不上：点「改地址」核对地址；换过网络，电脑的局域网地址可能变了。' },
-            ],
-            downloads: [remoteItem('repo-zip', '下载 CCST（zip）', REPO_ZIP_URL)],
-            hint: '点按钮会用系统浏览器打开；打不开就点「复制链接」，粘贴到浏览器地址栏。',
-            goto: { label: '去填地址和密码', tab: 'other' },
-        };
-    }
-    if (host === 'elsewhere') {
-        return {
-            ...base,
-            steps: [
-                { text: '这台设备只是打开酒馆网页的浏览器：代理要装在运行酒馆的那台机器上，在这里下载安装器没用。' },
-                { text: '酒馆在 Linux 服务器上：SSH 登录服务器，运行下面这行（可重复运行；订阅登录和访问密码见使用指南「用法三」）。', cmd: SERVER_INSTALL_CMD },
-                { text: '酒馆在家里的电脑上、你用手机或别的设备打开：到那台电脑上运行一键安装（或 Mac 的「酒馆工具」→ 手机模式）。' },
-                { text: '代理已经在跑，只是这里连不上：点「改地址」填这台设备能访问到的地址（不能是 127.0.0.1），再到「其他 → 手机连接」填访问密码。' },
-            ],
-            downloads: [remoteItem('docs', '打开使用指南（用法三）', DOCS_URL)],
-            hint: '不想装代理：改用 API 密钥直连，见面板的「重新引导」。',
-            goto: { label: '去填地址和密码', tab: 'other' },
+            sub: '把电脑上酒馆工具首页显示的「手机连接码」粘贴到这里',
+            form: { value: formPrefill(endpoint, accessKey, host), placeholder: CODE_PLACEHOLDER },
+            downloads: [tt ? remoteItem('repo-zip', '电脑上还没装？下载 CCST', REPO_ZIP_URL) : remoteItem('docs', '电脑上还没装？看安装说明', DOCS_URL)],
+            hint: '',
         };
     }
     return {
         ...base,
-        steps: [
-            { text: '代理启动了吗？装成酒馆插件的：重启酒馆；单独运行的：在 CCST 文件夹里运行', cmd: 'npm start' },
-            { text: '代理在另一台电脑上：那台电脑要开着、和这台在同一个网络；换过网络地址可能变了，点「改地址」。' },
-            { text: '还没装代理，或已经删了：点下面的「下载一键安装」，双击运行；不用代理、直连 Claude 的话忽略这张卡。' },
-        ],
+        sub: '代理没在运行：重启酒馆。没装或删了：下载一键安装，双击运行。',
         downloads: desktopDownloads(),
-        hint: '双击下载的文件，按提示做完后重启酒馆。下载没反应：点「复制链接」，粘贴到浏览器地址栏。',
+        hint: 'Mac 双击被拦时：系统设置 → 隐私与安全性 → 拉到底点「仍要打开」。',
     };
 }
 

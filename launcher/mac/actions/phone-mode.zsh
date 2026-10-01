@@ -25,11 +25,11 @@ show_phone_setup() {
     if [[ -z "$ip" ]]; then
         warn "没找到这台 Mac 的局域网 IP：确认 Wi-Fi 已连接。"
     else
-        ok "代理地址：http://$ip:$PROXY_PORT/v1"
+        # 地址 + 访问密码合成一串，手机上整串粘贴。只显示，不写进日志。格式见 src/panel/core/connect-code.js
+        print -r -- "  ${C_GREEN}✓${C_RESET} 手机连接码：http://$ip:$PROXY_PORT/v1#k=$(<"$LAN_KEY_FILE")"
     fi
-    print -r -- "  ${C_GREEN}✓${C_RESET} 访问密码：$(<"$LAN_KEY_FILE")"   # 只显示，不写进日志
-    explain "手机 TauriTavern → 扩展 → CCST：连不上代理时顶部状态卡里会出现「代理地址」「访问密码」，填上后点「重新连接」。"
-    explain "已经用「同步手机」同步过设置的话，手机上已经填好了，不用再填。"
+    explain "手机 TauriTavern → 扩展 → CCST：连不上代理时，顶部卡片里粘贴这串，点「连接」。"
+    explain "以后在「酒馆工具」首页也能看到，按 c 一键复制。已经用「同步手机」同步过的话，手机上已经填好了。"
 }
 
 if [[ -s "$LAN_KEY_FILE" ]]; then

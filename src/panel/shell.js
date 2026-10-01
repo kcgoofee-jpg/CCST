@@ -6,7 +6,8 @@
 
 import { store } from './core/store.js';
 import { getSettings, saveSettingsDebounced, EFFORT_LABEL } from './core/settings.js';
-import { connectHelp, mismatchHelp, hostKind } from './core/connect-help.js';
+import { connectHelp, mismatchHelp, hostKind, formPrefill, connectOutcome, CODE_PLACEHOLDER } from './core/connect-help.js';
+import { submitConnect, revealGroup } from './core/connect-form.js';
 import { openExternal, copyText } from './core/external.js';
 import { IS_TAURI, COARSE, cloudHosted, isOurEndpoint, stSideEndpoint } from './core/capabilities.js';
 import { libs } from './core/libs.js';
@@ -20,7 +21,7 @@ import { refreshAll, refreshStatus, refreshStats } from './core/live.js';
 import { buildReasonTab } from './tabs/reason.js';
 import { buildStatusTab } from './tabs/status.js';
 import { refreshMac } from './tabs/mac.js';
-import { buildSettingsTab } from './tabs/settings.js';
+import { buildSettingsTab, syncConnectionInputs } from './tabs/settings.js';
 import { buildOtherTab } from './tabs/other.js';
 import { TABS, resolveTab } from './core/tabs.js';
 import { buildGuideCard, renderGuide } from './guide.js';
@@ -204,6 +205,8 @@ function hostNow() {
     return hostKind({ tauri: IS_TAURI, elsewhere: COARSE || remote });
 }
 
+let formBusy = false;     // 「连接」 is saving and re-checking
+let formShown = false;    // the card's address / password form was visible at the last render
 let stepsOpen = false;   // the steps under the card's button
 let stepsFor = '';       // which situation they belong to (a new situation closes them)
 let prevSetup = false;   // was the panel in the first-run state at the last render
@@ -269,6 +272,57 @@ function downloadItem(d) {
     return box;
 }
 
+/** 去「其他 → 手机连接」：切到 其他、把组展开、光标放进地址框（所有「去填…」的跳转都走这里）。 */
+function openPhoneGroup() {
+    revealGroup({ showTab, tab: 'other', groupId: 'claude_max_lan' });
+}
+
+/** The card's inline form: one box for the 手机连接码, 「连接」, and the result line. The elements persist across redraws (see renderConnect). */
+function buildConnectForm() {
+    const form = el('form', 'cm-connect-form');
+    form.id = 'claude_max_connect_form';
+    form.hidden = true;
+    form.noValidate = true;
+    const code = el('input', 'text_pole');
+    code.type = 'text';
+    code.id = 'claude_max_cf_code';
+    code.autocomplete = 'off';
+    code.autocapitalize = 'off';
+    code.spellcheck = false;
+    code.setAttribute('aria-label', '手机连接码');
+    const go = el('button', 'menu_button cm-btn cm-primary', '连接');
+    go.type = 'submit';
+    go.id = 'claude_max_cf_go';
+    const result = el('small', 'cm-cf-result');
+    result.id = 'claude_max_cf_result';
+    result.setAttribute('role', 'status');
+    result.hidden = true;
+    form.append(code, go, result);
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (formBusy) return;
+        formBusy = true;
+        go.disabled = true;
+        result.hidden = false;
+        result.dataset.kind = 'busy';
+        result.textContent = '正在连接…';
+        try {
+            const out = await submitConnect({ code: code.value }, {
+                settings: getSettings(), save: saveSettingsDebounced, sync: syncConnectionInputs,
+                refresh: refreshStatus, getStatus: () => store.get().status, connect,
+            });
+            result.dataset.kind = out.kind;
+            result.textContent = out.text;
+            result.hidden = false;
+        } finally {
+            formBusy = false;
+            go.disabled = false;
+            renderConnect();
+        }
+    });
+    return form;
+}
+
 /** 版本不一致：情况 → 影响 → 编号步骤（内容见 connect-help.js 的 mismatchHelp）。 */
 function mismatchCard(base, status) {
     const help = mismatchHelp({ side: status.mismatchSide, proxyVersion: status.version, panelVersion: status.panelVersion, runtime: status.runtime, tauri: IS_TAURI, host: hostNow() });
@@ -283,20 +337,25 @@ function describeCard() {
     const online = proxyState === 'online';
     const setup = !connected && !direct;
     const base = { setup };
+    // While 「连接」 is re-checking, the card keeps showing the form (not 「正在检测」), so the typed text stays put.
+    const phase = formBusy && status.phase === 'pending' ? 'offline' : status.phase;
 
-    if (status.phase === 'denied') {
-        return { ...base, tone: 'error', dot: 'offline', key: 'denied', title: status.code === 401 ? '访问密码不对' : '代理拒绝连接', sub: status.message,
-            action: { label: '去改访问密码', run: () => showTab('other') } };
+    if (phase === 'denied') {
+        const title = status.code === 401 ? '访问密码不对' : '代理拒绝连接';
+        // Phone / TauriTavern: fix it right in the card. Desktop: the password lives in 其他 → 手机连接.
+        if (hostNow() !== 'desktop') {
+            return { ...base, tone: 'error', dot: 'offline', key: 'denied-form', title, sub: '重新粘贴电脑上最新的手机连接码', form: { value: formPrefill(getSettings().endpoint, getSettings().accessKey, 'tauri'), placeholder: CODE_PLACEHOLDER } };
+        }
+        return { ...base, tone: 'error', dot: 'offline', key: 'denied', title, sub: status.message,
+            action: { label: '去改连接码', run: openPhoneGroup } };
     }
-    if (status.phase === 'offline') {
+    if (phase === 'offline') {
         if (!setup && direct) return null; // direct to Claude without the proxy: nothing is wrong
-        const help = connectHelp({ endpoint: getSettings().endpoint, host: hostNow() });
+        const help = connectHelp({ endpoint: getSettings().endpoint, accessKey: getSettings().accessKey, host: hostNow() });
         return {
             ...base, tone: setup ? 'info' : 'error', dot: 'offline', key: `start-${help.key}`,
             title: help.title,
-            sub: help.sub, steps: help.steps, showSteps: true, downloads: help.downloads, hint: help.hint, goto: help.goto,
-            action: { label: '我做好了，重新检测', run: refreshAll },
-            edit: true,
+            sub: help.sub, steps: help.steps, showSteps: true, downloads: help.downloads, hint: help.hint, form: help.form,
         };
     }
     if (status.phase === 'nologin') {
@@ -359,7 +418,18 @@ export function renderConnect() {
         steps.hidden = !view.steps || !(stepsOpen || view.showSteps);
         const dl = card.querySelector('#claude_max_downloads');
         dl.replaceChildren(...(view.downloads ?? []).map(downloadItem));
-        dl.hidden = !view.downloads?.length;
+        dl.hidden = !dl.childElementCount;
+        const form = card.querySelector('#claude_max_connect_form');
+        form.hidden = !view.form;
+        if (view.form && !formShown) {
+            // First time the form appears: start from the saved connection (empty on a phone when it is 127.0.0.1).
+            const box = card.querySelector('#claude_max_cf_code');
+            box.value = view.form.value ?? '';
+            box.placeholder = view.form.placeholder ?? '';
+            const res = card.querySelector('#claude_max_cf_result');
+            if (!formBusy) { res.hidden = true; res.textContent = ''; }
+        }
+        formShown = !!view.form;
         const dlHint = card.querySelector('#claude_max_downloads_hint');
         dlHint.textContent = view.hint ?? '';
         dlHint.hidden = dl.hidden || !view.hint;
@@ -374,11 +444,7 @@ export function renderConnect() {
                 view.action.run();
             };
         }
-        card.querySelector('#claude_max_status_conn').hidden = !view.edit;
-        const go = card.querySelector('#claude_max_status_goto');
-        go.hidden = !view.goto;
-        if (view.goto) { go.textContent = view.goto.label; go.onclick = () => showTab(view.goto.tab); }
-    }
+    } else formShown = false;
     const { proxyState } = store.get();
     const { direct } = connectionInfo();
     const up = proxyState === 'online' || proxyState === 'warning';
@@ -426,16 +492,8 @@ function buildStatusBar(showTab) {
     const action = el('button', 'menu_button cm-btn cm-primary');
     action.type = 'button';
     action.id = 'claude_max_status_action';
-    // The address field lives in 设置 (and 其他 → 手机连接); this jumps to 设置.
-    const edit = el('button', 'cm-link-btn', '改地址');
-    edit.type = 'button';
-    edit.id = 'claude_max_status_conn';
-    edit.addEventListener('click', () => showTab('settings'));
-    const goto = el('button', 'cm-link-btn');
-    goto.type = 'button';
-    goto.id = 'claude_max_status_goto';
-    row.append(action, edit, goto);
-    card.append(head, sub, steps, downloads, dlHint, row);
+    row.append(action);
+    card.append(head, sub, buildConnectForm(), steps, downloads, dlHint, row);
 
     const cloud = note('info', '酒馆在云端，连不到你电脑上的代理');
     cloud.id = 'claude_max_cloud';
