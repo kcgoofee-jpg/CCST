@@ -19,4 +19,4 @@ mkdir -p "$DEST"
 rsync -a "$src/" "$DEST/"
 xattr -dr com.apple.quarantine "$DEST" 2>/dev/null || true
 print "已放到 $DEST"
-exec /bin/zsh "$DEST/launcher/mac/首次安装.command" </dev/tty
+exec /bin/zsh "$DEST/launcher/mac/首次安装.command"
