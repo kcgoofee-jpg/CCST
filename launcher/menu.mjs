@@ -225,7 +225,7 @@ export function statusLines(s, probs = problems(s)) {
     // 手机上要粘贴的连接码：开着手机模式时首页常驻（只显示在屏幕上，不写日志）
     L.push(`  手机连接码：${phoneCode(s) || c.dim('（没找到局域网地址：确认 Wi-Fi 已连接）')}`);
     if (!phoneCode(s)) return L;
-    L.push(`  ${c.key('c')}  复制连接码    或用手机相机扫下面的二维码，复制文字后粘贴到 CCST`);
+    L.push(`  ${c.key('c')}  复制连接码    或用手机扫下面的二维码，打开后点「复制连接码」`);
     L.push(...qrLines(phoneCode(s)));
     return L;
 }
