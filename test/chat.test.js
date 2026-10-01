@@ -229,6 +229,51 @@ test('dry run: the stand-in capture chains, and is found by text + the reply it 
     for (let i = 1; i < entries.length; i++) assert.ok(entries[i].parentUuid && entries[i].parentUuid === entries[i - 1].uuid, `entry ${i} chains`);
 }));
 
+function limitSdk({ text, mode }) {
+    return { query() {
+        return (async function* run() {
+            yield { type: 'system', subtype: 'init', model: 'claude-opus-5', session_id: 'sl' };
+            if (text) yield { type: 'stream_event', parent_tool_use_id: null, event: { type: 'content_block_delta', delta: { type: 'text_delta', text } } };
+            const msg = "API Error: Claude's response exceeded the 120 output token maximum. Try again.";
+            if (mode === 'assistant') yield { type: 'assistant', error: 'unknown', message: { content: [{ type: 'text', text: msg }] } };
+            else yield { type: 'result', subtype: 'error_during_execution', is_error: true, errors: [msg], usage: { input_tokens: 3, output_tokens: 120 } };
+        })();
+    } };
+}
+const lastStat = () => readFileSync(process.env.CLAUDE_SUBSCRIPTION_STATS_FILE, 'utf8').trim().split('\n').map((l) => JSON.parse(l)).at(-1);
+const post = (stream, extra = {}) => fetch(`${base}/v1/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+    model: 'claude-opus-5', stream, max_tokens: 120, messages: [{ role: 'user', content: '写' }], claude_subscription: { effort: 'low', ...extra },
+}) });
+
+for (const mode of ['assistant', 'result']) {
+    test(`max_tokens overflow (${mode}): non-stream returns partial text with finish_reason length`, quiet(async () => {
+        __setSdkForTesting(limitSdk({ text: '写到一半', mode }));
+        const r = await post(false);
+        assert.equal(r.status, 200);
+        const j = await r.json();
+        assert.equal(j.choices[0].message.content, '写到一半');
+        assert.equal(j.choices[0].finish_reason, 'length');
+        assert.equal(lastStat().ok, true);
+    }));
+    test(`max_tokens overflow (${mode}): stream keeps chunks and ends with finish_reason length`, quiet(async () => {
+        __setSdkForTesting(limitSdk({ text: '写到一半', mode }));
+        const t = await (await post(true)).text();
+        assert.match(t, /写到一半/);
+        assert.match(t, /"finish_reason":"length"/);
+        assert.doesNotMatch(t, /原因不明/);
+        assert.equal(lastStat().ok, true);
+    }));
+}
+
+test('max_tokens overflow with no text (thinking ate the budget): clear message, not 原因不明', quiet(async () => {
+    __setSdkForTesting(limitSdk({ text: '', mode: 'result' }));
+    const r = await post(false);
+    const m = (await r.json()).error.message;
+    assert.match(m, /最大回复长度/);
+    assert.match(m, /120 token/);
+    assert.doesNotMatch(m, /原因不明/);
+}));
+
 test('listener down', async () => {
     __setSdkForTesting(null);
     await stopStandaloneListener();

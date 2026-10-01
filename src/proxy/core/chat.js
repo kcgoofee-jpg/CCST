@@ -390,6 +390,13 @@ async function* runQuery({ sdk, prompt, options, stream, guardTier, requestedMod
                 // with the useful text in the content blocks, not in the enum —
                 // extract both so the retry ladder can classify them.
                 if (message.error) {
+                    if (isOutputLimitText(message.message?.content)) {
+                        // Reply hit max_tokens: the CLI reports it as an error,
+                        // but the text so far already streamed — end it like
+                        // the real API does (finish_reason "length").
+                        yield { kind: 'done', usage: null, stopReason: 'max_tokens' };
+                        return;
+                    }
                     const blocks = message.message?.content ?? [];
                     const text = blocks
                         .filter((b) => b.type === 'text' && b.text)
@@ -421,6 +428,10 @@ async function* runQuery({ sdk, prompt, options, stream, guardTier, requestedMod
                     return;
                 }
                 const detail = (message.errors ?? []).join('; ');
+                if (OUTPUT_LIMIT_RE.test(`${detail} ${message.result ?? ''}`)) {
+                    yield { kind: 'done', usage: message.usage ?? null, stopReason: 'max_tokens' };
+                    return;
+                }
                 const err = new Error(`Claude (Subscription) request failed (${message.subtype})${detail ? ' — ' + detail : ''}`);
                 err.sdkErrorText = `${message.subtype} ${detail}`;
                 throw err;
@@ -434,6 +445,13 @@ async function* runQuery({ sdk, prompt, options, stream, guardTier, requestedMod
     } finally {
         if (idleTimer) clearTimeout(idleTimer);
     }
+}
+
+// The CLI raises this as an error when a reply (thinking included) runs past max_tokens.
+const OUTPUT_LIMIT_RE = /exceeded the \d+ output token maximum/i;
+function isOutputLimitText(content) {
+    const text = Array.isArray(content) ? content.map((b) => b?.text ?? '').join(' ') : String(content ?? '');
+    return OUTPUT_LIMIT_RE.test(text);
 }
 
 // Upstream failures the client can act on get their own status code (a
@@ -764,6 +782,12 @@ async function completeChat(req, res, body, settings, conn) {
                         }
                         collectedText += tail;
                     }
+                }
+                if (finishReason === 'length' && !collectedText) {
+                    // Thinking used the whole budget (or nothing came out): no text to keep.
+                    const err = new Error(`回复超过了『最大回复长度』${settings.maxTokens ? `（${settings.maxTokens} token）` : ''}被截断，没有产出可用的文字（思考也计入长度）。到酒馆『AI 回复配置』把最大回复长度调大。`);
+                    err.sdkErrorText = err.message;
+                    throw err;
                 }
                 break; // success
             } catch (err) {

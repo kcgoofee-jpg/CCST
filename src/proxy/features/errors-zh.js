@@ -8,6 +8,12 @@
 
 const RULES = [
     {
+        code: 'output_limit',
+        test: /最大回复长度|output token maximum/i,
+        message: '回复超过了『最大回复长度』被截断，没有可保留的文字',
+        hint: '到酒馆『AI 回复配置』把最大回复长度调大（思考也计入长度），再重新生成。',
+    },
+    {
         code: 'not_logged_in',
         test: /not logged in|please run \/login|oauth token has expired|token_expired|invalid_token|authentication_failed|authentication expired/i,
         message: 'Claude 订阅没登录，或登录已过期',
