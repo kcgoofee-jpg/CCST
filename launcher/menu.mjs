@@ -23,6 +23,7 @@ import { join } from 'node:path';
 import { emitKeypressEvents } from 'node:readline';
 
 import { ACTIONS, HERE, IS_TERMUX, MAC_ONLY, OS, VERSION, ago, clock, getJson, loadConfig, macOnly, readState, restartRefusal } from './core.mjs';
+import { createRequire } from 'node:module';
 import { makeConnectCode } from '../src/panel/core/connect-code.js';
 import { PHONE_ACTIONS, latestGuard, pullJob, versionNote } from './phone.mjs';
 
@@ -178,6 +179,13 @@ export function probLetters(s) {
     return [...'abcdefghijklmnopqrstuvwxyz'].filter((l) => !(l === 'c' && phoneCode(s) && !macOnly()));
 }
 
+/** 连接码的二维码（终端字符画，每行前空两格）。 */
+export function qrLines(text) {
+    let out = '';
+    createRequire(import.meta.url)('qrcode-terminal').generate(text, { small: true }, (q) => { out = q; });
+    return out.split('\n').filter(Boolean).map((l) => `  ${l}`);
+}
+
 /** 复制到 macOS 剪贴板（pbcopy，内容走 stdin，不进命令行参数和日志）。 */
 export function copyToClipboard(text, run = spawnSync) {
     try { return run('pbcopy', [], { input: text }).status === 0; } catch { return false; }
@@ -192,7 +200,7 @@ function phoneText(s) {
     return { unauthorized: '手机待授权', noadb: '没找到 adb' }[s.phone] ?? '手机没连';
 }
 
-/** 首页状态：第一行能不能玩（+ 问题和修复键）；第二行酒馆在不在、地址；开着手机模式时才多手机 / TT 两行。 */
+/** 首页状态：第一行能不能玩（+ 问题和修复键）；第二行酒馆在不在、地址；开着手机模式时多连接码和二维码。 */
 export function statusLines(s, probs = problems(s)) {
     const blocked = probs.some((p) => p.block);
     const head = blocked ? c.bad('● 还不能玩') : probs.length ? c.warn('● 可以玩') : c.ok('● 可以玩');
@@ -216,14 +224,9 @@ export function statusLines(s, probs = problems(s)) {
     if (!s.phoneMode || macOnly()) return L;
     // 手机上要粘贴的连接码：开着手机模式时首页常驻（只显示在屏幕上，不写日志）
     L.push(`  手机连接码：${phoneCode(s) || c.dim('（没找到局域网地址：确认 Wi-Fi 已连接）')}`);
-    if (phoneCode(s)) L.push(`  ${c.key('c')}  复制连接码`);
-    const tt = [s.hasTT ? `Mac TT ${s.macTTRunning ? '开着' : '没开'}` : null, phoneText(s),
-        `手机模式${s.watchdog ? '' : '（守护没运行）'}`].filter(Boolean);
-    L.push(`  ${tt.join(' · ')}`);
-    const g = s.phoneTT;
-    const more = [s.lastSyncAt ? `上次同步 ${ago(s.lastSyncAt)}` : '还没同步过',
-        g?.guardVersion ? `TT 守护上次备份 ${g.guardLastBackup ? clock(g.guardLastBackup) : '—'}` : g?.root ? 'TT 守护没装' : null].filter(Boolean);
-    L.push(`  ${c.dim(more.join(' · '))}`);
+    if (!phoneCode(s)) return L;
+    L.push(`  ${c.key('c')}  复制连接码    或用手机相机扫下面的二维码，复制文字后粘贴到 CCST`);
+    L.push(...qrLines(phoneCode(s)));
     return L;
 }
 

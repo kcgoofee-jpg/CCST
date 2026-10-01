@@ -90,10 +90,8 @@ test('home: line 1 can-play, line 2 SillyTavern; phone lines only in phone mode'
     const phoneMode = statusLines({ ...st, phoneMode: true, watchdog: true, macTTRunning: true, phone: 'usb', lastSyncAt: new Date(Date.now() - 2 * 3600e3),
         phoneTT: { ttRunning: true, generating: true, root: true, guardVersion: '1.9', guardLastBackup: new Date() } });
     if (mac) {
-        assert.equal(phoneMode.length, 5);
         assert.match(phoneMode[2], /手机连接码：/);
-        assert.match(phoneMode[3], /Mac TT 开着 · 手机 TT 在线（在生成回复） · 手机模式/);
-        assert.match(phoneMode[4], /上次同步 2 小时前 · TT 守护上次备份 \d\d:\d\d/);
+        assert.ok(!phoneMode.join('\n').match(/Mac TT|上次同步|TT 守护/), 'no advanced phone status on home');
     } else {
         assert.equal(phoneMode.length, 2);
     }
@@ -159,6 +157,7 @@ test('home (phone mode on): shows 「手机连接码：<地址>#k=<密码>」 an
     assert.match(line, /手机连接码：http:\/\/192\.168\.31\.7:8901\/v1#k=Kx9mPq2$/);
     assert.ok(lines.some((l) => /\bc\b.*复制连接码/.test(l)));
     assert.equal(lines.filter((l) => l.includes('Kx9mPq2')).length, 1);
+    assert.ok(lines.some((l) => /▀|▄|█/.test(l)), 'QR code shown');
     assert.ok(renderHome(s).text.includes('手机连接码：http://192.168.31.7:8901/v1#k=Kx9mPq2'));
 });
 
