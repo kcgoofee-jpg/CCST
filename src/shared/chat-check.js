@@ -106,11 +106,23 @@ export function flashbackText(mes) {
     return out.join('\n');
 }
 
+/** The ONE cleaner behind length, paragraphs, repeat and refusal: drops extension markup that is not
+ *  prose (柏宝绘 <bbi_image> blocks, HTML cards, variable / status blocks, placeholder tags). */
+export function cleanReply(mes) {
+    return String(mes ?? '')
+        .replace(/<bbi_image>[\s\S]*?<\/bbi_image>/g, '')
+        .replace(/<htm1fenge>[\s\S]*?<\/htm1fenge>/g, '')
+        .replace(/<UpdateVariable>[\s\S]*?<\/UpdateVariable>/gi, '')
+        .replace(/<(StatusPlaceHolder\w*)\b[^>]*>[\s\S]*?<\/\1>/gi, '')
+        .replace(/<StatusPlaceHolder\w*\b[^>]*\/?>/gi, '')
+        .replace(/<\w+(?:\s[^>]*)?\/>/g, '');
+}
+
 export function bodyOf(mes) {
     // Image tags another extension writes into the reply (柏宝绘) and HTML
     // cards inside the prose are not prose: they inflated the word count
     // and showed up as hundreds of "repeated" lines.
-    mes = mes.replace(/<bbi_image>[\s\S]*?<\/bbi_image>/g, '').replace(/<htm1fenge>[\s\S]*?<\/htm1fenge>/g, '');
+    mes = cleanReply(mes);
     const m = mes.match(/<content>([\s\S]*?)<\/content>/);
     let body = m ? m[1] : mes.replace(/<(div|style|details|branches|status|meow_FM)[\s\S]*/, '');
     body = body.replace(/<!--[\s\S]*?-->/g, '');
@@ -120,6 +132,24 @@ export function bodyOf(mes) {
 /** Narration only: drop quoted dialogue. */
 export function narrationOnly(text) {
     return text.replace(/[“"「『'‘][^”"」』'’]{0,400}[”"」』'’]/g, '');
+}
+
+/** Real prose paragraphs (>= 20 chars, no list bullets) of an already cleaned body. */
+function proseParagraphs(body) {
+    const blocks = body.split(/\n[ \t]*\n/).filter((b) => b.trim());
+    return (blocks.length > 1 ? blocks : body.split(/\n+/))
+        .map((p) => p.trim())
+        .filter((p) => p.replace(/\s/g, '').length >= 20 && !/^(?:[-*•+]|\d+[.)、])\s/.test(p));
+}
+
+/** Paragraphs of `body` that also appear in `prev` (a 20-char run in common). Never more than body's paragraphs. */
+export function repeatedParagraphs(prev, body, n = 20) {
+    const flat = prev.replace(/\s+/g, '');
+    return proseParagraphs(body).filter((p) => {
+        const q = p.replace(/\s+/g, '');
+        for (let i = 0; i + n <= q.length; i++) if (flat.includes(q.slice(i, i + n))) return true;
+        return false;
+    });
 }
 
 function longRepeats(a, b, n = 14) {
@@ -157,12 +187,16 @@ function gaugeNames(mes) {
 const REFUSAL_EN = /(?:I(?:'|’)?m sorry,? (?:but )?(?:I )?(?:can(?:'|’)?t|cannot|won(?:'|’)?t|am unable|(?:'|’)m unable)|Sorry,? (?:but )?I (?:can(?:'|’)?t|cannot|won(?:'|’)?t)|I apologi[sz]e,? but I (?:can(?:'|’)?t|cannot|won(?:'|’)?t)|I (?:need|have|want|must|will have) to (?:decline|stop here|pause here|step out|refuse)|I (?:can(?:'|’)?t|cannot|won(?:'|’)?t|am not able to|am unable to|(?:'|’)m not able to|(?:'|’)m unable to|(?:'|’)m not going to|am not going to) (?:continue|write|help|assist|create|generate|produce|engage|roleplay|role-play|proceed|go on|do that|provide|take this))/i;
 const REFUSAL_ZH = /(?:(?:很抱歉|抱歉|对不起|十分抱歉|非常抱歉)[，,、]?\s*(?:但)?我(?:不能|无法|没法|不会|不可以)|我(?:必须|需要|只能|得)(?:要)?(?:拒绝|停下|停在这里|婉拒)|我(?:拒绝|不能|无法|没法|不会|不可以)(?:继续|接着|再)?(?:写|创作|续写|撰写|生成|提供|协助|参与|描写|扮演|进行)?(?:这个|这段|这场|该|本|下去的|此)?(?:故事|剧情|角色扮演|扮演|创作|写作|内容|请求|场景|情节|描写|设定|方向)|我(?:不能|无法|没法)(?:继续|再)(?:写|创作|续写|扮演|这个|这样|这类)|我(?:不能|无法)继续(?=[。.！!，,]?\s*$)|无法继续(?:这个|这段|这场|该|本|此)?(?:故事|剧情|角色扮演|扮演|创作|写作|内容|请求|场景|情节))/;
 const REFUSAL_HEAD_CHARS = 300;   // the refusal sits at the head of the reply
-const REFUSAL_MAX_BODY = 700;     // a refusal is short; a long scene that mentions one is not
+const REFUSAL_SHORT_BODY = 700;
+const REFUSAL_OFFER = /happy to help|glad to help|instead|alternative|let me know|other directions|would you like|another direction|可以帮你|愿意帮|换个方向|换一个方向|其他方向|另外的方向|你可以告诉我/i;
+const REFUSAL_MAX_BODY = 1500;    // refusal + a list of alternative suggestions; a long scene that mentions one is far longer
 
 /** One-line excerpt of the refusal, or null when the reply does not look like one. */
 export function detectRefusal(mes) {
     const body = bodyOf(String(mes ?? ''));
     if (!body || body.length > REFUSAL_MAX_BODY) return null;
+    // Past a short reply the refusal must come with its usual follow-up (an offer of alternatives), or it is just a scene that starts that way.
+    if (body.length > REFUSAL_SHORT_BODY && !REFUSAL_OFFER.test(body)) return null;
     const head = body.slice(0, REFUSAL_HEAD_CHARS);
     // Sentence starts: the very beginning, after a line break, after 。！？.!?
     const starts = [0];
@@ -284,7 +318,7 @@ export function checkReply({ mes, prevMes = null, words = null, banned = DEFAULT
     if (leak.length) add('leak', `疑似泄露隐藏设定：${leak.join('、')}`);
 
     if (prevMes) {
-        const rep = longRepeats(bodyOf(prevMes), body);
+        const rep = repeatedParagraphs(bodyOf(prevMes), body);
         if (rep.length) add('repeat', `和上一条重复 ${rep.length} 段，如「${rep[0].slice(0, 16)}」`);
         const a = statusNumbers(prevMes), b = statusNumbers(mes);
         if (a && b) {

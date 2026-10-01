@@ -46,3 +46,23 @@ export function planPresetReco(settings, rec, record, fields) {
         record: applied.length ? newRecord : null,
     };
 }
+
+/** Which model family a preset NAME was made for: 'gemini' | 'gpt' | 'deepseek' | 'claude', or null when the name does not say. */
+export function presetFamily(name) {
+    const n = String(name ?? '');
+    const hits = [];
+    if (/claude|opus|sonnet|haiku|克劳德/i.test(n)) hits.push('claude');
+    if (/gemini|\bgmn\b|谷歌|(?:^|[^\d.])\d(?:\.\d)?\s*P(?:ro)?(?![a-z])/i.test(n)) hits.push('gemini');
+    if (/gpt|chatgpt|openai|\bo[134]\b/i.test(n)) hits.push('gpt');
+    if (/deepseek|\bds\b|\bR1\b/i.test(n)) hits.push('deepseek');
+    return hits.length === 1 ? hits[0] : null;
+}
+
+export const FAMILY_NAMES = { gemini: 'Gemini', gpt: 'GPT', deepseek: 'DeepSeek' };
+
+/** Note for the connect notice when the active preset looks made for another family; '' when unsure or fine. */
+export function presetMismatchNote(name) {
+    const fam = presetFamily(name);
+    if (!fam || fam === 'claude') return '';
+    return `当前预设『${name}』看起来是给 ${FAMILY_NAMES[fam]} 用的，Claude 可能表现不好；可以在『AI 回复配置』换成给 Claude 的预设。`;
+}

@@ -51,11 +51,12 @@ export function describeCurrentConnection({ profile = '', source = '', url = '',
 }
 
 /** The notice after the profile step (plain words: where to double-check). */
-export function profileNotice({ existed, modelOk = true, name = PROFILE_NAME }) {
+export function profileNotice({ existed, modelOk = true, name = PROFILE_NAME, presetNote = '' }) {
     const verb = existed ? '已更新' : '已新建并选中';
-    return modelOk
+    const base = modelOk
         ? `${verb}连接配置『${name}』，模型 Opus 4.6。请到『API 连接』核对来源、地址和模型。`
         : `${verb}连接配置『${name}』，但模型没能自动选上。请到『API 连接』选好模型并核对来源、地址。`;
+    return presetNote ? `${base}${presetNote}` : base;
 }
 
 /**

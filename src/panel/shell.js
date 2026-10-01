@@ -111,7 +111,7 @@ async function connectProfile(settings) {
             applyConnection: async () => { applyConnection(settings); await pickModel(); },
             hasCommands: () => !!(ctx.executeSlashCommandsWithOptions && parser?.commands?.['profile-create'] && parser.commands['profile-list']),
         });
-        if (res.ok) notify('ok', '连接配置', profileNotice({ existed: res.existed, modelOk }), { ms: 12000, replace: 'connect-profile' });
+        if (res.ok) notify('ok', '连接配置', profileNotice({ existed: res.existed, modelOk, presetNote: libs.presetReco?.presetMismatchNote?.(ctx.chatCompletionSettings?.preset_settings_openai ?? '') ?? '' }), { ms: 12000, replace: 'connect-profile' });
         else if (res.reason === 'no-connection-manager') notify('warn', '已连上代理，但没保存连接配置', '酒馆的「连接管理器」扩展没开，存不了「CCST」配置。不影响聊天；模型请到「API 连接」里选。', { ms: 10000, replace: 'connect-profile' });
         else notify('warn', '已连上代理，但没保存连接配置', '酒馆没接受「CCST」配置。不影响聊天；想保留的话，到「API 连接」核对后自己存一个。', { ms: 10000, replace: 'connect-profile' });
     } catch (err) {
