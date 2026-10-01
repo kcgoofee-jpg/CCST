@@ -7,8 +7,7 @@
 // The work itself is in features/ (quiet-render, perf-diag, compact-buttons, debug-request).
 // ──────────────────────────────────────────────
 
-import { IS_TAURI, debugViewState } from '../core/capabilities.js';
-import { DEFAULT_ENDPOINT } from '../core/settings.js';
+import { IS_TAURI, isPhoneLike, debugViewState } from '../core/capabilities.js';
 import { el, segmented, toggleRow, collapsible, button } from '../core/dom.js';
 import { F } from '../core/registry.js';
 import { buildMacSection } from './mac.js';
@@ -16,18 +15,25 @@ import { restartGuide } from '../guide.js';
 import { buildCheckupSection } from './check.js';
 import { connectCodeField, stEndpointField, reconnectButton } from './settings.js';
 
+/** 「酒馆侧地址」 is for Docker on a desktop browser only: not in TauriTavern, not on a phone / touch device. */
+export function showStEndpoint(p) {
+    return !isPhoneLike(p);
+}
+
+export const USAGE_NOTES = (tauri = IS_TAURI) => [
+    tauri ? '代理要在一台电脑上一直开着（电脑上的「酒馆工具」启动，或 npm start）。TauriTavern 里装不了酒馆插件。' : '代理要一直开着（「酒馆工具」启动，或 npm start）。',
+    `第一次用：点面板顶部的「一键连接」，会自动选好 Claude 模型。`,
+    '换模型、调思考深度，都在「推理」页。',
+    `${tauri ? 'TauriTavern' : '酒馆'}自带的「推理强度」保持「自动」。`,
+    '温度、Top-P 等采样参数不能用。',
+    '带「(1M context)」的模型有 100 万上下文；用不了时会自动换成普通版。',
+    '直连 Claude（官方、OpenRouter 等）也能用：换模型、调预设、发送前检查照常；缓存、防丢回复、额度统计要走代理。',
+];
+
 function usageNotes() {
     const { root, body } = collapsible('使用说明', '代理、连接、思考深度、直连 Claude 的要点。');
     const list = el('ol', 'cm-notes');
-    for (const line of [
-        IS_TAURI ? '代理在一台电脑上单独运行，要一直开着（电脑上的「酒馆工具」启动，或 npm start）；TauriTavern 里装不了酒馆插件，也用不上一键安装。' : '代理要一直开着（「酒馆工具」启动，或 npm start）。',
-        '首次使用按面板顶部的提示「一键连接」，再在「API 连接」里选 Claude 模型。',
-        '酒馆自带的「推理强度」保持「自动」，思考深度在「推理」页设。',
-        ...(IS_TAURI ? [] : [`默认地址 ${DEFAULT_ENDPOINT} 时，其他设备打开的酒馆经酒馆服务器读额度和状态。`]),
-        '不支持温度、Top-P 等采样参数（Agent SDK 限制）。',
-        '「(1M context)」模型有 100 万上下文；不可用时自动退回普通版一小时。',
-        '直连 Claude（官方源、OpenRouter、Electron Hub、NanoGPT、AI/ML API、CometAPI、自定义地址）也能用：模型切换、按模型调整预设、发送前检查照常；缓存排布、防丢回复、额度统计要走代理。',
-    ]) list.append(el('li', null, line));
+    for (const line of USAGE_NOTES()) list.append(el('li', null, line));
     body.append(list);
     return root;
 }
@@ -43,7 +49,7 @@ export function buildOtherTab(pane, settings, save) {
     lan.body.append(
         connectCodeField(settings, save),
         el('small', 'cm-hint', '电脑上打开「酒馆工具」，开手机模式，首页会显示「手机连接码」，整行粘贴到这里（手机同步会自动填）。本机使用时留空。'),
-        stEndpointField(settings, save),
+        ...(showStEndpoint() ? [stEndpointField(settings, save)] : []),
         reconnectButton(),
     );
     pane.append(lan.root);

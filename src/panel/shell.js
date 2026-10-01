@@ -9,7 +9,7 @@ import { getSettings, saveSettingsDebounced, EFFORT_LABEL } from './core/setting
 import { connectHelp, mismatchHelp, hostKind, formPrefill, connectOutcome, CODE_PLACEHOLDER } from './core/connect-help.js';
 import { submitConnect, revealGroup } from './core/connect-form.js';
 import { openExternal, copyText } from './core/external.js';
-import { IS_TAURI, COARSE, cloudHosted, isOurEndpoint, stSideEndpoint } from './core/capabilities.js';
+import { IS_TAURI, APP_NAME, COARSE, cloudHosted, isOurEndpoint, stSideEndpoint } from './core/capabilities.js';
 import { libs } from './core/libs.js';
 import { F } from './core/registry.js';
 import { connectionInfo, shortModel } from './core/connection.js';
@@ -26,7 +26,7 @@ import { buildOtherTab } from './tabs/other.js';
 import { TABS, resolveTab } from './core/tabs.js';
 import { buildGuideCard, renderGuide } from './guide.js';
 import { glanceLinked } from './core/guide.js';
-import { PROFILE_MODEL, ensureProfile, profileNotice, describeCurrentConnection } from './core/connection-profile.js';
+import { chooseConnectModel, ensureProfile, profileNotice, connectAdvice, describeCurrentConnection } from './core/connection-profile.js';
 
 // ── One-click connect (same selector path as ST's /api-url command) ──
 
@@ -65,28 +65,30 @@ function applyConnection(settings) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // One-click connect rewrites SillyTavern's LIVE connection fields (source, URL, post-processing, and
-// on a LAN the key), picks Opus 4.6, then saves that as the connection profile 「CCST」 (created, or
+// on a LAN the key), keeps a Claude model ST already has (else Opus 4.6), then saves that as the connection profile 「CCST」 (created, or
 // updated when it exists). Other profiles are never edited, but the live connection is replaced — so
 // it always asks first unless ST already points at this proxy.
 export async function connect(settings) {
     try {
+        // Taken before anything is rewritten: a Claude model ST already has is kept.
+        const keepModel = connectionInfo().model ?? '';
         const ours = $('#chat_completion_source').val() === 'custom'
             && isOurEndpoint($('#custom_api_url_text').val(), settings);
         if (!ours) {
             const ctx = SillyTavern.getContext();
             const box = document.createElement('div');
             for (const line of [
-                '一键连接会把酒馆现在的连接改成 CCST 代理：',
+                `一键连接会把${APP_NAME}现在的连接改成 CCST 代理：`,
                 `现在：${currentConnectionText() || '（未连接）'}`,
                 `改成：自定义来源 · ${stSideEndpoint(settings)}`,
-                '同时会新建（或更新）一个叫「CCST」的连接配置并选中它，模型选 Opus 4.6；你别的连接配置不会被改，想切回在「API 连接」顶部选回来即可。继续吗？',
+                '同时会新建（或更新）一个叫「CCST」的连接配置并选中它；已选的 Claude 模型不变，没有就选 Opus 4.6。你别的连接配置不会被改，想切回在「API 连接」顶部选回来即可。继续吗？',
             ]) { const p = document.createElement('p'); p.textContent = line; box.append(p); }
             const ok = await ctx.callGenericPopup(box, ctx.POPUP_TYPE.CONFIRM);
             if (!ok) return;
         }
         applyConnection(settings);
-        notify('info', '正在保存连接配置『CCST』…', '酒馆在等模型列表，大约要十秒，请稍候。', { ms: 0, replace: 'connect-profile' });
-        await connectProfile(settings);
+        notify('info', '正在保存连接配置『CCST』…', `${APP_NAME}在等模型列表，大约要十秒，请稍候。`, { ms: 0, replace: 'connect-profile' });
+        await connectProfile(settings, keepModel);
         setTimeout(refreshAll, 800);
     } catch (err) {
         console.error('[claude-max] connect failed', err);
@@ -104,15 +106,16 @@ function presetRegexNote(ctx) {
 }
 
 /** After connecting: Opus 4.6, then the 「CCST」 profile (slash commands of ST's connection manager). */
-async function connectProfile(settings) {
+async function connectProfile(settings, keepModel = '') {
     try {
         const ctx = SillyTavern.getContext();
         const parser = ctx.SlashCommandParser;
         const run = async (cmd) => String((await ctx.executeSlashCommandsWithOptions(cmd, { handleExecutionErrors: true }))?.pipe ?? '');
         let modelOk = false;
+        const target = chooseConnectModel(keepModel, libs.sources?.canonicalModel);
         const pickModel = async () => {
             await sleep(600); // the source change reconnects asynchronously; the profile reads the settled fields
-            modelOk = F.models.setModel(PROFILE_MODEL) === true;
+            modelOk = F.models.setModel(target) === true;
             await sleep(300);
         };
         await pickModel();
@@ -121,9 +124,15 @@ async function connectProfile(settings) {
             applyConnection: async () => { applyConnection(settings); await pickModel(); },
             hasCommands: () => !!(ctx.executeSlashCommandsWithOptions && parser?.commands?.['profile-create'] && parser.commands['profile-list']),
         });
-        if (res.ok) notify('ok', '连接配置', profileNotice({ existed: res.existed, modelOk, presetNote: (libs.presetReco?.presetMismatchNote?.(ctx.chatCompletionSettings?.preset_settings_openai ?? '') ?? '') + presetRegexNote(ctx) }), { ms: 12000, replace: 'connect-profile' });
-        else if (res.reason === 'no-connection-manager') notify('warn', '已连上代理，但没保存连接配置', '酒馆的「连接管理器」扩展没开，存不了「CCST」配置。不影响聊天；模型请到「API 连接」里选。', { ms: 10000, replace: 'connect-profile' });
-        else notify('warn', '已连上代理，但没保存连接配置', '酒馆没接受「CCST」配置。不影响聊天；想保留的话，到「API 连接」核对后自己存一个。', { ms: 10000, replace: 'connect-profile' });
+        if (res.ok) {
+            notify('ok', '已连接', profileNotice({ existed: res.existed, modelOk, modelLabel: shortModel(target) }), { ms: 10000, replace: 'connect-profile' });
+            const preset = ctx.chatCompletionSettings?.preset_settings_openai ?? '';
+            for (const a of connectAdvice({ presetNote: libs.presetReco?.presetMismatchNote?.(preset) ?? '', regexNote: presetRegexNote(ctx) })) {
+                notify('warn', '提示', a.text, { ms: 12000, replace: a.key });
+            }
+        }
+        else if (res.reason === 'no-connection-manager') notify('warn', '已连上代理，但没保存连接配置', `${APP_NAME}的「连接管理器」扩展没开，存不了「CCST」配置。不影响聊天；模型请到「API 连接」里选。`, { ms: 10000, replace: 'connect-profile' });
+        else notify('warn', '已连上代理，但没保存连接配置', `${APP_NAME}没接受「CCST」配置。不影响聊天；想保留的话，到「API 连接」核对后自己存一个。`, { ms: 10000, replace: 'connect-profile' });
     } catch (err) {
         console.error('[claude-max] connection profile failed', err);
         notify('warn', '已连上代理，但没保存连接配置', `保存「CCST」配置时出错：${String(err?.message ?? err)}。不影响聊天。`, { ms: 10000, replace: 'connect-profile' });
@@ -376,8 +385,8 @@ function describeCard() {
         }
         // Proxy is fine, SillyTavern isn't on it (yet).
         const sub = direct ? '连上代理才有缓存排布、防丢回复和额度；现在酒馆直连 Claude，本地功能照常。'
-            : `${planOf(status.cred)} 订阅 · 代理 v${status.version}。点「一键连接」让酒馆改用它：会自动选 Opus 4.6，并保存成「CCST」连接配置。`;
-        return { ...base, tone: 'info', dot: mismatch ? 'warning' : 'online', key: 'connect', title: direct ? '代理在线，可以连上它' : '代理已就绪，酒馆还没接上',
+            : `${planOf(status.cred)} 订阅 · 代理 v${status.version}。点「一键连接」让${APP_NAME}改用它：会选好模型，并保存成「CCST」连接配置。`;
+        return { ...base, tone: 'info', dot: mismatch ? 'warning' : 'online', key: 'connect', title: direct ? '代理在线，可以连上它' : `代理已就绪，${APP_NAME}还没接上`,
             sub: mismatch ? `${sub}\n${mismatch}` : sub, action: { label: '一键连接', icon: 'fa-plug', primary: true, run: () => connect(getSettings()) } };
     }
     return null;

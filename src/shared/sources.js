@@ -42,6 +42,18 @@ export function isClaudeModel(id) {
 }
 
 /**
+ * Models that always think (the 「不思考」 choice does nothing on them): Fable / Mythos, Opus 4.7 and newer,
+ * Sonnet 5.5 and newer. Mirrors the proxy catalog (src/proxy/core/models.js adaptiveOnly). False for non-Claude ids.
+ */
+export function isAdaptiveOnly(id) {
+    const c = canonicalModel(id);
+    if (!c) return false;
+    return /fable|mythos/.test(c)
+        || /^claude-opus-(?:4-(?:[7-9]|\d{2,})|[5-9]|\d{2,})(?:-|$)/.test(c)
+        || /^claude-sonnet-(?:5-(?:[5-9]|\d{2,})|[6-9]|\d{2,})(?:-|$)/.test(c);
+}
+
+/**
  * The Anthropic API id behind any source's name: anthropic/claude-opus-4.6:thinking → claude-opus-4-6.
  * Drops vendor prefixes, [1m], :variants, -thinking, dates and -latest. Null when not a Claude id.
  */

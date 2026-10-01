@@ -43,10 +43,30 @@ test('no connection manager, or ST refusing, is reported instead of thrown', asy
     assert.equal(refused.reason, 'refused');
 });
 
-test('notice text', () => {
-    assert.equal(profileNotice({ existed: false }), '已新建并选中连接配置『CCST』，模型 Opus 4.6。请到『API 连接』核对来源、地址和模型。');
-    assert.match(profileNotice({ existed: true }), /^已更新连接配置『CCST』，模型 Opus 4\.6。/);
+test('notice text: one short line', () => {
+    assert.equal(profileNotice({ existed: false, modelLabel: 'Opus 4.6' }), '已连接 CCST · 模型 Opus 4.6');
+    assert.equal(profileNotice({ existed: true, modelLabel: 'Sonnet 5.5 1M' }), '已连接 CCST · 模型 Sonnet 5.5 1M');
     assert.match(profileNotice({ existed: false, modelOk: false }), /模型没能自动选上/);
+    assert.doesNotMatch(profileNotice({}), /Gemini|正则|核对/);
+});
+
+test('connect keeps a Claude model ST already has (incl. [1m]); default only for none / non-Claude', async () => {
+    const { chooseConnectModel, PROFILE_MODEL } = await import('../src/panel/core/connection-profile.js');
+    const { canonicalModel } = await import('../src/shared/sources.js');
+    assert.equal(chooseConnectModel('claude-sonnet-5-5', canonicalModel), 'claude-sonnet-5-5');
+    assert.equal(chooseConnectModel('claude-opus-4-6[1m]', canonicalModel), 'claude-opus-4-6[1m]');
+    assert.equal(chooseConnectModel('anthropic/claude-opus-4.7', canonicalModel), 'claude-opus-4-7');
+    assert.equal(chooseConnectModel('gemini-2.5-pro', canonicalModel), PROFILE_MODEL);
+    assert.equal(chooseConnectModel('', canonicalModel), PROFILE_MODEL);
+    assert.equal(chooseConnectModel(null), PROFILE_MODEL);
+    assert.equal(chooseConnectModel('claude-opus-4-5[1m]'), 'claude-opus-4-5[1m]');
+});
+
+test('advice notices are separate and only when they apply', async () => {
+    const { connectAdvice } = await import('../src/panel/core/connection-profile.js');
+    assert.deepEqual(connectAdvice({}), []);
+    assert.deepEqual(connectAdvice({ presetNote: 'A' }).map((a) => a.key), ['connect-preset']);
+    assert.equal(connectAdvice({ presetNote: 'A', regexNote: 'B' }).length, 2);
 });
 
 test('confirm popup: no profile selected ("<None>") leaves the profile part out', () => {

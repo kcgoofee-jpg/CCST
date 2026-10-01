@@ -50,13 +50,26 @@ export function describeCurrentConnection({ profile = '', source = '', url = '',
     return [hasProfile && `连接配置「${p}」`, source && `来源 ${sourceLabel(source)}`, url, model].filter(Boolean).join(' · ');
 }
 
-/** The notice after the profile step (plain words: where to double-check). */
-export function profileNotice({ existed, modelOk = true, name = PROFILE_NAME, presetNote = '' }) {
-    const verb = existed ? '已更新' : '已新建并选中';
-    const base = modelOk
-        ? `${verb}连接配置『${name}』，模型 Opus 4.6。请到『API 连接』核对来源、地址和模型。`
-        : `${verb}连接配置『${name}』，但模型没能自动选上。请到『API 连接』选好模型并核对来源、地址。`;
-    return presetNote ? `${base}${presetNote}` : base;
+/**
+ * The model the connect should end on: the Claude model ST already has (kept as it is, incl. a [1m] suffix),
+ * else the default. `canonical(id)` turns any source's spelling into claude-xxx (null when not Claude).
+ */
+export function chooseConnectModel(current, canonical = (id) => (/^claude-/i.test(String(id ?? '')) ? String(id).replace(/\[1m\]$/i, '').toLowerCase() : null)) {
+    const base = canonical(current);
+    if (!base) return PROFILE_MODEL;
+    return base + (/\[1m\]$/i.test(String(current ?? '')) ? '[1m]' : '');
+}
+
+/** The one-line toast after a successful connect. `modelLabel` is the model as the user reads it (Opus 4.6). */
+export function profileNotice({ modelOk = true, modelLabel = 'Opus 4.6', name = PROFILE_NAME, existed = false }) {
+    return modelOk
+        ? `已连接 ${name} · 模型 ${modelLabel}`
+        : `已连接 ${name}，但模型没能自动选上，请到『API 连接』选一个 Claude 模型。`;
+}
+
+/** Separate advice notices (only the ones that apply), after a successful connect. */
+export function connectAdvice({ presetNote = '', regexNote = '' } = {}) {
+    return [presetNote && { key: 'connect-preset', text: presetNote }, regexNote && { key: 'connect-regex', text: regexNote }].filter(Boolean);
 }
 
 /**

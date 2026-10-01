@@ -8,6 +8,7 @@ import { getSettings, EFFORT_LABEL, EFFORT_OPTIONS, VALID_EFFORTS } from '../cor
 import { connectionInfo, modelKey } from '../core/connection.js';
 import { el, note, segmented, group } from '../core/dom.js';
 import { F } from '../core/registry.js';
+import { libs } from '../core/libs.js';
 import { renderGlance } from '../shell.js';
 
 export function init() {
@@ -90,6 +91,17 @@ export function syncThinkingControls() {
     const s = getSettings();
     document.getElementById('claude_max_depth')?.select?.(s.thinking === 'off' ? 'off' : s.effort);
     document.getElementById('claude_max_thinking')?.select?.(s.thinking);
+    syncAlwaysThinks();
+}
+
+export const ALWAYS_THINKS = '这个模型总会思考';
+
+/** On a model that always thinks, 「不思考」 / 「关闭」 stay visible but greyed out, with the reason. */
+export function syncAlwaysThinks() {
+    const { model } = connectionInfo();
+    const reason = model && libs.sources?.isAdaptiveOnly(model) ? ALWAYS_THINKS : '';
+    document.getElementById('claude_max_depth')?.setDisabled?.('off', reason);
+    document.getElementById('claude_max_thinking')?.setDisabled?.('off', reason);
 }
 
 export function buildReasonTab(pane, settings, save) {
@@ -121,6 +133,7 @@ export function buildReasonTab(pane, settings, save) {
         },
     });
     depth.id = 'claude_max_depth';
+    queueMicrotask(syncAlwaysThinks); // the tab is not in the document yet
     think.body.append(depth, oneShotEffortRow(settings));
     const cotTip = note('warn');
     cotTip.id = 'claude_max_cot_tip';

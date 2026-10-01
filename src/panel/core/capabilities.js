@@ -48,6 +48,9 @@ export const platform = detectPlatform();
 // /api/plugins routes don't exist — talk to the standalone proxy directly.
 export const IS_TAURI = platform.tauri;
 export const COARSE = platform.coarse;
+/** What the app is called in panel text: TauriTavern there, 酒馆 elsewhere. */
+export const appName = (tauri = IS_TAURI) => (tauri ? 'TauriTavern' : '酒馆');
+export const APP_NAME = appName();
 
 /** A phone or TauriTavern: the devices that get the lighter display and phone wording. */
 export function isPhoneLike(p = platform) {
@@ -134,4 +137,14 @@ export function genLine(gen) {
     if (gen.kind === 'thinking') return `思考中 ${Math.max(0, Math.round((Date.now() - gen.startedAt) / 1000))} 秒`;
     if (gen.kind === 'writing') return `写作中 ${n(gen.chars ?? 0)} 字`;
     return ['完成', gen.chars != null ? `${n(gen.chars)} 字` : null, gen.seconds != null ? `${gen.seconds} 秒` : null, gen.cache != null ? `缓存 ${Math.round(gen.cache)}%` : null, gen.flag || null].filter(Boolean).join(' · ');
+}
+
+/**
+ * The id the 「模型」 cards need as an extra option: the current model's canonical Claude id when it is a
+ * Claude model that is not one of `picks`; '' otherwise (a leftover Gemini / GPT id never gets a card).
+ * `canonical(id)` is shared/sources.js canonicalModel (null for non-Claude).
+ */
+export function extraModelId(model, picks, canonical) {
+    const key = canonical(model);
+    return key && !picks.some((o) => o.value === key) ? key : '';
 }

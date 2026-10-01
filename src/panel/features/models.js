@@ -8,6 +8,7 @@ import { getSettings } from '../core/settings.js';
 import { proxyBase, timeoutSignal } from '../core/proxy.js';
 import { connectionInfo, shortModel, modelKey, modelBase } from '../core/connection.js';
 import { cards } from '../core/dom.js';
+import { extraModelId } from '../core/capabilities.js';
 import { notify } from '../core/notify.js';
 import { F } from '../core/registry.js';
 import { renderGlance, rebuildPanel } from '../shell.js';
@@ -91,14 +92,18 @@ export async function fillMissingClaudeModels() {
     }
 }
 
+/** The Claude model that needs its own card ('' when none: a non-Claude leftover never gets one). */
+function currentExtra(model) {
+    return extraModelId(model, MODEL_PICKS, (id) => libs.sources?.canonicalModel(id) ?? (/^claude-/i.test(String(id ?? '')) ? modelBase(id).toLowerCase() : null));
+}
+
 export function modelRow() {
     const { connected, direct, model } = connectionInfo();
     if (!connected && !direct) return null;
-    const current = modelKey(model);
+    const extra = currentExtra(model);
     const options = [...MODEL_PICKS];
-    if (current && !options.some((o) => o.value === current)) {
-        options.push({ value: current, label: shortModel(current), hint: '当前模型，在「API 连接」里选的。' });
-    }
+    if (extra) options.push({ value: extra, label: shortModel(extra), hint: '当前模型，在「API 连接」里选的。' });
+    const current = extra || (MODEL_PICKS.some((o) => o.value === modelKey(model)) ? modelKey(model) : null);
     const row = cards({
         label: '',
         options,
@@ -117,6 +122,7 @@ export function modelRow() {
         },
     });
     row.id = 'claude_max_model';
+    row.dataset.extra = extra;
     row.setAttribute('aria-label', '模型');
     return row;
 }
@@ -145,5 +151,9 @@ export function modelRowFollowsSource() {
 
 export function syncModelControl() {
     const { model } = connectionInfo();
-    document.getElementById('claude_max_model')?.select?.(modelKey(model));
+    const row = document.getElementById('claude_max_model');
+    if (!row) return;
+    // The card list was built for another model (an extra card appeared or went away): rebuild it.
+    if ((row.dataset.extra ?? '') !== currentExtra(model) && document.querySelector('.inline-drawer.claude-max')) { rebuildPanel(); return; }
+    row.select?.(modelKey(model));
 }

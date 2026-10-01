@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { checkReply, detectRefusal, repeatedParagraphs } from '../src/shared/chat-check.js';
-import { profileNotice } from '../src/panel/core/connection-profile.js';
+import { profileNotice, connectAdvice } from '../src/panel/core/connection-profile.js';
 import { presetFamily, presetMismatchNote } from '../src/shared/preset-reco.js';
 
 const REAL_REFUSAL = `I need to stop here. The previous conversation contains sexual content involving a character who is a minor, and I cannot continue writing any content in this narrative thread.
@@ -45,6 +45,7 @@ test('connect notice warns when the active preset looks made for another model f
     assert.equal(presetMismatchNote('Claude 专用'), '');
     const note = presetMismatchNote('智脑-Z(3.1P)');
     assert.match(note, /『智脑-Z\(3\.1P\)』看起来是给 Gemini 用的，Claude 可能表现不好；可以在『AI 回复配置』换成给 Claude 的预设/);
-    assert.match(profileNotice({ existed: false, presetNote: note }), /已新建并选中.*Gemini/);
+    assert.match(connectAdvice({ presetNote: note })[0].text, /Gemini/);
     assert.doesNotMatch(profileNotice({ existed: false }), /Gemini/);
+    assert.deepEqual(connectAdvice({}), []);
 });

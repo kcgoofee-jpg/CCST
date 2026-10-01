@@ -11,8 +11,10 @@ import { onSettingsReady } from './inject.js';
 import { currentCharKey } from './st.js';
 import { connectionInfo } from './connection.js';
 import { refreshStats, refreshQuota } from './live.js';
+import { makeStatsAfterReply } from './stats-after-reply.js';
+import { store } from './store.js';
 import { renderConnect, renderGlance } from '../shell.js';
-import { clearOneShotEffort } from '../tabs/reason.js';
+import { clearOneShotEffort, syncAlwaysThinks } from '../tabs/reason.js';
 import { renderCacheCard } from '../tabs/status.js';
 
 export function wireEvents({ eventSource, eventTypes }) {
@@ -22,6 +24,8 @@ export function wireEvents({ eventSource, eventTypes }) {
     }
     eventSource.on(eventTypes.CHAT_COMPLETION_SETTINGS_READY, onSettingsReady);
     // Keep stats fresh while the panel is open.
+    const refreshAfterReply = makeStatsAfterReply({ refresh: refreshStats, getStats: () => store.get().stats, canRun: () => !!document.getElementById('claude_max_stats') });
+    if (eventTypes.GENERATION_ENDED) eventSource.on(eventTypes.GENERATION_ENDED, () => refreshAfterReply());
     const refreshIfOpen = () => {
         const box = document.getElementById('claude_max_stats');
         if (box && box.offsetParent !== null) setTimeout(refreshStats, 500);
@@ -47,12 +51,13 @@ export function wireEvents({ eventSource, eventTypes }) {
     }, 200));
     // Model / API switches: keep the header summary and connect button current.
     for (const ev of [eventTypes.CHATCOMPLETION_MODEL_CHANGED, eventTypes.CHATCOMPLETION_SOURCE_CHANGED, eventTypes.MAIN_API_CHANGED, eventTypes.SETTINGS_UPDATED]) {
-        if (ev) eventSource.on(ev, () => setTimeout(() => { renderConnect(); renderGlance(); renderCacheCard(); F.models.modelRowFollowsSource(); }, 100));
+        if (ev) eventSource.on(ev, () => setTimeout(() => { renderConnect(); renderGlance(); renderCacheCard(); F.models.modelRowFollowsSource(); syncAlwaysThinks(); }, 100));
     }
     for (const ev of [eventTypes.CHATCOMPLETION_SOURCE_CHANGED, eventTypes.APP_READY]) {
         if (ev) eventSource.on(ev, () => setTimeout(() => F.models.fillMissingClaudeModels(), 300));
     }
     eventSource.on(eventTypes.MESSAGE_RECEIVED, refreshIfOpen);
+    eventSource.on(eventTypes.MESSAGE_RECEIVED, onOwnReply(() => refreshAfterReply()));
     // The quota is read after each reply (live.js keeps the 60 s gap and the backoff), not on opening.
     // Only when this chat talks to our proxy: elsewhere the subscription's 5h window says nothing.
     eventSource.on(eventTypes.MESSAGE_RECEIVED, onOwnReply(() => { if (connectionInfo().connected) setTimeout(() => refreshQuota(), 1500); }));

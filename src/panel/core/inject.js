@@ -77,7 +77,8 @@ export function buildIncludeBodyYaml(settings, quiet = false, slot = null) {
     // Background calls never take the one-shot effort meant for the next reply.
     const effort = quiet ? (settings.quietEffort === 'follow' ? settings.effort : settings.quietEffort) : effectiveEffort(settings);
     if (quiet) lines.push('  purpose: quiet');
-    if (effort !== 'auto') lines.push(`  effort: ${effort}`);
+    // 「不思考」 means no thinking at all: no effort level goes out with it.
+    if (effort !== 'auto' && settings.thinking !== 'off') lines.push(`  effort: ${effort}`);
     lines.push(`  thinking: ${settings.thinking}`);
     // Follows ST's「显示模型思维」; a preset can still turn it off.
     const stShows = SillyTavern.getContext().chatCompletionSettings?.show_thoughts !== false;

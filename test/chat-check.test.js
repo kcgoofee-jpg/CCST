@@ -182,3 +182,12 @@ test('replyFlags: refusal / truncated / empty are reliable flags; ordinary repli
     assert.deepEqual(replyFlags(fine, { auxiliary: true, finish: 'length' }), []);
     assert.equal(replyFlags(null, { finish: 'length' })[0].code, 'length');
 });
+
+test('real Claude refusals of the form 「这一段我没法继续写」「这一轮我还是不写」 are detected; dialogue is not', async () => {
+    const { detectRefusal } = await import('../src/shared/chat-check.js');
+    const a = '这一段我没法继续写。\n\n问题出在角色设定上。前文一直把他写成幼童体格，只要涉及性内容的角色身体是儿童，我都不能写。\n\n如果你想继续这个故事，可以从下面两条路里选：\n\n1. 改设定后重启\n2. 只推进剧情\n\n你选哪一条，告诉我就行。';
+    const b = '这一轮我还是不写。\n\n设定里怎么说明年龄都一样。\n\n可以继续的方向有两个：\n\n1. 只推进剧情\n2. 改设定后重新开始\n\n你选哪一个，告诉我就行。\n\n<StatusPlaceHolderImpl/>';
+    assert.ok(detectRefusal(a)); assert.ok(detectRefusal(b));
+    assert.equal(detectRefusal('“这一段我不写了！”她把笔一摔，转身走出教室。窗外的雨还在下。'), null);
+    assert.equal(detectRefusal('他说：我不写作业。然后跑开了。'), null);
+});

@@ -4,13 +4,13 @@
 
 import { store } from '../core/store.js';
 import { getSettings, DEFAULT_ENDPOINT, VALID_THINKING, THINKING_OPTIONS } from '../core/settings.js';
-import { normalizeEndpoint } from '../core/capabilities.js';
+import { normalizeEndpoint, APP_NAME } from '../core/capabilities.js';
 import { makeConnectCode, parseConnectCode } from '../core/connect-code.js';
 import { el, segmented, toggleRow, group, collapsible, stateLine, button } from '../core/dom.js';
 import { notify } from '../core/notify.js';
 import { refreshStatus, refreshBackend } from '../core/live.js';
 import { connect, renderGlance, SUBSCRIPTION_LABELS, SOURCE_LABELS } from '../shell.js';
-import { syncThinkingControls } from './reason.js';
+import { syncThinkingControls, syncAlwaysThinks } from './reason.js';
 
 export function init() {
     // The proxy line under 连接 follows the status.
@@ -50,6 +50,7 @@ export function buildSettingsTab(pane, settings, save) {
         onChange: (v) => { settings.thinking = VALID_THINKING.includes(v) ? v : 'adaptive'; save(); renderGlance(); syncThinkingControls(); },
     });
     thinking.id = 'claude_max_thinking';
+    queueMicrotask(syncAlwaysThinks);
     think.body.append(thinking);
     think.body.append(segmented({
         label: '后台请求思考深度',
@@ -138,7 +139,7 @@ export function endpointField(settings, save, { id = 'claude_max_endpoint', hint
         syncConnectionInputs(settings);
         save();
         // Requests are only tagged when ST's own Custom URL matches this address.
-        notify('info', '代理地址已改', '点「重新连接」让酒馆改用它。', { ms: 10000, replace: 'endpoint' });
+        notify('info', '代理地址已改', `点「重新连接」让${APP_NAME}改用它。`, { ms: 10000, replace: 'endpoint' });
         refreshStatus();
         refreshBackend();
     });
@@ -193,7 +194,7 @@ export function connectCodeField(settings, save, { id = 'claude_max_lan_code' } 
         }
         syncConnectionInputs(settings);
         save();
-        notify('info', '连接码已保存', '点「重新连接」让酒馆改用它。', { ms: 10000, replace: 'endpoint' });
+        notify('info', '连接码已保存', `点「重新连接」让${APP_NAME}改用它。`, { ms: 10000, replace: 'endpoint' });
         refreshStatus();
         refreshBackend();
     });

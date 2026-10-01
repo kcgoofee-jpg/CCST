@@ -842,3 +842,6 @@ body.cm-quiet #chat > .mes:not(.last_mes) * { backdrop-filter: none !important; 
 .claude-max .cm-cf-result[data-kind="denied"], .claude-max .cm-cf-result[data-kind="offline"], .claude-max .cm-cf-result[data-kind="empty"] { color: var(--cm-bad); }
 .claude-max .cm-card-fold { margin-top: 8px; }
 .claude-max .cm-card-fold .cm-fold-body { display: flex; flex-direction: column; gap: 6px; }
+
+.claude-max .cm-toggle.cm-disabled { opacity: 0.5; }
+.claude-max .cm-seg-btn:disabled { opacity: 0.45; cursor: not-allowed; }

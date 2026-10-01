@@ -16,7 +16,7 @@ export function buildCheckupSection(settings, save) {
     body.append(toggleRow({
         id: 'claudeMaxHeuristicChecks', title: '开启体检（实验）', desc: '默认关。开了才会检查字数、段落、禁词、重复、隐藏设定关键词，并可弹提示。',
         checked: !!settings.heuristicChecks,
-        onChange: (v) => { settings.heuristicChecks = v; save(); F.checkup.runCheckup(); F.audit.runCardAudit(); },
+        onChange: (v) => { settings.heuristicChecks = v; save(); syncSubToggles(); F.checkup.runCheckup(); F.audit.runCardAudit(); },
     }));
 
     const reply = el('div', 'cm-field');
@@ -45,6 +45,16 @@ export function buildCheckupSection(settings, save) {
         checked: !!settings.cardAudit,
         onChange: (on) => { settings.cardAudit = on; save(); F.audit.runCardAudit(); },
     }));
+    // The sub-switches do nothing while the master switch is off: grey them so they don't look on.
+    const syncSubToggles = () => {
+        for (const id of ['claudeMaxCheckupToast', 'claude_max_card_audit_on']) {
+            const input = body.querySelector(`#${id}`);
+            if (!input) continue;
+            input.disabled = !settings.heuristicChecks;
+            input.closest('.cm-toggle')?.classList.toggle('cm-disabled', !settings.heuristicChecks);
+        }
+    };
+    syncSubToggles();
     const leakField = el('div', 'cm-field');
     leakField.append(el('div', 'cm-field-label', '隐藏设定关键词（仅当前角色卡）'));
     const leakInput = el('input', 'text_pole');

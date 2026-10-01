@@ -59,8 +59,21 @@ export function segmented({ label, options, current, onChange, hideLabel = false
         if (fire) onChange(value);
     }
     select(current, false);
-    wrap.append(group, hint);
+    const why = el('small', 'cm-hint');
+    why.hidden = true;
+    wrap.append(group, hint, why);
     wrap.select = (value) => select(value, false);
+    // Grey an option out (it stays visible) and say why; `reason` falsy re-enables it.
+    wrap.setDisabled = (value, reason) => {
+        options.forEach((opt, i) => {
+            if (opt.value !== value) return;
+            buttons[i].disabled = !!reason;
+            buttons[i].title = reason || '';
+        });
+        const reasons = options.map((opt, i) => buttons[i].disabled && buttons[i].title).filter(Boolean);
+        why.textContent = reasons.join(' ');
+        why.hidden = !reasons.length;
+    };
     return wrap;
 }
 
