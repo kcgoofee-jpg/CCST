@@ -1,5 +1,5 @@
 #!/bin/zsh
-# 首次安装（macOS）：下载或 git clone 本仓库后，双击这个文件，按提示一步步来。
+# 首次安装（macOS）：一般由 install-mac.sh（终端一行安装）调用；git clone 的也可以直接运行，按提示一步步来。
 #   ① Node.js  ② 程序依赖  ③ 登录 Claude  ④ 桌面放「酒馆工具」快捷方式  ⑤ 启动代理，打开 TauriTavern / 酒馆
 # 可以重复运行：已经做好的步骤会跳过。
 source "${0:A:h}/lib.zsh"
@@ -54,7 +54,7 @@ make_shortcut() {
     print -r -- "#!/bin/zsh
 $MARK，仓库更新后自动跟着更新）
 t=${(q)t}
-[[ -f \"\$t\" ]] || { print \"找不到酒馆工具：\$t\"; print \"下载的文件夹被移动或删掉了。到新位置双击 launcher/mac/首次安装.command，会重新放一个快捷方式。\"; read -k 1 -s 2>/dev/null; exit 1; }
+[[ -f \"\$t\" ]] || { print \"找不到酒馆工具：\$t\"; print \"CCST 文件夹被移动或删掉了。在「终端」里重新运行一次安装那一行，会重新放一个快捷方式。\"; read -k 1 -s 2>/dev/null; exit 1; }
 exec /bin/zsh \"\$t\"" >"$shortcut" && chmod +x "$shortcut"
 }
 if [[ -f "$shortcut" ]] && grep -qF "$LAUNCHER_DIR/酒馆工具.command" "$shortcut"; then

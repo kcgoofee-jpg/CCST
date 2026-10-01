@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { connectHelp, mismatchHelp, hostKind, formPrefill, connectOutcome, REPO_ZIP_URL } from '../src/panel/core/connect-help.js';
+import { connectHelp, mismatchHelp, hostKind, formPrefill, connectOutcome, MAC_INSTALL_CMD } from '../src/panel/core/connect-help.js';
 import { makeConnectCode, parseConnectCode } from '../src/panel/core/connect-code.js';
 import { submitConnect, revealGroup } from '../src/panel/core/connect-form.js';
 import { readFileSync } from 'node:fs';
@@ -39,8 +39,8 @@ test('TauriTavern: one sentence, one 连接码 box, one visible download line; n
     assert.equal(h.fold, undefined);
     assert.deepEqual(h.form, { value: '', placeholder: 'http://192.168.x.x:8901/v1#k=…' });
     noLoopback(h);
-    assert.deepEqual(h.downloads.map((d) => [d.key, d.label]), [['repo-zip', '电脑上还没装？下载 CCST']]);
-    assert.equal(h.downloads[0].href, REPO_ZIP_URL);
+    assert.deepEqual(h.downloads.map((d) => [d.key, d.label]), [['mac-cmd', '电脑上还没装？Mac 打开「终端」粘贴下面这行']]);
+    assert.equal(h.downloads[0].copy, MAC_INSTALL_CMD, 'a terminal line, not a zip: downloaded .command files are blocked by macOS');
     assert.equal(h.downloads[0].download, false, 'opened by the system browser, not a webview download');
     assert.ok(cardText(h).length < 80, 'short');
 });
@@ -145,14 +145,15 @@ test('shell: no jump to 设置, no 改地址 / 去填地址和密码; the 其他
 test('every link the cards offer has a URL to copy', () => {
     for (const host of ['desktop', 'tauri', 'elsewhere']) {
         const h = connectHelp({ host });
-        for (const d of h.downloads) assert.match(d.copy, /^https:\/\//, `${host}: ${d.key} has a URL to copy`);
+        for (const d of h.downloads) assert.match(d.copy, /^https:\/\/|^zsh -c "\$\(curl -fsSL https:\/\//, `${host}: ${d.key} has a URL or command to copy`);
     }
 });
 
 test('version mismatch, proxy older: TauriTavern gets the standalone steps only', () => {
     for (const runtime of [null, 'plugin', 'standalone']) {
         const h = mismatchHelp({ side: 'proxy', proxyVersion: '4.0.0', panelVersion: '4.5.1', runtime, tauri: true });
-        assert.deepEqual(h.downloads.map((d) => d.key), ['repo-zip'], `runtime ${runtime}`);
+        assert.deepEqual(h.downloads, [], `runtime ${runtime}`);
+        assert.ok(h.steps.some((st) => st.cmd === MAC_INSTALL_CMD), 'update = the same terminal line');
         const t = allText(h);
         assert.doesNotMatch(t, /CCST安装|一键安装|酒馆的黑色窗口/);
         assert.match(t, /重启代理/);

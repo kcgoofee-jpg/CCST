@@ -266,7 +266,7 @@ function downloadItem(d) {
     }
     const row = el('div', 'cm-cmd');
     const code = el('code', null, d.copy ?? d.href);
-    const copy = copyButton('复制链接', d.copy ?? d.href);
+    const copy = copyButton(d.copyLabel ?? '复制链接', d.copy ?? d.href);
     row.append(code, copy);
     box.append(a, row);
     return box;

@@ -20,6 +20,9 @@ export const INSTALLERS = [
 export const RAW_BASE = `${REPO_URL}/raw/main/installer/`;
 export const REPO_ZIP_URL = `${REPO_URL}/archive/refs/heads/main.zip`;
 export const DOCS_URL = `${REPO_URL}/blob/main/docs/%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97.md`;
+export const MAC_INSTALL_CMD = 'zsh -c "$(curl -fsSL https://raw.githubusercontent.com/kcgoofee-jpg/CCST/main/install-mac.sh)"';
+// 电脑上装代理（Mac）：不给 zip，下载的 .command 会被系统拦住；给一行终端命令，按钮打开安装说明。
+const macInstallItem = (label) => ({ key: 'mac-cmd', label, file: '', href: DOCS_URL, copy: MAC_INSTALL_CMD, copyLabel: '复制命令', download: false });
 export const SERVER_INSTALL_CMD = 'curl -fsSL https://raw.githubusercontent.com/kcgoofee-jpg/CCST/main/deploy/install.sh | sh';
 
 /**
@@ -75,7 +78,7 @@ export function connectHelp({ endpoint = DEFAULT_ENDPOINT, accessKey = '', host 
             ...base,
             sub: '把电脑上酒馆工具首页显示的「手机连接码」粘贴到这里',
             form: { value: formPrefill(endpoint, accessKey, host), placeholder: CODE_PLACEHOLDER },
-            downloads: [tt ? remoteItem('repo-zip', '电脑上还没装？下载 CCST', REPO_ZIP_URL) : remoteItem('docs', '电脑上还没装？看安装说明', DOCS_URL)],
+            downloads: [tt ? macInstallItem('电脑上还没装？Mac 打开「终端」粘贴下面这行') : remoteItem('docs', '电脑上还没装？看安装说明', DOCS_URL)],
             hint: '',
         };
     }
@@ -118,8 +121,8 @@ ${impact}
 怎么办：`;
     const standaloneSteps = [
         { text: isTT
-            ? '更新代理代码：在电脑上的 CCST 文件夹里运行下面这行。不是用命令行装的（没有这个文件夹的 .git）：点下面的按钮重新下载 CCST 的 zip，解压后覆盖原来的文件夹。'
-            : '在 CCST 文件夹里运行下面这行命令，更新代码：', cmd: 'git pull && npm install' },
+            ? '更新代理代码：Mac 打开「终端」，粘贴下面这行，回车（会保留登录和数据）。'
+            : '在 CCST 文件夹里运行下面这行命令，更新代码：', cmd: isTT ? MAC_INSTALL_CMD : 'git pull && npm install' },
         { text: '重启代理：用「酒馆工具」的，首页选「1 重启代理」；用 npm start 的，关掉那个窗口再运行 npm start。' },
     ];
     if (isTT || host === 'elsewhere') {
@@ -127,8 +130,8 @@ ${impact}
         return {
             sub,
             steps: [...(host === 'elsewhere' ? [{ text: '代理在运行酒馆的那台机器上，更新要到那台机器上做，不是在这台设备上。' }] : []), ...standaloneSteps, { text: REFRESH_STEP }],
-            downloads: isTT ? [remoteItem('repo-zip', '下载 CCST（zip）', REPO_ZIP_URL)] : [remoteItem('docs', '打开使用指南', DOCS_URL)],
-            hint: isTT ? '点按钮会用系统浏览器打开；打不开就点「复制链接」。' : '',
+            downloads: isTT ? [] : [remoteItem('docs', '打开使用指南', DOCS_URL)],
+            hint: '',
         };
     }
     const pluginSteps = [
