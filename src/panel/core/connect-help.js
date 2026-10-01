@@ -78,7 +78,7 @@ export function connectHelp({ endpoint = DEFAULT_ENDPOINT, accessKey = '', host 
             ...base,
             sub: '把电脑上酒馆工具首页显示的「手机连接码」粘贴到这里',
             form: { value: formPrefill(endpoint, accessKey, host), placeholder: CODE_PLACEHOLDER },
-            downloads: [tt ? macInstallItem('电脑上还没装？Mac 打开「终端」粘贴下面这行') : remoteItem('docs', '电脑上还没装？看安装说明', DOCS_URL)],
+            downloads: [tt ? macInstallItem('电脑上还没装？（目前只支持 Mac）打开「终端」粘贴下面这行') : remoteItem('docs', '电脑上还没装？看安装说明', DOCS_URL)],
             hint: '',
         };
     }

@@ -39,7 +39,7 @@ test('TauriTavern: one sentence, one 连接码 box, one visible download line; n
     assert.equal(h.fold, undefined);
     assert.deepEqual(h.form, { value: '', placeholder: 'http://192.168.x.x:8901/v1#k=…' });
     noLoopback(h);
-    assert.deepEqual(h.downloads.map((d) => [d.key, d.label]), [['mac-cmd', '电脑上还没装？Mac 打开「终端」粘贴下面这行']]);
+    assert.deepEqual(h.downloads.map((d) => [d.key, d.label]), [['mac-cmd', '电脑上还没装？（目前只支持 Mac）打开「终端」粘贴下面这行']]);
     assert.equal(h.downloads[0].copy, MAC_INSTALL_CMD, 'a terminal line, not a zip: downloaded .command files are blocked by macOS');
     assert.equal(h.downloads[0].download, false, 'opened by the system browser, not a webview download');
     assert.ok(cardText(h).length < 80, 'short');
