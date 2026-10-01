@@ -72,13 +72,15 @@ export function effectiveEffort(settings) {
     return store.get().nextEffort ?? settings.effort;
 }
 
-export function buildIncludeBodyYaml(settings, quiet = false, slot = null) {
+export function buildIncludeBodyYaml(settings, quiet = false, slot = null, model = '') {
     const lines = ['claude_subscription:'];
     // Background calls never take the one-shot effort meant for the next reply.
     const effort = quiet ? (settings.quietEffort === 'follow' ? settings.effort : settings.quietEffort) : effectiveEffort(settings);
     if (quiet) lines.push('  purpose: quiet');
     // 「不思考」 means no thinking at all: no effort level goes out with it.
-    if (effort !== 'auto' && settings.thinking !== 'off') lines.push(`  effort: ${effort}`);
+    // 「不思考」 drops the depth, except on a model that always thinks (the proxy ignores off there).
+    const thinksAnyway = !!(model && libs.sources?.isAdaptiveOnly?.(model));
+    if (effort !== 'auto' && (settings.thinking !== 'off' || thinksAnyway)) lines.push(`  effort: ${effort}`);
     lines.push(`  thinking: ${settings.thinking}`);
     // Follows ST's「显示模型思维」; a preset can still turn it off.
     const stShows = SillyTavern.getContext().chatCompletionSettings?.show_thoughts !== false;
@@ -118,7 +120,7 @@ export function onSettingsReady(data) {
         // The reply keeper hands out the reply's slot (null for quiet / impersonate / continue).
         const slot = F.keeper.openSlot(data) ?? null;
 
-        data.custom_include_body = (cleaned ? cleaned + '\n' : '') + buildIncludeBodyYaml(settings, data.type === 'quiet', slot);
+        data.custom_include_body = (cleaned ? cleaned + '\n' : '') + buildIncludeBodyYaml(settings, data.type === 'quiet', slot, data.model ?? '');
         preflightCheck(data);
         postProcessingCheck(data);
     } catch (err) {

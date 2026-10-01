@@ -102,6 +102,12 @@ export function syncAlwaysThinks() {
     const reason = model && libs.sources?.isAdaptiveOnly(model) ? ALWAYS_THINKS : '';
     document.getElementById('claude_max_depth')?.setDisabled?.('off', reason);
     document.getElementById('claude_max_thinking')?.setDisabled?.('off', reason);
+    // The saved 「关」 does not apply on this model: show what actually happens (the depth / 自适应).
+    const s = getSettings();
+    if (reason && s.thinking === 'off') {
+        document.getElementById('claude_max_depth')?.select?.(s.effort);
+        document.getElementById('claude_max_thinking')?.select?.('adaptive');
+    }
 }
 
 export function buildReasonTab(pane, settings, save) {
