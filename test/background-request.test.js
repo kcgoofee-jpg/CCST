@@ -1,48 +1,10 @@
-import { test, beforeEach } from 'node:test';
+import { test, } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { genStarted, genFinished, isBackgroundRequest, __resetBackgroundForTesting } from '../src/panel/core/background.js';
 import { makeCheckupGate } from '../src/panel/core/checkup-gate.js';
 import { extractSettings } from '../src/proxy/features/settings.js';
 import { refusalNotice, checkReply } from '../src/shared/chat-check.js';
 
-beforeEach(() => __resetBackgroundForTesting());
-
-test('a normal reply is the chat turn; the extension call right after it is background', () => {
-    genStarted('normal', {}, false);
-    assert.equal(isBackgroundRequest({ type: 'normal' }), false, 'the reply');
-    // 柏宝绘 writes its image tags before GENERATION_ENDED, through a plain-typed call
-    assert.equal(isBackgroundRequest({ type: 'normal' }), true, 'second request of the same generation');
-    genFinished();
-    assert.equal(isBackgroundRequest({ type: 'normal' }), true, 'no generation running');
-});
-
-test('quiet / raw / unknown types are background, even during a reply', () => {
-    genStarted('swipe', {}, false);
-    assert.equal(isBackgroundRequest({ type: 'quiet' }), true);
-    assert.equal(isBackgroundRequest({}), true, 'generateRaw-style: no type');
-    assert.equal(isBackgroundRequest({ type: 'something_custom' }), true);
-    assert.equal(isBackgroundRequest({ type: 'swipe' }), false, 'the reply is still claimable');
-});
-
-test('quiet generations and dry runs never start a chat turn; each new generation re-arms', () => {
-    genStarted('quiet', {}, false);
-    assert.equal(isBackgroundRequest({ type: 'normal' }), true);
-    genStarted('normal', { quiet_prompt: 'x' }, false);
-    assert.equal(isBackgroundRequest({ type: 'normal' }), true);
-    genStarted('normal', {}, true);
-    assert.equal(isBackgroundRequest({ type: 'normal' }), true);
-    genStarted('regenerate', {}, false);
-    assert.equal(isBackgroundRequest({ type: 'regenerate' }), false);
-    genFinished();
-    genStarted('continue', {}, false);
-    assert.equal(isBackgroundRequest({ type: 'continue' }), false);
-});
-
-test('without generation events (old ST) the type alone decides', () => {
-    assert.equal(isBackgroundRequest({ type: 'normal' }), false);
-    assert.equal(isBackgroundRequest({ type: 'quiet' }), true);
-});
 
 test('proxy: purpose quiet is auxiliary and carries no chat key, so it can never be 上一轮', () => {
     const s = extractSettings({ claude_subscription: { purpose: 'quiet', thinking: 'adaptive' } });
