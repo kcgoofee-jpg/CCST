@@ -22,7 +22,7 @@ export async function runCardAudit({ toast = false, force = false } = {}) {
         box?.replaceChildren(stateLine('error', '没加载（扩展文件不完整），重装扩展即可。'));
         return;
     }
-    if (!force && !getSettings().cardAudit) {
+    if (!force && !(getSettings().heuristicChecks && getSettings().cardAudit)) {
         box?.replaceChildren(stateLine('empty', '没开自动检查。点右上角按钮查一次，或在下面打开开关。'));
         return;
     }
@@ -64,6 +64,6 @@ export async function runCardAudit({ toast = false, force = false } = {}) {
     const key = ch.avatar ?? ch.name;
     if (toast && high.length && !auditedCards.has(key)) {
         auditedCards.add(key);
-        notify('bad', `角色卡检查 ·「${ch.name}」`, `有 ${high.length} 处未成年人物相关内容（${[...new Set(high.map((f) => f.where))].slice(0, 3).join('、')}）。详见 CCST 面板「体检」。`, { ms: 20000 });
+        notify('bad', `角色卡检查 ·「${ch.name}」`, `有 ${high.length} 处未成年人物相关内容（${[...new Set(high.map((f) => f.where))].slice(0, 3).join('、')}）。详见 CCST 面板「其他 → 体检（实验）」。`, { ms: 20000 });
     }
 }

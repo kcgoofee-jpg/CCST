@@ -60,6 +60,17 @@ export function presetFamily(name) {
 
 export const FAMILY_NAMES = { gemini: 'Gemini', gpt: 'GPT', deepseek: 'DeepSeek' };
 
+/** Count of enabled regex scripts a preset carries (preset.extensions.regex_scripts, entries not `disabled`). */
+export function presetRegexCount(preset) {
+    const list = preset?.extensions?.regex_scripts;
+    return Array.isArray(list) ? list.filter((r) => r && !r.disabled).length : 0;
+}
+
+/** Appended to the connect notice when the preset carries enabled regex scripts; '' otherwise. */
+export function presetRegexNote(preset) {
+    return presetRegexCount(preset) ? '预设带正则脚本：先点酒馆提示里的『点击此处立即刷新』，正则才生效。' : '';
+}
+
 /** Note for the connect notice when the active preset looks made for another family; '' when unsure or fine. */
 export function presetMismatchNote(name) {
     const fam = presetFamily(name);

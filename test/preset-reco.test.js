@@ -30,3 +30,14 @@ test('switching between two recommending presets restores then applies', () => {
     assert.deepEqual([b.next.inlineSystem, b.next.effort], [true, 'high']);
     assert.deepEqual(b.record, { before: { effort: 'auto' }, applied: { effort: 'high' } });
 });
+
+import { presetRegexCount, presetRegexNote } from '../src/shared/preset-reco.js';
+
+test('preset regex note: only for enabled regex scripts in the preset data', () => {
+    const on = { extensions: { regex_scripts: [{ scriptName: 'a' }, { scriptName: 'b', disabled: true }] } };
+    assert.equal(presetRegexCount(on), 1);
+    assert.equal(presetRegexNote(on), '预设带正则脚本：先点酒馆提示里的『点击此处立即刷新』，正则才生效。');
+    for (const none of [null, undefined, {}, { extensions: {} }, { extensions: { regex_scripts: [] } }, { extensions: { regex_scripts: [{ disabled: true }] } }]) {
+        assert.equal(presetRegexNote(none), '');
+    }
+});

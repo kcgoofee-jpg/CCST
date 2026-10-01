@@ -18,7 +18,7 @@ import { renderGlance, rebuildPanel } from '../shell.js';
 export const MODEL_PICKS = [
     { value: 'claude-opus-5-5', label: 'Opus 5.5', hint: '最细腻，长篇最稳；总会思考，偏慢。' },
     { value: 'claude-opus-4-6', label: 'Opus 4.6', hint: '思考可关，过程完整可见；老牌稳定。' },
-    { value: 'claude-sonnet-5-5', label: 'Sonnet 5.5', hint: '更快更省，原生 1M 上下文；总会思考。' },
+    { value: 'claude-sonnet-5-5', label: 'Sonnet 5.5', hint: '通常更快更省，原生 1M 上下文；总会思考。' },
 ];
 
 /** Add an option the dropdown lacks (ST's static Claude list lags new models). */

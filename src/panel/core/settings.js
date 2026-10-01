@@ -26,6 +26,7 @@ export const defaultSettings = {
     useResume: true,
     inlineSystem: true,
     debugDump: false,
+    heuristicChecks: false,  // 4.6：体检（实验）总开关（字数/段落/禁词/重复/隐藏设定/角色卡自动检查）；新老用户都默认关
     checkupToast: true,      // 本轮体检发现问题时弹提示
     leakWords: {},           // 角色卡 → 隐藏设定关键词（逗号分隔）
     presetRecoRecord: null,  // 上一个预设的推荐改了什么（切走时恢复）
@@ -43,7 +44,7 @@ export const defaultSettings = {
     guideSource: '',         // 引导里选的来源：'' 没开始 | 'choose' 还没选 | proxy / claude / openrouter / relay
     everConnected: false,    // 成功连接过一次就记下：之后断线只显示连接卡片，不再出现首次引导
     freshInstall: false,     // 面板第一次启动时设置还不存在（全新安装）才是 true，只有这时才自动出现引导
-    cardAudit: false,        // 切卡时检查角色卡（未成年相关内容）；默认关，体检页可开
+    cardAudit: false,        // 切卡时检查角色卡（未成年相关内容）；默认关，其他页「体检（实验）」里可开
 };
 
 export function getSettings() {

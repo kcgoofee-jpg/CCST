@@ -5,6 +5,7 @@
 import { connectionInfo } from '../core/connection.js';
 import { generating } from '../core/st.js';
 import { store } from '../core/store.js';
+import { libs } from '../core/libs.js';
 
 // Only for chat replies going to a Claude connection (not background requests or other connections).
 // thinking → writing → done (a few seconds: length, time, cache) → back to the normal bar.
@@ -54,7 +55,9 @@ export function genEnd() {
     if (!last || last.is_user || last.is_system) { idle(); return; }
     const chars = String(last.mes ?? '').replace(/<[^>]*>/g, '').replace(/\s+/g, '').length;
     const startedAt = gen().startedAt;
-    genDone({ chars, seconds: startedAt ? Math.round((Date.now() - startedAt) / 1000) : null });
+    // Reliable problems show right in the done line (refusal / empty; "cut off" arrives with the proxy's record).
+    const flag = libs.chatCheck?.replyFlags?.(last.mes ?? '', null)[0]?.short;
+    genDone({ chars, seconds: startedAt ? Math.round((Date.now() - startedAt) / 1000) : null, ...(flag ? { flag } : {}) });
 }
 export function genStopped() {
     if (!genActive) return;

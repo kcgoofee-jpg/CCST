@@ -23,7 +23,9 @@ export async function noticeLastTurn() {
         const last = data.lastRequest;
         if (!last || last.auxiliary || last.at <= lastNoticeAt || Date.now() - last.at > 5 * 60 * 1000) return;
         lastNoticeAt = last.at;
-        F.progress.genDone({ cache: data.lastCache?.hitPct ?? null, seconds: last.durationMs != null ? Math.round(last.durationMs / 1000) : null });
+        const flag = libs.chatCheck?.replyFlags?.(null, last)[0]?.short;
+        F.progress.genDone({ cache: data.lastCache?.hitPct ?? null, seconds: last.durationMs != null ? Math.round(last.durationMs / 1000) : null, ...(flag ? { flag } : {}) });
+        F.checkup.renderLatestFlags();
         const notices = last.notices ?? [];
         const fallback = notices.find((n) => n.startsWith('fallback:'))?.slice(9);
         if (fallback) {

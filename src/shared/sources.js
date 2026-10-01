@@ -131,7 +131,7 @@ export function cacheAdvice(source) {
     }
     return {
         tone: 'warn',
-        lines: [`酒馆对「${meta?.label ?? source}」没有缓存设置，缓存由来源自己决定。想省钱：换 Claude 官方源 / OpenRouter，或连本机代理。`],
+        lines: [`酒馆对「${meta?.label ?? source}」没有缓存设置，缓存由来源自己决定。想更省：换 Claude 官方源 / OpenRouter，或连本机代理。`],
         yaml: null,
     };
 }

@@ -9,7 +9,7 @@
 
 /** Who each source is for. `proxy` covers 订阅 / API 密钥 / 其他后端: the proxy's own backend form picks. */
 export const SOURCES = [
-    { id: 'proxy', label: '本机代理', who: '有 Claude 订阅（Pro / Max），或想用 API 密钥 / 其他后端，要最省缓存和防丢回复。' },
+    { id: 'proxy', label: '本机代理', who: '有 Claude 订阅（Pro / Max），或想用 API 密钥 / 其他后端，想要缓存排布（预计更省额度）和防丢回复。' },
     { id: 'claude', label: 'Claude 官方', who: '手上有 Anthropic API 密钥，不想跑代理。' },
     { id: 'openrouter', label: 'OpenRouter', who: '用 OpenRouter 的额度，一个密钥换着用各家模型。' },
     { id: 'relay', label: '其他中转', who: '用第三方中转站或聚合站（Electron Hub、NanoGPT、自定义地址……）。' },
@@ -99,19 +99,19 @@ export const KEY_STEPS = {
 /** Step 3: what CCST does for each source. */
 export const SUMMARY = {
     proxy: {
-        works: ['缓存排布（长提示词一直命中）', '防丢回复（断线后补回）', '额度和用量统计', '模型与思考深度、发送前检查、体检'],
+        works: ['缓存排布（预计长提示词更容易命中，视预设和扩展而定）', '防丢回复（断线后补回）', '额度和用量统计', '模型与思考深度、发送前检查、最新回复检查（拒绝 / 截断）'],
         gaps: ['不支持温度、Top-P 等采样参数'],
     },
     claude: {
-        works: ['模型切换、按预设调整模型', '发送前检查、体检'],
+        works: ['模型切换、按预设调整模型', '发送前检查、最新回复检查（拒绝 / 截断）'],
         gaps: ['没有防丢回复、额度和用量统计（要走代理）', '缓存靠酒馆自带设置，见下面的建议'],
     },
     openrouter: {
-        works: ['模型切换、按预设调整模型', '发送前检查、体检'],
+        works: ['模型切换、按预设调整模型', '发送前检查、最新回复检查（拒绝 / 截断）'],
         gaps: ['没有防丢回复、额度和用量统计（要走代理）', '缓存靠酒馆自带设置，见下面的建议'],
     },
     relay: {
-        works: ['发送前检查、体检'],
+        works: ['发送前检查、最新回复检查（拒绝 / 截断）'],
         gaps: ['没有防丢回复、额度和用量统计（要走代理）', '缓存由中转自己决定，酒馆多半没有设置'],
     },
 };

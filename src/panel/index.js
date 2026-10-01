@@ -14,7 +14,7 @@
 //
 //   core/       state store, settings, platform capabilities, notices, proxy access, live data, events
 //   shell.js    the drawer, header, status bar and tab bar
-//   tabs/       one module per tab (推理 / 状态 / 体检 / 设置 / 其他)
+//   tabs/       one module per tab (推理 / 状态 / 设置 / 其他)
 //   features/   optional pieces (reply keeper, check-up, card check, lore cache, backend form, …):
 //               each is loaded on its own, and one that fails to load is skipped, never fatal
 //   ../shared/  pure helpers also used by the tests, loaded by core/libs.js the same forgiving way

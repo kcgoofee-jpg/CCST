@@ -3,7 +3,7 @@
 // (phone / TauriTavern / Mac) stay working here; nothing was removed when the main line narrowed to
 // SillyTavern in 4.0.
 //   Mac 遥控 (only when the proxy runs on the Mac launcher) · 手机连接 · 省电显示 · 性能诊断 ·
-//   脚本按钮并排 · 查看发给模型的请求 / 调试选项 · 使用说明
+//   脚本按钮并排 · 查看发给模型的请求 / 调试选项 · 体检（实验） · 使用说明
 // The work itself is in features/ (quiet-render, perf-diag, compact-buttons, debug-request).
 // ──────────────────────────────────────────────
 
@@ -13,6 +13,7 @@ import { el, segmented, toggleRow, collapsible, button } from '../core/dom.js';
 import { F } from '../core/registry.js';
 import { buildMacSection } from './mac.js';
 import { restartGuide } from '../guide.js';
+import { buildCheckupSection } from './check.js';
 import { endpointField, stEndpointField, accessKeyField, reconnectButton } from './settings.js';
 
 function usageNotes() {
@@ -25,7 +26,7 @@ function usageNotes() {
         ...(IS_TAURI ? [] : [`默认地址 ${DEFAULT_ENDPOINT} 时，其他设备打开的酒馆经酒馆服务器读额度和状态。`]),
         '不支持温度、Top-P 等采样参数（Agent SDK 限制）。',
         '「(1M context)」模型有 100 万上下文；不可用时自动退回普通版一小时。',
-        '直连 Claude（官方源、OpenRouter、Electron Hub、NanoGPT、AI/ML API、CometAPI、自定义地址）也能用：模型切换、按模型调整预设、发送前检查、体检照常；缓存排布、防丢回复、额度统计要走代理。',
+        '直连 Claude（官方源、OpenRouter、Electron Hub、NanoGPT、AI/ML API、CometAPI、自定义地址）也能用：模型切换、按模型调整预设、发送前检查照常；缓存排布、防丢回复、额度统计要走代理。',
     ]) list.append(el('li', null, line));
     body.append(list);
     return root;
@@ -47,7 +48,7 @@ export function buildOtherTab(pane, settings, save) {
     );
     pane.append(lan.root);
 
-    const quiet = collapsible('省电显示', '旧楼层动画只播一遍，手机更省电不卡。', { id: 'claude_max_quiet' });
+    const quiet = collapsible('省电显示', '旧楼层动画只播一遍，手机上通常更省电、更不卡。', { id: 'claude_max_quiet' });
     quiet.body.append(segmented({
         label: '省电显示', hideLabel: true,
         options: [
@@ -94,6 +95,8 @@ export function buildOtherTab(pane, settings, save) {
     dbg.body.querySelector('#claudeMaxDebugDump')?.addEventListener('change', syncView);
     dbg.body.append(viewBtn, viewHint);
     pane.append(dbg.root);
+
+    pane.append(buildCheckupSection(settings, save));
 
     pane.append(button('重新引导（选来源 → 连接 → 完成）', () => restartGuide(), { icon: 'fa-compass', id: 'claude_max_guide_again', text: true }));
 

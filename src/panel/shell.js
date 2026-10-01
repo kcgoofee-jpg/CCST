@@ -18,7 +18,6 @@ import { notify } from './core/notify.js';
 import { refreshAll, refreshStatus, refreshStats } from './core/live.js';
 import { buildReasonTab } from './tabs/reason.js';
 import { buildStatusTab } from './tabs/status.js';
-import { buildCheckTab } from './tabs/check.js';
 import { refreshMac } from './tabs/mac.js';
 import { buildSettingsTab } from './tabs/settings.js';
 import { buildOtherTab } from './tabs/other.js';
@@ -93,6 +92,15 @@ export async function connect(settings) {
     }
 }
 
+/** 「预设带正则脚本…」 when the selected preset's data carries enabled regex scripts; '' when unknown. */
+function presetRegexNote(ctx) {
+    try {
+        const name = ctx.chatCompletionSettings?.preset_settings_openai;
+        const preset = name ? ctx.getPresetManager?.('openai')?.getCompletionPresetByName?.(name) : null;
+        return libs.presetReco?.presetRegexNote?.(preset) ?? '';
+    } catch { return ''; }
+}
+
 /** After connecting: Opus 4.6, then the 「CCST」 profile (slash commands of ST's connection manager). */
 async function connectProfile(settings) {
     try {
@@ -111,7 +119,7 @@ async function connectProfile(settings) {
             applyConnection: async () => { applyConnection(settings); await pickModel(); },
             hasCommands: () => !!(ctx.executeSlashCommandsWithOptions && parser?.commands?.['profile-create'] && parser.commands['profile-list']),
         });
-        if (res.ok) notify('ok', '连接配置', profileNotice({ existed: res.existed, modelOk, presetNote: libs.presetReco?.presetMismatchNote?.(ctx.chatCompletionSettings?.preset_settings_openai ?? '') ?? '' }), { ms: 12000, replace: 'connect-profile' });
+        if (res.ok) notify('ok', '连接配置', profileNotice({ existed: res.existed, modelOk, presetNote: (libs.presetReco?.presetMismatchNote?.(ctx.chatCompletionSettings?.preset_settings_openai ?? '') ?? '') + presetRegexNote(ctx) }), { ms: 12000, replace: 'connect-profile' });
         else if (res.reason === 'no-connection-manager') notify('warn', '已连上代理，但没保存连接配置', '酒馆的「连接管理器」扩展没开，存不了「CCST」配置。不影响聊天；模型请到「API 连接」里选。', { ms: 10000, replace: 'connect-profile' });
         else notify('warn', '已连上代理，但没保存连接配置', '酒馆没接受「CCST」配置。不影响聊天；想保留的话，到「API 连接」核对后自己存一个。', { ms: 10000, replace: 'connect-profile' });
     } catch (err) {
@@ -169,12 +177,6 @@ export function renderGlance() {
                 bar.append(quota);
             }
         }
-    }
-    // The check-up result lives on its tab: a count badge instead of another status block.
-    const badge = document.getElementById('claude_max_check_badge');
-    if (badge) {
-        badge.textContent = glance.issues ? String(glance.issues) : '';
-        badge.hidden = !glance.issues;
     }
 }
 
@@ -435,7 +437,6 @@ export function addExtensionSettings(settings) {
     const panes = Object.fromEntries(TABS.map(([k]) => [k, el('div', 'cm-pane')]));
     buildReasonTab(panes.reason, settings, save);
     buildStatusTab(panes.status);
-    buildCheckTab(panes.check, settings, save);
     buildSettingsTab(panes.settings, settings, save);
     buildOtherTab(panes.other, settings, save);
 
@@ -458,12 +459,6 @@ export function addExtensionSettings(settings) {
         b.type = 'button';
         b.dataset.tab = k;
         b.setAttribute('role', 'tab');
-        if (k === 'check') {
-            const badge = el('span', 'cm-badge');
-            badge.id = 'claude_max_check_badge';
-            badge.hidden = true;
-            b.append(badge);
-        }
         b.addEventListener('click', () => {
             showTab(k);
             // Stats go stale while the panel sits open: re-read on entering the tab

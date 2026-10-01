@@ -53,7 +53,7 @@ export function buildSettingsTab(pane, settings, save) {
     think.body.append(segmented({
         label: '后台请求思考深度',
         options: [
-            { value: 'low', label: '低', hint: '其他插件的后台请求（生图 tag、总结）用「低」，快、省额度。' },
+            { value: 'low', label: '低', hint: '其他插件的后台请求（生图 tag、总结）用「低」，通常更快、更省额度。' },
             { value: 'follow', label: '跟随', hint: '后台请求也用「推理」页的深度。' },
         ],
         current: settings.quietEffort === 'follow' ? 'follow' : 'low',
@@ -75,7 +75,7 @@ export function buildSettingsTab(pane, settings, save) {
     const adv = collapsible('高级', '缓存与上下文的开关，一般不用动。', { id: 'claude_max_advanced' });
     const add = (x) => adv.body.append(x);
     add(toggleRow({
-        id: 'claudeMaxResume', title: '会话续接', desc: '按真实多轮发送，能用缓存。',
+        id: 'claudeMaxResume', title: '会话续接', desc: '按真实多轮发送，预计能用上缓存。',
         more: '关掉会把聊天记录压成一整段，只在排查时关。',
         checked: settings.useResume, onChange: (v) => { settings.useResume = v; save(); },
     }));
@@ -86,17 +86,17 @@ export function buildSettingsTab(pane, settings, save) {
     }));
     add(toggleRow({
         id: 'claudeMaxLoreTail', title: '世界书变化部分移到末尾', desc: '每轮在变的世界书挪进本轮消息。',
-        more: '系统提示词和旧聊天记录每轮不变，能读缓存，只重写最近一轮。',
+        more: '系统提示词和旧聊天记录每轮不变，预计能读缓存，通常只重写最近一轮（取决于预设和其他扩展）。',
         checked: settings.loreTail, onChange: (v) => { settings.loreTail = v; save(); },
     }));
     add(toggleRow({
         id: 'claudeMaxFoldTail', title: '发言后的注入并进发言', desc: '放在你发言后的条目并进发言。',
-        more: 'MVU 等变量卡把状态以「深度 0」放在发言后；并进去后下一轮原样重放，缓存对得上。',
+        more: 'MVU 等变量卡把状态以「深度 0」放在发言后；并进去后下一轮原样重放，预计缓存能对上。',
         checked: settings.foldTail, onChange: (v) => { settings.foldTail = v; save(); },
     }));
     add(toggleRow({
         id: 'claudeMaxTailBlock', title: '实验：预设后置条目提前', desc: '只对 Ny、图灵这类预设有用。',
-        more: '把每轮不变的后置条目挪到对话最前，旧楼层能命中缓存；代价是规则离回复更远。',
+        more: '把每轮不变的后置条目挪到对话最前，预计旧楼层更容易命中缓存；代价是规则离回复更远。',
         checked: settings.tailBlockFront, onChange: (v) => { settings.tailBlockFront = v; save(); },
     }));
     pane.append(adv.root);

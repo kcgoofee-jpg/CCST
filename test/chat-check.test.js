@@ -157,3 +157,28 @@ test('refusal: in-character replies that mention refusing are not flagged', () =
     }
     assert.equal(detectRefusal(''), null);
 });
+
+import { replyFlags } from '../src/shared/chat-check.js';
+
+test('replyFlags: refusal / truncated / empty are reliable flags; ordinary replies and background calls give none', () => {
+    const fine = '她推开门，雨还在下。'.repeat(40);
+    assert.deepEqual(replyFlags(fine, { finish: 'stop', notices: [] }), []);
+    // proxy refusal: nearly empty → declined; with real text → cut off
+    const declined = replyFlags('', { notices: ['refusal'], finish: 'content_filter', textChars: 0 });
+    assert.equal(declined[0].code, 'refusal');
+    assert.equal(declined[0].short, '模型拒绝了这一轮');
+    assert.equal(replyFlags(fine, { notices: ['refusal'], textChars: 900 })[0].short, '被截断');
+    // text-only refusal (no proxy record)
+    const textRefusal = replyFlags("I can't continue with this story. I'm happy to help with other directions instead.", null);
+    assert.equal(textRefusal[0].code, 'refusal');
+    assert.match(textRefusal[0].text, /模型拒绝了这一轮/);
+    // length
+    const cut = replyFlags(fine, { finish: 'length' });
+    assert.deepEqual(cut.map((f) => f.code), ['length']);
+    assert.equal(cut[0].short, '被截断');
+    // empty
+    assert.deepEqual(replyFlags('  \n', null).map((f) => f.code), ['empty']);
+    // a background request never flags this reply; the reply text is not needed for proxy-only flags
+    assert.deepEqual(replyFlags(fine, { auxiliary: true, finish: 'length' }), []);
+    assert.equal(replyFlags(null, { finish: 'length' })[0].code, 'length');
+});

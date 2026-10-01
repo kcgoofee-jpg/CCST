@@ -231,7 +231,28 @@ export function refusalNotice(last) {
     return { declined: false, title: '回复被安全机制截断', text: '这条回复写到一半被安全机制拦下，结尾缺了内容（变量、状态栏可能出错）。重新生成，或改一下上一条再发。' };
 }
 
-export const REFUSAL_HINT ='多半是角色卡或世界书里的内容触发了 Anthropic 使用政策（例如未成年人相关）。可在体检里打开『切卡时自动检查角色卡』看具体是哪段。';
+export const REFUSAL_HINT ='多半是角色卡或世界书里的内容触发了 Anthropic 使用政策（例如未成年人相关）。可在「其他 → 体检（实验）」里打开『切卡时自动检查角色卡』看具体是哪段。';
+
+/**
+ * The reliable checks of the latest reply (always on, no switch): the model refused, the reply was cut
+ * off at the length limit, or it is empty. `mes` is the reply text, `last` the proxy's record of that
+ * request (stats.lastRequest; background calls are ignored). One entry per problem, in this order:
+ * { code: 'refusal' | 'length' | 'empty', text: one line for 状态, short: the words for the done line }.
+ */
+export function replyFlags(mes, last = null) {
+    const out = [];
+    const req = last && !last.auxiliary ? last : null;
+    const notice = refusalNotice(req);
+    if (notice) {
+        out.push({ code: 'refusal', text: notice.declined ? '模型拒绝了这一轮' : '回复被安全机制截断，结尾缺内容', short: notice.declined ? '模型拒绝了这一轮' : '被截断' });
+    } else if (mes != null) {
+        const excerpt = detectRefusal(mes);
+        if (excerpt) out.push({ code: 'refusal', text: `模型拒绝了这一轮：「${excerpt}」`, short: '模型拒绝了这一轮' });
+    }
+    if (req?.finish === 'length') out.push({ code: 'length', text: '写到最大长度被截断，调大酒馆的「最大回复长度」', short: '被截断' });
+    if (mes != null && String(mes).trim() === '') out.push({ code: 'empty', text: '回复是空的', short: '回复是空的' });
+    return out;
+}
 
 const OPTION_RE = /^\s*(?:[*_#>-]+\s*)?[（(【[]?([A-Ja-j])[）)】\]]?\s*[.．、,，:：\-—]\s*(.*\S)\s*$/;
 

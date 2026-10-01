@@ -1,5 +1,5 @@
 // ──────────────────────────────────────────────
-// Tab 状态: last-turn cache, quota, usage, world-info cache tool.
+// Tab 状态: last-turn cache, the latest reply's reliable checks, quota, usage, world-info cache tool.
 // Draws what core/live.js put in the store (quota, stats).
 // ──────────────────────────────────────────────
 
@@ -166,9 +166,9 @@ function backendUsageLine(backends, pricesAsOf) {
 
 /** The cache result in plain words (the proxy's headline has the numbers; this says what they mean). */
 function cacheVerdict(hitPct) {
-    if (hitPct >= 80) return { tone: 'ok', text: `缓存命中 ${hitPct}%，又快又省` };
+    if (hitPct >= 80) return { tone: 'ok', text: `缓存命中 ${hitPct}%，大部分读了缓存` };
     if (hitPct >= 50) return { tone: 'ok', text: `缓存命中 ${hitPct}%，大半读了缓存` };
-    return { tone: 'warn', text: `缓存命中 ${hitPct}%，大部分重写了，偏慢偏耗额度` };
+    return { tone: 'warn', text: `缓存命中 ${hitPct}%，大部分重写了，通常偏慢、偏耗额度` };
 }
 
 /** The last turn: cache in plain words first, then model / time / output, then why. */
@@ -180,11 +180,6 @@ function lastTurnCard(data) {
     if (last) {
         card.append(el('small', 'cm-hint',
             `${shortModel(last.model)} · 用时 ${fmtSec(last.durationMs)} · 输出 ${fmtK(last.outputTokens)} token`));
-    }
-    if (last?.finish === 'content_filter') {
-        card.append(el('small', 'cm-hint cm-warn', '被安全机制中途截断，结尾缺内容（变量、状态栏可能报错）。重新生成，或回退一楼换个说法。'));
-    } else if (last?.finish === 'length') {
-        card.append(el('small', 'cm-hint cm-warn', '写到最大长度被截断：调高酒馆的「最大回复长度」。'));
     }
     // The first reason is the conclusion; everything else is detail.
     const [first, ...rest] = c.reasons;
@@ -267,6 +262,14 @@ export function buildStatusTab(pane) {
     last.body.append(lastBox);
     pane.append(last.root);
 
+    // 最新回复: only the reliable checks (refusal / cut off / empty), one line each; hidden when none.
+    const latest = group('最新回复', '模型拒绝、被截断、空回复；没有问题时这里不显示。', { id: 'claude_max_latest_sec' });
+    latest.root.hidden = true;
+    const latestBox = el('div', 'cm-stats');
+    latestBox.id = 'claude_max_latest';
+    latest.body.append(latestBox);
+    pane.append(latest.root);
+
     const quota = group('订阅额度', '5 小时和 7 天的用量窗口，到点自动重置。每条回复写完后自动查一次。', {
         id: 'claude_max_quota_sec',
         tools: iconButton('fa-rotate', '刷新额度', () => refreshQuota({ force: true })),
@@ -286,13 +289,13 @@ export function buildStatusTab(pane) {
     usage.body.append(statsBox);
     pane.append(usage.root);
 
-    const cache = group('缓存建议', '这个连接怎么缓存最省。');
+    const cache = group('缓存建议', '这个连接的缓存可以怎么设。');
     const cacheBox = el('div', 'cm-field');
     cacheBox.id = 'claude_max_cache';
     cache.body.append(cacheBox);
     pane.append(cache.root);
 
-    const lore = group('世界书缓存', '按关键词触发的条目会让缓存每轮重写，设为常驻即可。');
+    const lore = group('世界书缓存', '按关键词触发的条目可能让缓存每轮重写，设为常驻通常能缓解。');
     const loreBox = el('div', 'cm-field');
     loreBox.id = 'claude_max_lore';
     lore.body.append(loreBox);

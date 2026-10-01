@@ -133,5 +133,5 @@ export function genLine(gen) {
     const n = (v) => Number(v).toLocaleString('en-US');
     if (gen.kind === 'thinking') return `思考中 ${Math.max(0, Math.round((Date.now() - gen.startedAt) / 1000))} 秒`;
     if (gen.kind === 'writing') return `写作中 ${n(gen.chars ?? 0)} 字`;
-    return ['完成', gen.chars != null ? `${n(gen.chars)} 字` : null, gen.seconds != null ? `${gen.seconds} 秒` : null, gen.cache != null ? `缓存 ${Math.round(gen.cache)}%` : null].filter(Boolean).join(' · ');
+    return ['完成', gen.chars != null ? `${n(gen.chars)} 字` : null, gen.seconds != null ? `${gen.seconds} 秒` : null, gen.cache != null ? `缓存 ${Math.round(gen.cache)}%` : null, gen.flag || null].filter(Boolean).join(' · ');
 }

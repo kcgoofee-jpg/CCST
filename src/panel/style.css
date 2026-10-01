@@ -631,18 +631,6 @@
     font-weight: 700;
 }
 
-.claude-max .cm-badge {
-    min-width: 1.4em;
-    padding: 0 4px;
-    border-radius: 99px;
-    background: var(--cm-warn);
-    color: #1a1a1a;
-    font-size: var(--cm-fs-caption);
-    font-weight: 700;
-    line-height: 1.4;
-    text-align: center;
-}
-
 /* ── collapsible rows: title + one-line description + chevron; hairlines instead of boxes ── */
 
 .claude-max .cm-details > summary,

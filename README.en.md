@@ -17,7 +17,6 @@
 
 <img src="docs/assets/panel-reason.png" width="200" alt="Reasoning tab">
 <img src="docs/assets/panel-status.png" width="200" alt="Status tab">
-<img src="docs/assets/panel-check.png" width="200" alt="Check-up tab">
 
 </div>
 
@@ -29,11 +28,13 @@ SillyTavern on its own only talks to pay-per-token APIs. CCST is a SillyTavern p
 
 | | |
 | --- | --- |
-| 🎟️ **Use your subscription**<br>Claude Pro / Max, no separate API credit; API keys, Bedrock, Vertex and OpenRouter work too | 💰 **Long chats cost less**<br>In long chats only the new part of each turn is processed; the rest comes from the prompt cache |
+| 🎟️ **Use your subscription**<br>Claude Pro / Max, no separate API credit; API keys, Bedrock, Vertex and OpenRouter work too | 💰 **Long chats should cost less (estimate)**<br>In long chats the prompt cache can usually save re-processing part of the history; how much depends on your preset, world info and extensions |
 | 🛟 **Replies survive disconnects**<br>Close the browser or drop the connection; the reply still finishes and is filled in later | 🔀 **Switch models in one click**<br>Opus 5.5 / Opus 4.6 / Sonnet 5.5, thinking depth on demand |
 | 🩺 **Auto reply check-up**<br>Length, banned words, repeated paragraphs, character-card issues | 📦 **Set up in 5 minutes**<br>No terminal, no file editing; double-click |
 
 The panel also shows your quota and per-turn usage.
+
+> Note: effects such as cache savings depend on your preset, world info and other extensions. They are estimates, not measured on every combination; the per-turn cache hit shown in the panel is a measured value.
 
 > [!CAUTION]
 > Using a subscription through third-party software is **not** permitted by Anthropic; your account may be limited or banned. If that's not acceptable, use an API key (see "Other setups"). Read the [risks](#risks).
@@ -103,20 +104,19 @@ The installer only does these steps; you can do them by hand:
 
 ## Using it
 
-The panel has five tabs; you mostly need the first. The first time, click **一键连接** (connect): it creates and selects a SillyTavern connection profile named "CCST" (model Opus 4.6) and asks you to check it under API Connections. Your existing profiles are not changed.
+The panel has four tabs; you mostly need the first. The first time, click **一键连接** (connect): it creates and selects a SillyTavern connection profile named "CCST" (model Opus 4.6) and asks you to check it under API Connections. Your existing profiles are not changed.
 
 | Tab | What it does |
 | --- | --- |
 | **推理** (Reasoning) | Model and thinking depth (deeper = slower, more usage) |
-| **状态** (Status) | Last turn in this chat: time and cache hit; subscription quota; 7-day usage |
-| **体检** (Check-up) | Checks the latest AI reply (length, banned words, repeated paragraphs…) and the character card |
+| **状态** (Status) | Last turn in this chat: time and cache hit; a line when the latest reply was refused, cut off or empty; subscription quota; 7-day usage |
 | **设置** (Settings) | Proxy address, backend (subscription / API key / Bedrock …), thinking options |
-| **其他** (Other) | Phone connection, Mac remote, debugging |
+| **其他** (Other) | Phone connection, Mac remote, debugging; plus an experimental, off-by-default "体检（实验）" group (length, banned words, repeats, card check; may give false alarms depending on preset and extensions) |
 
 ## Other setups
 
 - **API key / Bedrock / Vertex / OpenRouter instead of a subscription**: install as above, then switch in Settings → 代理后端 (proxy backend). Keys stay on your computer.
-- **No proxy, direct Claude API or OpenRouter**: just install the extension. Model switching and check-ups work; reply recovery and quota don't.
+- **No proxy, direct Claude API or OpenRouter**: just install the extension. Model switching and refusal / truncation notices work; reply recovery and quota don't.
 - **SillyTavern on a server / Docker**: see the [guide](docs/使用指南.md#用法三-服务器与-docker) (Chinese).
 
 **Three setups** (Chinese guide):

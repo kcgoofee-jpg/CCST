@@ -53,12 +53,12 @@ function loreRow(ctx, name, book) {
     const backup = libs.loreConst.backupName(name);
     const hasBackup = (ctx.getWorldInfoNames?.() ?? []).includes(backup);
     box.append(el('small', 'cm-hint', sum.keyword
-        ? `「${name}」有 ${sum.keyword} 条关键词条目（约 ${sum.keywordChars.toLocaleString()} 字），聊天记录每轮重写缓存。`
+        ? `「${name}」有 ${sum.keyword} 条关键词条目（约 ${sum.keywordChars.toLocaleString()} 字），聊天记录可能每轮重写缓存。`
         : `「${name}」已全部常驻，不影响缓存。`));
     if (sum.keyword) {
         const why = el('details', 'cm-mini');
         why.append(el('summary', null, '有什么影响'), el('small', 'cm-hint',
-            '常驻后每轮都发这些条目（多占上下文），但聊天记录能命中缓存；实测每轮缓存写入从约 2.8 万降到 3 千 token。'));
+            '常驻后每轮都发这些条目（多占上下文），但聊天记录预计能命中缓存（取决于预设和其他扩展；在一个实测的聊天里，每轮缓存写入从约 2.8 万降到 3 千 token，其他聊天不一定）。'));
         box.append(why);
     }
     const row = el('div', 'cm-btn-row');
