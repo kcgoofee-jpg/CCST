@@ -1046,6 +1046,34 @@ reinstall_deps() {
     fi
 }
 
+# ── 桌面快捷方式 ─────────────────────────────
+
+# 在桌面放一个「酒馆工具.command」，双击就打开菜单；它只是转到仓库里的脚本，仓库更新后自动跟着更新。
+# 已经有且指向这里：什么都不做；指向旧位置：换成现在这个文件夹；是别的同名文件：不覆盖，只说明。
+ensure_desktop_shortcut() {
+    local shortcut="$HOME/Desktop/酒馆工具.command"
+    local mark="# 酒馆工具菜单（转到仓库里的脚本"
+    local target="$LAUNCHER_DIR/酒馆工具.command"
+    make_shortcut() {
+        print -r -- "#!/bin/zsh
+$mark，仓库更新后自动跟着更新）
+t=${(qq)target}
+[[ -f \"\$t\" ]] || { print \"找不到酒馆工具：\$t\"; print \"CCST 文件夹被移动或删掉了。在「终端」里重新运行一次安装那一行，会重新放一个快捷方式。\"; read -k 1 -s 2>/dev/null; exit 1; }
+exec /bin/zsh \"\$t\"" >"$shortcut" && chmod +x "$shortcut"
+    }
+    mkdir -p "$HOME/Desktop" 2>/dev/null
+    if [[ -f "$shortcut" ]] && grep -qF "$target" "$shortcut"; then
+        ok "桌面上已经有「酒馆工具」"
+    elif [[ -f "$shortcut" ]] && grep -qF "$mark" "$shortcut"; then
+        make_shortcut && ok "桌面上的「酒馆工具」指向旧位置，已经换成现在这个文件夹"
+    elif [[ -e "$shortcut" ]]; then
+        warn "桌面上已经有一个别的「酒馆工具.command」，没有覆盖"
+        explain "  菜单本体在：$target"
+    else
+        make_shortcut && ok "已放到桌面：酒馆工具（平时双击它就行）" || warn "没能写到桌面（检查「桌面」文件夹的权限）"
+    fi
+}
+
 # ── 开机自动启动（LaunchAgent）──────────────────
 
 AUTOSTART_LABEL="com.claudemax.autostart"

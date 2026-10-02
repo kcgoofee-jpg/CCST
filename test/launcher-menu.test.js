@@ -2,7 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { width, pad, problems, renderHome, renderPhone, screens, statusLines, nextStep, phoneCode, probLetters, copyToClipboard } from '../launcher/menu.mjs';
-import { macOnly } from '../launcher/core.mjs';
+import { macOnly, newerVersion, cachedLatest, refreshLatest } from '../launcher/core.mjs';
+import { mkdtempSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const base = {
     proxy: true, proxyVersion: null, loggedIn: true, plan: 'Max', busy: 0, phoneMode: false, watchdog: false,
@@ -129,8 +132,8 @@ test('home fits an 80x24 terminal in every state (<= 22 lines)', () => {
 test('更多: login, repair, logs, autostart, stop — then TT guard, lid, and the import tools; keys are unique and skip h / q / x', () => {
     const items = screens({ ...base, hasComfy: true, canTTImport: true }).more.items.filter((i) => !i.group);
     assert.deepEqual(items.map((i) => i.sub ?? i.id), mac
-        ? ['login', 'repair', 'logs', 'autostart-toggle', 'stop', 'guard', 'lid', 'comfy', 'tt-import', 'baibai-import', 'prompt-split']
-        : ['login', 'repair', 'logs', 'autostart-toggle', 'stop', 'guard', 'lid', 'tt-import', 'baibai-import', 'prompt-split']);
+        ? ['login', 'update', 'repair', 'logs', 'shortcut', 'autostart-toggle', 'stop', 'guard', 'lid', 'comfy', 'tt-import', 'baibai-import', 'prompt-split']
+        : ['login', 'update', 'repair', 'logs', 'shortcut', 'autostart-toggle', 'stop', 'guard', 'lid', 'tt-import', 'baibai-import', 'prompt-split']);
     const keys = items.map((i) => i.key);
     assert.equal(new Set(keys).size, keys.length);
     assert.ok(!keys.some((k) => ['h', 'q', 'x', '0'].includes(k)));
@@ -192,4 +195,47 @@ test('copyToClipboard: pbcopy gets the text on stdin, never in the arguments', (
     assert.equal(copyToClipboard('secret-code', (cmd, args, opts) => { calls.push([cmd, args, opts.input]); return { status: 0 }; }), true);
     assert.deepEqual(calls, [['pbcopy', [], 'secret-code']]);
     assert.equal(copyToClipboard('x', () => { throw new Error('no pbcopy'); }), false);
+});
+
+test('newerVersion compares x.y.z only', () => {
+    assert.equal(newerVersion('5.1.0', '5.0.0'), true);
+    assert.equal(newerVersion('v5.10.0', '5.9.9'), true);
+    assert.equal(newerVersion('5.0.0', '5.0.0'), false);
+    assert.equal(newerVersion('4.9.9', '5.0.0'), false);
+    assert.equal(newerVersion(null, '5.0.0'), false);
+    assert.equal(newerVersion('5.1.0', '?'), false);
+});
+
+test('update check: cached for 12 h, a failed lookup changes nothing', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ccst-upd-'));
+    const file = join(dir, 'u.json');
+    let calls = 0;
+    const ok = async () => { calls++; return { ok: true, json: async () => ({ tag_name: 'v9.9.9' }) }; };
+    assert.equal(cachedLatest(file), null);
+    assert.equal(await refreshLatest({ file, fetchImpl: ok, now: 1000 }), '9.9.9');
+    assert.equal(cachedLatest(file), '9.9.9');
+    await refreshLatest({ file, fetchImpl: ok, now: 1000 + 60_000 });
+    assert.equal(calls, 1, 'fresh cache: no second request');
+    await refreshLatest({ file, fetchImpl: ok, now: 1000 + 13 * 3600_000 });
+    assert.equal(calls, 2, 'stale cache: asks again');
+    const bad = async () => { throw new Error('offline'); };
+    assert.equal(await refreshLatest({ file, fetchImpl: bad, now: 1000 + 30 * 3600_000 }), null);
+    assert.equal(cachedLatest(file), '9.9.9', 'offline leaves the old answer');
+    assert.equal(await refreshLatest({ file: join(dir, 'x.json'), fetchImpl: async () => ({ ok: true, json: async () => ({ tag_name: 'nightly' }) }), now: 5 }), null);
+    assert.ok(!existsSync(join(dir, 'x.json')), 'not a version: nothing cached');
+});
+
+test('home: a newer release shows as a yellow problem with the update fix (mac only); more has 检查更新 and 桌面快捷方式', () => {
+    const none = problems({ ...base, latestVersion: null });
+    assert.deepEqual(none, []);
+    const p = problems({ ...base, latestVersion: '99.0.0' });
+    if (mac) {
+        assert.equal(p.length, 1);
+        assert.equal(p[0].fix, 'update');
+        assert.match(p[0].text, /有新版本 v99\.0\.0/);
+        assert.equal(p[0].block, undefined);
+    } else assert.deepEqual(p, []);
+    const items = screens({ ...base, latestVersion: '99.0.0' }).more.items;
+    assert.match(items.find((i) => i.id === 'update').note, /有新版本 v99\.0\.0/);
+    assert.ok(items.find((i) => i.id === 'shortcut'));
 });

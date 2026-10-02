@@ -221,6 +221,44 @@ export function clock(d, now = new Date()) {
     return d.toDateString() === now.toDateString() ? hm : `${two(d.getMonth() + 1)}-${two(d.getDate())} ${hm}`;
 }
 
+// ── 有没有新版本：问 GitHub 最新的 Release，结果缓存 12 小时（菜单启动时在后台刷新，不挡画面）──
+
+const UPDATE_CACHE = join(ROOT, 'launcher', 'update-check.local.json');
+const UPDATE_TTL_MS = 12 * 60 * 60 * 1000;
+
+/** a 是否比 b 新（只比 x.y.z 三段；不是版本号就当不新）。 */
+export function newerVersion(a, b) {
+    const pa = String(a ?? '').match(/^v?(\d+)\.(\d+)\.(\d+)/);
+    const pb = String(b ?? '').match(/^v?(\d+)\.(\d+)\.(\d+)/);
+    if (!pa || !pb) return false;
+    for (let i = 1; i <= 3; i++) if (Number(pa[i]) !== Number(pb[i])) return Number(pa[i]) > Number(pb[i]);
+    return false;
+}
+
+/** 缓存里记的最新版本号（没有或读不出 = null）。 */
+export function cachedLatest(file = UPDATE_CACHE) {
+    try { return String(JSON.parse(readFileSync(file, 'utf8')).latest ?? '') || null; } catch { return null; }
+}
+
+/** 缓存过期就问一次 GitHub；失败（没网、被限流）什么都不改。返回最新版本号或 null。 */
+export async function refreshLatest({ file = UPDATE_CACHE, fetchImpl = globalThis.fetch, now = Date.now(), ttl = UPDATE_TTL_MS } = {}) {
+    try {
+        const at = JSON.parse(readFileSync(file, 'utf8')).at;
+        if (typeof at === 'number' && now - at < ttl) return cachedLatest(file);
+    } catch { /* 没有缓存：去问 */ }
+    try {
+        const res = await fetchImpl('https://api.github.com/repos/kcgoofee-jpg/CCST/releases/latest', {
+            headers: { 'User-Agent': 'ccst-launcher', Accept: 'application/vnd.github+json' },
+            signal: AbortSignal.timeout(4000),
+        });
+        if (!res.ok) return null;
+        const latest = String((await res.json())?.tag_name ?? '').replace(/^v/, '');
+        if (!/^\d+\.\d+\.\d+/.test(latest)) return null;
+        writeFileSync(file, JSON.stringify({ latest, at: now }));
+        return latest;
+    } catch { return null; }
+}
+
 /**
  * 菜单要的全部状态。deps 给测试换掉：fetch、exists、mtime、portOpen、osStatus、phoneProbe。
  * 分系统的字段在别的系统上是 null / false（菜单显示「只支持 Mac」）。
@@ -253,6 +291,7 @@ export async function readState(deps = {}) {
         proxy: !!status?.ok,
         proxyVersion: status?.version ?? null,
         repoVersion: VERSION,
+        latestVersion: deps.latest !== undefined ? deps.latest : cachedLatest(),
         loggedIn: status ? !!status.credential?.present : null,
         backend: backendInfo(backend, status),
         plan: planName(status?.credential?.subscriptionType),

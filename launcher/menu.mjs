@@ -21,9 +21,10 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { emitKeypressEvents } from 'node:readline';
 
-import { ACTIONS, HERE, IS_TERMUX, MAC_ONLY, OS, VERSION, ago, clock, getJson, loadConfig, macOnly, readState, restartRefusal } from './core.mjs';
+import { ACTIONS, HERE, IS_TERMUX, MAC_ONLY, OS, VERSION, ago, clock, getJson, loadConfig, macOnly, newerVersion, readState, refreshLatest, restartRefusal } from './core.mjs';
 import { createRequire } from 'node:module';
 import { makeConnectCode } from '../src/panel/core/connect-code.js';
 import { PHONE_ACTIONS, latestGuard, pullJob, versionNote } from './phone.mjs';
@@ -70,6 +71,10 @@ export function problems(s) {
     if (s.proxy && s.proxyVersion && s.proxyVersion !== VERSION) {
         out.push({ text: `代理还在跑 v${s.proxyVersion}（本地代码 v${VERSION}）`, fix: 'restart', fixLabel: '重启代理' });
     }
+    // 有新版本：只提醒（黄色），一键更新在 Mac 上；没问过 GitHub 或没网时没有这一条
+    if (!macOnly() && newerVersion(s.latestVersion, VERSION)) {
+        out.push({ text: `有新版本 v${s.latestVersion}（现在 v${VERSION}）`, fix: 'update', fixLabel: '更新' });
+    }
     // 手机相关的提醒只在开着手机模式时出现：不用手机的人首页不该看到这些
     if (s.phoneMode && !macOnly()) {
         if (!s.watchdog) out.push({ text: '手机模式的守护没在运行', fix: 'phone-on', fixLabel: '修复' });
@@ -108,8 +113,10 @@ export function screens(s) {
         items: [
             { group: '账号和维护' },
             { id: 'login', label: '登录 Claude', note: !sub ? `现在用 ${s.backend.label}，不用登录` : s.loggedIn ? `已登录${s.plan ? `（${s.plan}）` : ''}` : '浏览器登录订阅，一般只要一次' },
+            { id: 'update', label: '检查更新', note: newerVersion(s.latestVersion, VERSION) ? `有新版本 v${s.latestVersion}` : `现在 v${VERSION}，一键更新到最新版`, why },
             { id: 'repair', label: '修复依赖', note: '报「缺少依赖 / Cannot find module」时' },
             { id: 'logs', label: '打开日志', note: '出错时附上最后几十行求助' },
+            { id: 'shortcut', label: '桌面快捷方式', note: '在桌面放一个双击就能打开酒馆工具的图标', why },
             { id: 'autostart-toggle', label: '开机自动启动', note: s.autostart ? '已开 · 开 / 关' : '没开 · 开 / 关' },
             { id: 'stop', label: `关闭代理${withSt}`, note: '聊天记录都已保存' },
             { group: '手机上的 TauriTavern' },
@@ -315,6 +322,11 @@ async function run(id, io) {
         const f = join(HERE, 'mac', 'actions', `${id === 'phone-on' || id === 'phone-off' ? 'phone-mode' : id}.zsh`);
         if (!existsSync(f)) return `找不到动作脚本 ${id}`;
         r = spawnSync('/bin/zsh', [f], { stdio: 'inherit', env });
+        // 更新把菜单自己的代码也换了：磁盘上的版本变了，就用新代码重开菜单（旧的这个进程还是旧代码）
+        if (id === 'update' && r.status === 0 && diskVersion() !== VERSION) {
+            const next = spawnSync(process.execPath, [fileURLToPath(import.meta.url)], { stdio: 'inherit', env: process.env });
+            process.exit(next.status ?? 0);
+        }
     } else if (OS === 'win') {
         if (!WIN_ACTIONS[id]) return `「${id}」${MAC_ONLY}`;
         r = spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(HERE, 'windows', 'claude-max.ps1'), WIN_ACTIONS[id]], { stdio: 'inherit', env });
@@ -323,6 +335,10 @@ async function run(id, io) {
         r = spawnSync('bash', [join(HERE, 'termux', 'claude-max.sh'), TERMUX_ACTIONS[id]], { stdio: 'inherit', env });
     }
     return r.status === 0 ? null : `没有成功（退出码 ${r.status ?? r.signal}）`;
+}
+
+function diskVersion() {
+    try { return JSON.parse(readFileSync(join(HERE, '..', 'package.json'), 'utf8')).version; } catch { return VERSION; }
 }
 
 function openHelp() {
@@ -436,6 +452,8 @@ async function main() {
     let s = null;
     let sAt = 0;
     let dirty = true;
+    // 后台问一次 GitHub 有没有新版本（缓存 12 小时）；问到了有新的，下一次刷新就会在首页提醒
+    if (OS === 'mac') void refreshLatest().then((v) => { if (newerVersion(v, VERSION)) dirty = true; });
     for (;;) {
         if (dirty || !s || Date.now() - sAt > 5000) {
             s = await readState();
