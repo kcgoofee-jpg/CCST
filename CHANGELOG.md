@@ -2,7 +2,11 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规则见 [docs/版本规范.md](docs/版本规范.md)。
 
-## 未发布
+## 5.1.0 - 2026-10-02
+
+补完 5.0 留下的几项：原版酒馆的 Mac 安装改成终端一行，Opus 4.7 / 4.8 / 5 可以关思考，预设匹配改看启用的条目，GHCR 镜像随这个版本首次发布。
+
+**已知缺口（计划 5.2）**：手机模式从关到开的完整流程、没有 Node / Homebrew 的干净机器、干净的 macOS 15 上从头走一遍原版酒馆的终端一行安装，都还没在真机上测过（[#24](https://github.com/kcgoofee-jpg/CCST/issues/24)）。镜像发布后，需要仓库主人在 GitHub Packages 里把包改成公开（[#25](https://github.com/kcgoofee-jpg/CCST/issues/25)）。
 
 ### 新增
 - **原版酒馆的 Mac 安装改成终端一行**（[#22](https://github.com/kcgoofee-jpg/CCST/issues/22)）：`install-plugin-mac.sh` 在「终端」里下载并运行 `CCST安装.command`，终端自己下载的文件不带「来自网络」标记，不会被 macOS 15 以上拦住。面板在电脑浏览器里「连不上 CCST 代理」的卡片、版本不一致的更新步骤、README 和使用指南都改成给这一行命令（带「复制命令」）；Windows 的 `.bat` 不变。`CCST-mac.zip` 只留给旧版面板的下载链接。
