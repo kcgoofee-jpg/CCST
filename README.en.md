@@ -30,7 +30,7 @@ SillyTavern on its own only talks to pay-per-token APIs. CCST is a SillyTavern p
 | --- | --- |
 | 🎟️ **Use your subscription**<br>Claude Pro / Max, no separate API credit; API keys, Bedrock, Vertex and OpenRouter work too | 💰 **Long chats should cost less (estimate)**<br>In long chats the prompt cache can usually save re-processing part of the history; how much depends on your preset, world info and extensions |
 | 🛟 **Replies survive disconnects**<br>Close the browser or drop the connection; the reply still finishes and is filled in later | 🔀 **Switch models in one click**<br>Opus 5.5 / Opus 4.6 / Sonnet 5.5, thinking depth on demand |
-| 🩺 **Auto reply check-up**<br>Length, banned words, repeated paragraphs, character-card issues | 📦 **Set up in 5 minutes**<br>No terminal, no file editing; double-click |
+| 🩺 **Refusal / truncation alerts**<br>When the model refuses or the reply is cut off or empty, the status says so; length, banned-word and similar checks are in 「其他」 (Other), experimental | 📦 **Short install**<br>SillyTavern: download the one-click installer and double-click; Mac for TauriTavern and phone: paste one line in Terminal, it ends in the menu |
 
 The panel also shows your quota and per-turn usage.
 
