@@ -8,7 +8,7 @@ If you find a security issue, use **Security → Report a vulnerability** on thi
 
 ## 报告里不要放
 
-- API 密钥、访问密码、登录令牌（`~/.claude` 下的文件）。
+- API 密钥、访问密码（手机连接码里就带着访问密码）、登录令牌（`~/.claude` 下的文件）。
 - 完整的聊天记录或角色卡。
 
 只需要说明：哪个版本、怎么复现、影响是什么。日志请先把密钥和令牌涂掉。如果你不小心贴出了密钥，请立刻去对应平台作废并重新生成。

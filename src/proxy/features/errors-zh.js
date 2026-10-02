@@ -17,7 +17,7 @@ const RULES = [
         code: 'not_logged_in',
         test: /not logged in|please run \/login|oauth token has expired|token_expired|invalid_token|authentication_failed|authentication expired/i,
         message: 'Claude 订阅没登录，或登录已过期',
-        hint: '这次没法生成。重新登录一次就好，不用重启代理：在 SillyTavern/plugins/CCST 文件夹里运行 npm run login（用一键安装包的：打开「酒馆工具」按 3）。',
+        hint: '这次没法生成。重新登录一次就好，不用重启代理：在 SillyTavern/plugins/CCST 文件夹里运行 npm run login（用一键安装包的：打开「酒馆工具」，按 4 进「更多」，选「登录 Claude」）。',
     },
     {
         code: 'reasoning_extraction',
@@ -77,7 +77,7 @@ const RULES = [
         code: 'sdk_unavailable',
         test: /failed to load @anthropic-ai\/claude-agent-sdk|没能加载 Claude SDK|native cli binary/i,
         message: 'CCST 代理缺少运行所需的组件（Claude SDK）',
-        hint: '在 SillyTavern/plugins/CCST 文件夹里运行 npm install（不要加 --omit=optional），再重启酒馆。用一键安装包的：在「酒馆工具」里选「修复依赖」，然后重启。',
+        hint: '在 SillyTavern/plugins/CCST 文件夹里运行 npm install（不要加 --omit=optional），再重启酒馆。用一键安装包的：在「酒馆工具」的「更多」里选「修复依赖」，然后重启。',
     },
     {
         code: 'refusal',

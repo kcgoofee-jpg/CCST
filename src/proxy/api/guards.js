@@ -109,7 +109,7 @@ button{width:100%;margin:16px 0;padding:18px;font-size:22px;border:0;border-radi
 </style><h1>CCST 手机连接码</h1><div id="ok" hidden>
 <textarea id="code" rows="3" readonly></textarea><button id="copy">复制连接码</button><p id="msg"></p>
 <ol><li>点上面的「复制连接码」</li><li>打开 TauriTavern → 扩展 → CCST</li><li>粘贴到输入框，点「连接」</li></ol></div>
-<p id="none" hidden>这个地址是 Claude 代理，不是网页。请用手机相机扫电脑上「酒馆工具」首页的二维码。</p>
+<p id="none" hidden>这个地址是 Claude 代理，不是网页。请用手机相机扫电脑上「酒馆工具」里「手机」页的二维码。</p>
 <script>
 var c=location.hash.indexOf('#k=')===0?location.href:'';
 if(c){document.getElementById('ok').hidden=false;var t=document.getElementById('code');t.value=c;
@@ -128,13 +128,13 @@ export function guardRemote(req, res, next) {
         res.setHeader('Vary', 'Origin');
     }
     const expected = envValue(process.env.CLAUDE_SUBSCRIPTION_LAN_KEY);
-    // 手机相机扫了酒馆工具的二维码、在浏览器里打开：给一张能看懂的页面，不给 JSON
+    // 手机相机扫了酒馆工具「手机」页的二维码、在浏览器里打开：给一张能看懂的页面，不给 JSON
     if (req.method === 'GET' && /text\/html/.test(String(req.headers.accept ?? ''))) return res.status(200).type('html').send(CONNECT_PAGE);
     if (!expected) {
-        return res.status(403).json({ error: { message: '这个代理只给它所在的电脑用，没有开放给其他设备（手机、另一台电脑）。要从手机用，先在电脑的「酒馆工具」里切到手机模式，再把首页的手机连接码粘贴到 CCST 卡片，点「连接」。' } });
+        return res.status(403).json({ error: { message: '这个代理只给它所在的电脑用，没有开放给其他设备（手机、另一台电脑）。要从手机用，先在电脑的「酒馆工具」首页按 1 进「手机」页，按 x 开启手机模式，再把那里的手机连接码粘贴到 CCST 卡片，点「连接」。' } });
     }
     if (keyMatches(presentedKey(req), expected)) return next();
-    res.status(401).json({ error: { message: '访问密码不对：代理开放给其他设备使用时需要密码。把电脑上「酒馆工具」首页的手机连接码整串粘贴到 CCST 卡片，点「连接」。' } });
+    res.status(401).json({ error: { message: '访问密码不对：代理开放给其他设备使用时需要密码。把电脑上「酒馆工具」「手机」页的手机连接码整串粘贴到 CCST 卡片，点「连接」。' } });
 }
 
 /** Async route handler → rejections go to the error handler (express 4 does

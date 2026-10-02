@@ -76,7 +76,7 @@ export function connectHelp({ endpoint = DEFAULT_ENDPOINT, accessKey = '', host 
         const tt = host === 'tauri';
         return {
             ...base,
-            sub: '把电脑上酒馆工具首页显示的「手机连接码」粘贴到这里',
+            sub: '把电脑上酒馆工具「手机」页显示的「手机连接码」粘贴到这里',
             form: { value: formPrefill(endpoint, accessKey, host), placeholder: CODE_PLACEHOLDER },
             downloads: [tt ? macInstallItem('电脑上还没装？（目前只支持 Mac）打开「终端」粘贴下面这行') : remoteItem('docs', '电脑上还没装？看安装说明', DOCS_URL)],
             hint: '',
@@ -123,7 +123,7 @@ ${impact}
         { text: isTT
             ? '更新代理代码：Mac 打开「终端」，粘贴下面这行，回车（会保留登录和数据）。'
             : '在 CCST 文件夹里运行下面这行命令，更新代码：', cmd: isTT ? MAC_INSTALL_CMD : 'git pull && npm install' },
-        { text: '重启代理：用「酒馆工具」的，首页选「1 重启代理」；用 npm start 的，关掉那个窗口再运行 npm start。' },
+        { text: '重启代理：用「酒馆工具」的，首页按 2「重启代理」；用 npm start 的，关掉那个窗口再运行 npm start。' },
     ];
     if (isTT || host === 'elsewhere') {
         // No plugin installer on these hosts: the proxy is the standalone one on another machine.

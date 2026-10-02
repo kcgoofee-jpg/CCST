@@ -190,7 +190,7 @@ export function connectCodeField(settings, save, { id = 'claude_max_lan_code' } 
             settings.accessKey = '';
         } else {
             const parsed = parseConnectCode(input.value);
-            if (!parsed) { notify('warn', '没认出连接码', '请把电脑上酒馆工具首页显示的「手机连接码」整行粘贴过来。', { ms: 8000, replace: 'endpoint' }); input.value = codeFor(settings); return; }
+            if (!parsed) { notify('warn', '没认出连接码', '请把电脑上酒馆工具「手机」页显示的「手机连接码」整行粘贴过来。', { ms: 8000, replace: 'endpoint' }); input.value = codeFor(settings); return; }
             settings.endpoint = parsed.endpoint;
             settings.accessKey = parsed.accessKey;
         }

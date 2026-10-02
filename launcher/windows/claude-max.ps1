@@ -74,7 +74,7 @@ function CheckLogin {
     Pop-Location
     try { $j = $json | ConvertFrom-Json } catch { $j = $null }
     if ($j -and $j.loggedIn) { Ok "Claude 订阅已登录（$($j.subscriptionType) 套餐）" }
-    elseif ($j) { Warn 'Claude 订阅还没有登录 —— 酒馆能打开，但发消息会失败'; Fix '在酒馆工具「维护」里选「登录 Claude」。' }
+    elseif ($j) { Warn 'Claude 订阅还没有登录 —— 酒馆能打开，但发消息会失败'; Fix '在酒馆工具的「更多」里选「登录 Claude」。' }
     else { Warn '无法读取 Claude 登录状态'; Explain '  可能是代理依赖不完整，先选「修复依赖」。' }
 }
 
@@ -126,7 +126,7 @@ switch ($Action) {
                 Push-Location $d; npm install --no-audit --no-fund; $code = $LASTEXITCODE; Pop-Location
                 if ($code -eq 0) { Ok '安装完成' } else { Fail '安装失败'; Fix '检查网络后再试一次。' }
             }
-            Explain '如果程序正在运行，需要运行「重启」才会生效。'
+            Explain '如果程序正在运行，需要「重启代理」才会生效。'
         }
         Summary; PauseEnd
     }

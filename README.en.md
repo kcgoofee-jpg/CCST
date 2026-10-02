@@ -41,7 +41,7 @@ The panel also shows your quota and per-turn usage.
 
 ## You need
 
-- A computer (Mac / Windows / Linux) with [SillyTavern](https://github.com/SillyTavern/SillyTavern) installed. [Node.js](https://nodejs.org) 18+ (the installer tells you if it's missing).
+- A computer (Mac / Windows / Linux) with [SillyTavern](https://github.com/SillyTavern/SillyTavern) installed. [Node.js](https://nodejs.org) 18+ (the installer tells you if it's missing). TauriTavern / phone only, no SillyTavern on the computer: see usage 2 under "Other setups" (Mac only for now).
 - A Claude Pro or Max subscription (or an API key).
 - Chrome or Edge.
 
@@ -59,7 +59,7 @@ https://github.com/kcgoofee-jpg/CCST
 
 **3. Double-click it and sign in to Claude.** On Mac you get a zip: double-click to unzip, then double-click `CCST安装`. It finds SillyTavern, installs what's needed and opens your browser once to sign in to Claude. It says 「装好了」 (done) at the end.
 
-- Mac "cannot verify the developer": **right-click the file → Open → Open**.
+- Mac "cannot verify the developer": on macOS 15 and later double-clicking is blocked outright (known issue, [#22](https://github.com/kcgoofee-jpg/CCST/issues/22); a Terminal command is planned): **System Settings → Privacy & Security → scroll down → Open Anyway**. On older macOS, right-click the file → Open → Open.
 - Windows "Windows protected your PC": **More info → Run anyway**.
 - No Node.js yet: it opens the download page; install it and double-click again.
 
@@ -104,13 +104,13 @@ The installer only does these steps; you can do them by hand:
 
 ## Using it
 
-The panel has four tabs; you mostly need the first. The first time, click **一键连接** (connect): it creates and selects a SillyTavern connection profile named "CCST" (model Opus 4.6) and asks you to check it under API Connections. Your existing profiles are not changed.
+The panel has four tabs; you mostly need the first. The first time, click **一键连接** (connect): it creates and selects a SillyTavern connection profile named "CCST" (it keeps the Claude model you already picked, else Opus 4.6) and asks you to check it under API Connections. Your existing profiles are not changed.
 
 | Tab | What it does |
 | --- | --- |
 | **推理** (Reasoning) | Model and thinking depth (deeper = slower, more usage) |
-| **状态** (Status) | Last turn in this chat: time and cache hit; a line when the latest reply was refused, cut off or empty; subscription quota; 7-day usage |
-| **设置** (Settings) | Proxy address, backend (subscription / API key / Bedrock …), thinking options |
+| **状态** (Status) | Last turn in this chat: time and cache hit (refreshed when a reply ends); a line when the latest reply was refused, cut off or empty; subscription quota; 7-day usage |
+| **设置** (Settings) | Proxy address, backend (subscription / API key / Bedrock …), thinking options, and an Advanced group (cache and context switches, thinking depth for background requests) |
 | **其他** (Other) | Phone connection, Mac remote, debugging; plus an experimental, off-by-default "体检（实验）" group (length, banned words, repeats, card check; may give false alarms depending on preset and extensions) |
 
 ## Other setups
@@ -121,18 +121,19 @@ The panel has four tabs; you mostly need the first. The first time, click **一�
 
 **Three setups** (Chinese guide):
 - Usage 1, vanilla SillyTavern on a computer: the install flow above ([details](docs/使用指南.md#用法一-原版酒馆)).
-- Usage 2, TauriTavern / phone (**Mac only for now**): a Mac runs the standalone proxy; TauriTavern installs the panel and connects to it. Open Terminal and paste one line (installs dependencies, signs in to Claude, puts a shortcut on the desktop, then drops straight into the 「酒馆工具」 menu):
+- Usage 2, TauriTavern / phone (**Mac only for now**): a Mac runs the standalone proxy; TauriTavern installs the panel and connects to it. Open Terminal and paste one line (installs to `~/CCST`; installs dependencies, signs in to Claude, puts a shortcut on the desktop, starts the proxy and opens TauriTavern without further questions, then drops straight into the 「酒馆工具」 menu; the window stays open until you press `q`):
   ```bash
   zsh -c "$(curl -fsSL https://raw.githubusercontent.com/kcgoofee-jpg/CCST/main/install-mac.sh)"
   ```
-  On the phone: press `1` (手机) on the menu home page to turn phone mode on, paste the 「手机连接码」 shown there into the panel card on the phone and tap 「连接」 (or scan the QR code and tap copy). Windows / Linux: use usage 1 or 3. ([details](docs/使用指南.md#用法二-tauritavern-与手机))
-- Usage 3, server / cloud: one command or Docker ([details](docs/使用指南.md#用法三-服务器与-docker); CI-tested on Linux).
+  On the phone: press `1` on the menu home page to open the 「手机」 (phone) page, press `x` to turn phone mode on, paste the 「手机连接码」 shown there into the panel card on the phone and tap 「连接」 (or scan the QR code and tap copy). To update: run the same line in Terminal again (it overwrites the code and keeps your login and data), then choose 「重启代理」 (restart proxy) in the menu. Windows / Linux: use usage 1 or 3. ([details](docs/使用指南.md#用法二-tauritavern-与手机))
+- Usage 3, server / cloud: one command or Docker ([details](docs/使用指南.md#用法三-服务器与-docker); CI-tested on Linux; the Docker image is not published yet, so build it yourself; the release workflow is ready and ships with 5.0).
 
 More in the [guide](docs/使用指南.md) and [roadmap](docs/路线图.md) (Chinese).
 
 ## Limits
 
 - No temperature, Top-P or Top-K.
+- Phone / TauriTavern connecting to a proxy on your computer (phone connection code, QR code, the 「酒馆工具」 menu) is Mac only for now.
 - Usage is shared with Claude.ai and subject to the 5-hour and 7-day windows.
 - First token takes a few seconds longer than a direct API call.
 

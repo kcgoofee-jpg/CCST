@@ -205,11 +205,11 @@ export function renderGlance() {
 const STEPS = {
     login: [
         { text: '在 SillyTavern/plugins/CCST 文件夹里运行下面的命令，在弹出的浏览器里登录 Claude：', cmd: 'npm run login' },
-        '用一键安装包装的：打开「酒馆工具」，按 3 登录 Claude。',
+        '用一键安装包装的：打开「酒馆工具」，按 4 进「更多」，选「登录 Claude」。',
     ],
     // TauriTavern / a phone / a remote page: the proxy is the standalone one on a computer, never in a SillyTavern plugins folder.
     loginStandalone: [
-        '在运行代理的那台电脑上，打开「酒馆工具」，首页按 3 登录 Claude（只需一次）。',
+        '在运行代理的那台电脑上，打开「酒馆工具」，按 4 进「更多」，选「登录 Claude」（只需一次）。',
         { text: '没有「酒馆工具」：在 CCST 文件夹里运行下面的命令，在弹出的浏览器里登录 Claude：', cmd: 'npm run login' },
     ],
 };

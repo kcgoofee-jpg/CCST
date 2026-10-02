@@ -34,7 +34,7 @@ const cardText = (h) => [h.title, h.sub, h.hint, ...h.downloads.map((d) => d.lab
 test('TauriTavern: one sentence, one 连接码 box, one visible download line; no 127.0.0.1, no steps, nothing collapsed', () => {
     const h = connectHelp({ host: 'tauri', endpoint: 'http://127.0.0.1:8901/v1' });
     assert.equal(h.title, '连不上 CCST 代理');
-    assert.equal(h.sub, '把电脑上酒馆工具首页显示的「手机连接码」粘贴到这里');
+    assert.equal(h.sub, '把电脑上酒馆工具「手机」页显示的「手机连接码」粘贴到这里');
     assert.deepEqual(h.steps, []);
     assert.equal(h.fold, undefined);
     assert.deepEqual(h.form, { value: '', placeholder: 'http://192.168.x.x:8901/v1#k=…' });

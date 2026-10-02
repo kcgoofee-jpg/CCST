@@ -137,7 +137,7 @@ export async function handleControlAction(req, res) {
         return res.status(409).json({ ok: false, message: `代理正在写 ${inFlight} 条回复，${action.idleNote ?? '写完再试'}` });
     }
     if (action.standaloneOnly && !standalone) {
-        return res.status(409).json({ ok: false, message: '代理现在运行在酒馆（SillyTavern）里面，从这里重启会把酒馆一起关掉。请在 Mac 上用启动器重启酒馆。' });
+        return res.status(409).json({ ok: false, message: '代理现在运行在酒馆（SillyTavern）里面，从这里重启会把酒馆一起关掉。请在 Mac 上用「酒馆工具」重启（会连酒馆一起重启）。' });
     }
     await logEvent(action.label);
     if (action.run) action.run();

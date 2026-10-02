@@ -4,7 +4,7 @@ labels: [bug]
 body:
   - type: input
     id: version
-    attributes: { label: CCST 版本, description: 面板「设置」或酒馆工具顶部能看到, placeholder: "3.1.1" }
+    attributes: { label: CCST 版本, description: 面板「设置」或酒馆工具首页顶部能看到, placeholder: "4.5.1" }
     validations: { required: true }
   - type: dropdown
     id: where

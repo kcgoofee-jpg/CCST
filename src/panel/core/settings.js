@@ -26,7 +26,7 @@ export const defaultSettings = {
     useResume: true,
     inlineSystem: true,
     debugDump: false,
-    heuristicChecks: false,  // 4.6：体检（实验）总开关（字数/段落/禁词/重复/隐藏设定/角色卡自动检查）；新老用户都默认关
+    heuristicChecks: false,  // 5.0：体检（实验）总开关（字数/段落/禁词/重复/隐藏设定/角色卡自动检查）；新老用户都默认关
     checkupToast: true,      // 本轮体检发现问题时弹提示
     leakWords: {},           // 角色卡 → 隐藏设定关键词（逗号分隔）
     presetRecoRecord: null,  // 上一个预设的推荐改了什么（切走时恢复）
@@ -72,7 +72,7 @@ export const EFFORT_OPTIONS = [
     { value: 'low', label: '低', hint: '最快最省，但长篇容易漏规则，不推荐。' },
     { value: 'medium', label: '中', hint: '速度与质量平衡。' },
     { value: 'high', label: '高', hint: '剧情更连贯、规则更完整，稍慢。长篇推荐。' },
-    { value: 'xhigh', label: '超高', hint: '更慢、更耗额度。Opus 4.6 按「高」处理。' },
+    { value: 'xhigh', label: '超高', hint: '更慢、更耗额度。Opus 4.6、Sonnet 4.6 按「高」处理；4.5 代模型不分档。' },
     { value: 'max', label: '最大', hint: '最慢、最耗额度。' },
 ];
 

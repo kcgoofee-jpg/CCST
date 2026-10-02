@@ -45,10 +45,10 @@ export function buildOtherTab(pane, settings, save) {
     // Mac 遥控: hidden by default; refreshMac() shows it when the proxy reports it runs on the Mac launcher.
     pane.append(buildMacSection());
 
-    const lan = collapsible('手机连接', '手机连电脑上的代理：粘贴电脑上的手机连接码。', { id: 'claude_max_lan' });
+    const lan = collapsible('手机连接', '手机连电脑上的代理（电脑目前只支持 Mac）：粘贴电脑上的手机连接码。', { id: 'claude_max_lan' });
     lan.body.append(
         connectCodeField(settings, save),
-        el('small', 'cm-hint', '电脑上打开「酒馆工具」，开手机模式，首页会显示「手机连接码」，整行粘贴到这里（手机同步会自动填）。本机使用时留空。'),
+        el('small', 'cm-hint', '电脑上打开「酒馆工具」，首页按 1 进「手机」页，按 x 开手机模式，那里会显示「手机连接码」，整行粘贴到这里（手机同步会自动填）。本机使用时留空。'),
         ...(showStEndpoint() ? [stEndpointField(settings, save)] : []),
         reconnectButton(),
     );
