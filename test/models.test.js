@@ -194,3 +194,21 @@ test('Sonnet 5 rejects budgets but can turn thinking off (noBudget)', () => {
     assert.equal(parseModelRequest('claude-sonnet-4-6').noBudget, false);
     assert.equal(parseModelRequest('claude-opus-5').noBudget, false);
 });
+
+test('effortForModel: nothing for the 4.5 generation, xhigh→high on 4.6, others untouched', async () => {
+    const { effortForModel, isAdaptiveOnlyModel, isNoBudgetModel } = await import('../src/proxy/core/models.js');
+    for (const id of ['claude-haiku-4-5', 'claude-opus-4-5', 'claude-sonnet-4-5', 'claude-sonnet-4-5[1m]']) {
+        assert.equal(effortForModel(id, 'high'), undefined, id);
+    }
+    assert.equal(effortForModel('claude-opus-4-6', 'xhigh'), 'high');
+    assert.equal(effortForModel('claude-sonnet-4.6', 'xhigh'), 'high');
+    assert.equal(effortForModel('claude-opus-4-6', 'max'), 'max');
+    assert.equal(effortForModel('claude-opus-5-5', 'xhigh'), 'xhigh');
+    assert.equal(effortForModel('claude-sonnet-5-9', 'max'), 'max');
+    assert.equal(effortForModel('claude-opus-4-6', undefined), undefined);
+    // 目录外的新 Sonnet：和面板一致，当作总会思考，不再当成「可以关思考」
+    assert.equal(isAdaptiveOnlyModel('claude-sonnet-5-6'), true);
+    assert.equal(isAdaptiveOnlyModel('claude-sonnet-6'), true);
+    assert.equal(isNoBudgetModel('claude-sonnet-5-6'), false);
+    assert.equal(isNoBudgetModel('claude-sonnet-5'), true);
+});

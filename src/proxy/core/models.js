@@ -83,6 +83,7 @@ export function isAdaptiveOnlyModel(id) {
     if (entry) return entry.adaptiveOnly;
     return (
         /claude-opus-(?:4-(?:[7-9]|\d{2,})|[5-9]|\d{2,})/.test(s) ||
+        /claude-sonnet-(?:5-(?:[5-9]|\d{2,})|[6-9]|\d{2,})/.test(s) ||
         s.includes('fable') ||
         s.includes('mythos')
     );
@@ -93,7 +94,20 @@ export function isNoBudgetModel(id) {
     const s = String(id).toLowerCase();
     const entry = catalogEntry(s.replace(/\[1m\]$/, ''));
     if (entry) return !!entry.noBudget;
-    return /claude-sonnet-(?:[5-9]|\d{2,})/.test(s);
+    return /claude-sonnet-(?:[5-9]|\d{2,})/.test(s) && !isAdaptiveOnlyModel(s);
+}
+
+/**
+ * Effort the model can take. The CLI's own model table (read from its binary) lists no effort at all for the
+ * 4.5 generation and no xhigh for 4.6; it quietly drops or lowers those, so do the same here instead of
+ * relying on its retry. Unknown / newer ids pass through untouched.
+ */
+export function effortForModel(id, effort) {
+    if (!effort) return undefined;
+    const s = String(id).toLowerCase().replace(/\[1m\]$/, '').replace(/\./g, '-');
+    if (/claude-(?:haiku|opus|sonnet)-4-5(?:-|$)/.test(s)) return undefined;
+    if (/claude-(?:opus|sonnet)-4-6(?:-|$)/.test(s) && effort === 'xhigh') return 'high';
+    return effort;
 }
 
 /**

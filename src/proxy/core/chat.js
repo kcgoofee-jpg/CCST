@@ -34,7 +34,7 @@ import { randomUUID } from 'node:crypto';
 import { loadSdk } from './sdk-loader.js';
 import { renderTranscript } from './transcript.js';
 import { extractSettings } from '../features/settings.js';
-import { parseModelRequest, isExtendedContextKnownUnavailable, recordExtendedContextUnavailable } from './models.js';
+import { parseModelRequest, effortForModel, isExtendedContextKnownUnavailable, recordExtendedContextUnavailable } from './models.js';
 import { buildSubprocessEnv, pickApiKeyFromAuthHeader } from './env.js';
 import { resolveBackendConfig } from '../features/backend-config.js';
 import { BACKEND_LABELS, mapModelId } from '../../shared/backends.js';
@@ -185,8 +185,9 @@ function buildSdkOptions({ modelInfo, oneMActive, settings, systemText, abortCon
             options.thinking = { type: 'disabled' };
         }
     }
-    if (settings.effort) {
-        options.effort = settings.effort;
+    const effort = effortForModel(modelInfo.baseId, settings.effort);
+    if (effort) {
+        options.effort = effort;
     }
 
     // Always run the subprocess in the scratch bucket so any live-turn
