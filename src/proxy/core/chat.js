@@ -53,6 +53,7 @@ import { diagnoseCache, describeDiag } from '../features/cache-diag.js';
 import { extractVolatileBlocks, foldTrailingInjections, injectBlocks, injectedTextFor, loreTarget, newLoreOnly, rememberInjected } from '../features/lore-tail.js';
 import { dumpEntries, dumpRequest, noteDebugSetting } from '../features/debug-dump.js';
 import { keepReply, trackGeneration } from '../features/reply-keeper.js';
+import { recordRateLimit } from '../features/rate-limit.js';
 
 const PLUGIN_TAG = '[claude-subscription]';
 const MAX_RATE_LIMIT_RETRIES = 2;
@@ -436,7 +437,8 @@ async function* runQuery({ sdk, prompt, options, stream, guardTier, requestedMod
                 err.sdkErrorText = `${message.subtype} ${detail}`;
                 throw err;
             }
-            // Everything else (system/init, status, rate_limit events, ...)
+            if (message.type === 'rate_limit_event') recordRateLimit(message.rate_limit_info);
+            // Everything else (system/init, status, ...)
             // is bookkeeping; prompt_suggestion can arrive after result but
             // we return at result.
         }
