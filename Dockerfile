@@ -1,6 +1,10 @@
 # CCST 独立代理（不含酒馆）。构建：docker build -t ccst .   运行示例见 deploy/docker-compose.yml
 FROM node:22-bookworm-slim
 
+LABEL org.opencontainers.image.source="https://github.com/kcgoofee-jpg/CCST" \
+      org.opencontainers.image.description="CCST: 让酒馆用 Claude 订阅的本地代理" \
+      org.opencontainers.image.licenses="AGPL-3.0-or-later"
+
 ENV NODE_ENV=production \
     CLAUDE_SUBSCRIPTION_HOST=0.0.0.0 \
     CLAUDE_SUBSCRIPTION_PORT=8901 \
