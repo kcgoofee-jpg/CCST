@@ -115,7 +115,10 @@ export function isRateLimitError(text) {
 
 export function isExtraUsageRequiredError(text) {
     const s = String(text ?? '').toLowerCase();
-    return (s.includes('extra usage') && s.includes('1m')) || s.includes('out of extra usage');
+    return (s.includes('extra usage') && s.includes('1m'))
+        || s.includes('out of extra usage')
+        // 新版 CLI 的说法：「Usage credits required for 1M context · turn on usage credits …」
+        || (s.includes('usage credits required') && s.includes('1m'));
 }
 
 export function isStaleSessionError(text) {

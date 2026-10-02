@@ -55,7 +55,7 @@ export function buildOtherTab(pane, settings, save) {
     pane.append(lan.root);
 
     // 一个控件的设置不再套一层折叠：标题和说明直接摆出来。
-    pane.append(el('small', 'cm-hint', '旧楼层动画只播一遍，手机上通常更省电、更不卡。'), segmented({
+    const quietSeg = segmented({
         label: '省电显示',
         options: [
             { value: 'auto', label: '自动', hint: '手机和 TauriTavern 上开，电脑上关。' },
@@ -64,7 +64,10 @@ export function buildOtherTab(pane, settings, save) {
         ],
         current: ['on', 'off'].includes(settings.quietRender) ? settings.quietRender : 'auto',
         onChange: (v) => { settings.quietRender = v; F.quiet.applyQuietRender(); save(); F.perf.renderPerfNote(); },
-    }));
+    });
+    // 说明放在标题下面（不是上面，否则像是上一组的说明）
+    quietSeg.querySelector('.cm-field-label').after(el('small', 'cm-hint', '旧楼层动画只播一遍，手机上通常更省电、更不卡。'));
+    pane.append(quietSeg);
 
     const perf = collapsible('性能诊断', '测几秒，找出让页面卡的楼层。', { id: 'claude_max_perf_section' });
     const perfNote = el('small', 'cm-hint');
