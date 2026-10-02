@@ -65,7 +65,7 @@ elif [[ -e "$shortcut" ]]; then
     warn "桌面上已经有一个别的「酒馆工具.command」，没有覆盖"
     explain "  菜单本体在：$LAUNCHER_DIR/酒馆工具.command"
 elif ask_yes "在桌面放一个「酒馆工具」快捷方式吗？（平时双击它就行）"; then
-    make_shortcut && ok "已放到桌面：酒馆工具（以后别移动下载的这个文件夹；移动了就再运行一次首次安装）"
+    make_shortcut && ok "已放到桌面：酒馆工具（平时双击它就行）"
 fi
 
 step "5/5 启动"
@@ -88,6 +88,6 @@ fi
 if ! autostart_enabled && ask_yes "登录 Mac 时自动在后台启动代理吗？（以后开机就能直接用，随时可以在菜单里关）"; then
     autostart_enable
 fi
-explain "手机上用：菜单里的「手机模式」（同一 Wi-Fi 下手机 TauriTavern 连这台 Mac），说明见 launcher/使用说明.txt。"
+explain "手机上用：双击桌面「酒馆工具」，选「手机模式」，用手机扫首页的二维码（同一 Wi-Fi）。"
 summary
 pause_end
