@@ -5,7 +5,8 @@
 //
 // 各系统只留一个启动壳（mac/酒馆工具.command、windows/酒馆工具.bat），
 // 菜单的分组、说明、问题判断都在这里；状态和不分系统的动作在 core.mjs（三个系统同一份）：
-// 首页只放每天要用的；手机、TT 守护、生图、导入这些主线以外的收在「其他」里（冻结维护，都还能用）。
+// 首页只放每天要用的：打开 App、手机、重启代理、检查状态；登录、修复、日志、TT 守护、生图、导入这些收在「更多」里（都还能用）。
+// 手机是单独一页（连接码、二维码、开关都在那里），不是一串子菜单。
 // 只有 Mac 的功能统一用 core.mjs 的 macOnly() 判断，不在各处散着写 OS === 'mac'。
 //   检查状态                      三个系统都用 core.mjs
 //   启动 / 关闭 / 重启            Windows、Linux 用 core.mjs；Mac 用 mac/actions/*.zsh（要连带手机模式守护、合盖）、
@@ -71,7 +72,7 @@ export function problems(s) {
     }
     // 手机相关的提醒只在开着手机模式时出现：不用手机的人首页不该看到这些
     if (s.phoneMode && !macOnly()) {
-        if (!s.watchdog) out.push({ text: '手机模式的守护没在运行', fix: 'phone-mode', fixLabel: '修复' });
+        if (!s.watchdog) out.push({ text: '手机模式的守护没在运行', fix: 'phone-on', fixLabel: '修复' });
         if (s.phone === 'unauthorized') out.push({ text: '手机上还没允许这台电脑调试', fixLabel: '在手机上点「允许」' });
         if (s.phoneTT?.restoring) out.push({ text: '手机上 TT 守护正在恢复备份', fixLabel: '恢复完再同步' });
         else if (s.phoneTT?.restorePending) out.push({ text: '手机上次从备份恢复没做完', sub: 'guard', fixLabel: '看 TT 守护' });
@@ -91,41 +92,40 @@ export function screens(s) {
     const sub = (s.backend?.id ?? 'subscription') === 'subscription';
     const home = {
         title: '首页',
-        primary: { id: 'start', label: s.proxy ? openLabel : `启动代理${withSt}` },
+        primary: { id: 'start', label: s.proxy ? openLabel : `启动代理${withSt}`, note: s.proxy ? '' : '代理没开，先启动它' },
         rows: [[
-            { key: '1', id: 'restart', label: `重启代理${withSt}` },
-            { key: '2', id: 'check', label: '检查状态' },
-            { key: '3', id: 'login', label: '登录 Claude', note: !sub ? `现在用 ${s.backend.label}，不用登录` : s.loggedIn ? `已登录${s.plan ? `（${s.plan}）` : ''}` : '浏览器登录订阅，一般只要一次' },
+            { key: '1', sub: 'phone', label: '手机', note: '连接码、二维码、开关', why },
         ], [
-            { key: '4', sub: 'maint', label: '维护 >' },
-            { key: '5', sub: 'other', label: '其他 >' },
+            { key: '2', id: 'restart', label: `重启代理${withSt}`, note: '改了设置、更新后用' },
+        ], [
+            { key: '3', id: 'check', label: '检查状态', note: '出问题先点这里' },
+        ], [
+            { key: '4', sub: 'more', label: '更多 >', note: '登录、修复、日志、开机启动…' },
         ]],
     };
-    const other = {
-        title: '其他',
-        note: '主线以外的功能：手机、TT、生图、导入。冻结维护，都还能用。',
+    const more = {
+        title: '更多',
         items: [
-            { key: '1', sub: 'phone', label: '手机 >', note: '手机模式、手机同步、合盖不睡', why },
-            { key: '2', sub: 'guard', label: 'TT 守护 >', note: '手机上 TT 的备份和恢复', why },
-            ...(mac && s.hasComfy ? [{ key: '3', sub: 'comfy', label: '生图 >', note: '本地 ComfyUI' }] : []),
-            { group: '导入和工具' },
-            ...(s.canTTImport ? [{ key: '4', id: 'tt-import', label: '本机TT导入', note: '测试用：电脑酒馆 -> 这台 Mac 的 TauriTavern', why }] : []),
-            { key: '5', id: 'baibai-import', label: '柏宝绘配方导入', note: '把「提示词拆分」导出的配方写进酒馆和手机', why },
-            { key: '6', id: 'prompt-split', label: '提示词拆分', note: '打开本机网页工具', why },
+            { group: '账号和维护' },
+            { id: 'login', label: '登录 Claude', note: !sub ? `现在用 ${s.backend.label}，不用登录` : s.loggedIn ? `已登录${s.plan ? `（${s.plan}）` : ''}` : '浏览器登录订阅，一般只要一次' },
+            { id: 'repair', label: '修复依赖', note: '报「缺少依赖 / Cannot find module」时' },
+            { id: 'logs', label: '打开日志', note: '出错时附上最后几十行求助' },
+            { id: 'autostart-toggle', label: '开机自动启动', note: s.autostart ? '已开 · 开 / 关' : '没开 · 开 / 关' },
+            { id: 'stop', label: `关闭代理${withSt}`, note: '聊天记录都已保存' },
+            { group: '手机上的 TauriTavern' },
+            { sub: 'guard', label: 'TT 守护 >', note: '手机上 TT 的备份和恢复', why },
+            { id: 'lid', label: '合盖不睡', note: s.lidInstalled ? '已安装 · 装 / 卸' : '没安装 · 装 / 卸（输一次密码）', why },
+            { group: '其他' },
+            ...(mac && s.hasComfy ? [{ sub: 'comfy', label: '生图 >', note: '本地 ComfyUI' }] : []),
+            ...(s.canTTImport ? [{ id: 'tt-import', label: '本机TT导入', note: '测试用：电脑酒馆 -> 这台 Mac 的 TauriTavern', why }] : []),
+            { id: 'baibai-import', label: '柏宝绘配方导入', note: '把「提示词拆分」导出的配方写进酒馆和手机', why },
+            { id: 'prompt-split', label: '提示词拆分', note: '打开本机网页工具', why },
         ],
     };
-    const phone = {
-        title: '手机',
-        note: mac
-            ? `${s.phoneMode ? '手机模式' + (s.watchdog ? '（守护中）' : '（守护没在运行）') : '电脑模式'}  ·  ${phoneText(s)}${s.lastSyncAt ? `  ·  上次同步 ${ago(s.lastSyncAt)}` : ''}`
-            : '手机相关功能只支持 Mac。',
-        items: [
-            { key: '1', id: 'phone-sync', label: '同步手机', note: `${s.hubLabel || '电脑'} <-> 手机：先预览，拿不准的问你`, why },
-            { key: '2', id: 'phone-mode', label: s.phoneMode ? '切到电脑模式' : '切到手机模式', note: s.phoneMode ? '关掉防睡眠和掉线重启' : '同一 Wi-Fi 的手机用这台 Mac 的代理', why },
-            { group: '一次性设置' },
-            { key: '3', id: 'lid', label: '合盖不睡', note: s.lidInstalled ? '已安装 · 装 / 卸' : '没安装 · 装 / 卸（输一次密码）', why },
-        ],
-    };
+    // 按实际出现的项连续编号；h、q、x 留给说明、退出和手机页的开关
+    const KEYS = [...'123456789abdefgijkmnoprstuvwyz'];
+    let n = 0;
+    for (const it of more.items) if (!it.group) it.key = KEYS[n++];
     const g = s.phoneTT;
     const guard = {
         title: 'TT 守护',
@@ -150,18 +150,7 @@ export function screens(s) {
                 : { key: '1', id: 'comfy-start', label: '启动生图', note: '本地 ComfyUI，端口 8188' },
         ],
     };
-    const maint = {
-        title: '维护',
-        items: [
-            { key: '1', id: 'repair', label: '修复依赖', note: '报「缺少依赖 / Cannot find module」时' },
-            { key: '2', id: 'logs', label: '打开日志', note: '出错时附上最后几十行求助' },
-            { key: '3', id: 'autostart-toggle', label: '开机自动启动', note: s.autostart ? '已开 · 开 / 关' : '没开 · 开 / 关' },
-            { key: '4', id: 'stop', label: `关闭代理${withSt}`, note: '聊天记录都已保存' },
-        ],
-    };
-    let n = 0;
-    for (const it of other.items) if (!it.group) it.key = String(++n); // 按实际出现的项连续编号
-    return { home, other, phone, guard, comfy, maint };
+    return { home, more, guard, comfy };
 }
 
 /** 手机要填的代理地址：http://<这台 Mac 的局域网地址>:端口/v1；没有局域网地址时 ''。 */
@@ -174,16 +163,20 @@ export function phoneCode(s) {
     return phoneAddress(s) && s.lanKey ? makeConnectCode(phoneAddress(s), s.lanKey) : '';
 }
 
-/** 首页上的问题用 a b c… 当按键；开着手机模式时 c 留给「复制连接码」，问题的字母跳过它。 */
-export function probLetters(s) {
-    return [...'abcdefghijklmnopqrstuvwxyz'].filter((l) => !(l === 'c' && phoneCode(s) && !macOnly()));
+/** 首页上的问题用 a b c… 当按键。 */
+export function probLetters() {
+    return [...'abcdefghijklmnopqrstuvwxyz'];
 }
 
-/** 连接码的二维码（终端字符画，每行前空两格）。 */
+/** 连接码的二维码（终端字符画，每行前空两格）。依赖没装好时返回 null，调用方只显示连接码。 */
 export function qrLines(text) {
-    let out = '';
-    createRequire(import.meta.url)('qrcode-terminal').generate(text, { small: true }, (q) => { out = q; });
-    return out.split('\n').filter(Boolean).map((l) => `  ${l}`);
+    try {
+        let out = '';
+        createRequire(import.meta.url)('qrcode-terminal').generate(text, { small: true }, (q) => { out = q; });
+        return out.split('\n').filter(Boolean).map((l) => `  ${l}`);
+    } catch {
+        return null;
+    }
 }
 
 /** 复制到 macOS 剪贴板（pbcopy，内容走 stdin，不进命令行参数和日志）。 */
@@ -200,7 +193,19 @@ function phoneText(s) {
     return { unauthorized: '手机待授权', noadb: '没找到 adb' }[s.phone] ?? '手机没连';
 }
 
-/** 首页状态：第一行能不能玩（+ 问题和修复键）；第二行酒馆在不在、地址；开着手机模式时多连接码和二维码。 */
+/** 一句话：现在该做什么。有挡路的问题先说修它（带按键），都好了就说去哪儿用。 */
+export function nextStep(s, probs = problems(s)) {
+    const first = probs.find((p) => p.block && (p.fix || p.fixLabel)) ?? probs.find((p) => p.fix);
+    if (first) {
+        const key = probLetters()[probs.indexOf(first)];
+        return first.fix ? `按 ${key}：${first.fixLabel}` : first.fixLabel;
+    }
+    const mac = !macOnly();
+    const target = s.stManaged ? '酒馆' : s.hasTT || !mac ? 'TauriTavern' : '酒馆';
+    return `去 ${target} 里用，面板点「一键连接」`;
+}
+
+/** 首页状态：第一行能不能玩；下一步；问题和修复键；酒馆在不在；手机模式一句话（连接码和二维码在「手机」页）。 */
 export function statusLines(s, probs = problems(s)) {
     const blocked = probs.some((p) => p.block);
     const head = blocked ? c.bad('● 还不能玩') : probs.length ? c.warn('● 可以玩') : c.ok('● 可以玩');
@@ -213,21 +218,56 @@ export function statusLines(s, probs = problems(s)) {
         if (s.busy) facts.push(c.warn(`在写 ${s.busy} 条回复`));
     }
     const L = [`  ${pad(head, 11)}  ${facts.join(' · ')}`];
+    L.push(`  ${c.bold('下一步')}  ${nextStep(s, probs)}`);
     const w = Math.max(0, ...probs.map((p) => width(p.text))) + 2;
-    const letters = probLetters(s);
+    const letters = probLetters();
     probs.forEach((p, i) => {
         const act = p.fix || p.sub ? `→ ${p.fixLabel}` : c.dim(p.fixLabel);
         L.push(`    ${c.key(letters[i])}  ${pad(p.text, w)}${act}`);
     });
     // 没配置酒馆（只用 TauriTavern 的人）：什么都不显示。
     if (s.hasST !== false) L.push(`  酒馆 ${s.stRunning ? `${c.ok('运行中')} · http://127.0.0.1:${s.stPort ?? 8000}` : c.dim('没运行')}`);
-    if (!s.phoneMode || macOnly()) return L;
-    // 手机上要粘贴的连接码：开着手机模式时首页常驻（只显示在屏幕上，不写日志）
-    L.push(`  手机连接码：${phoneCode(s) || c.dim('（没找到局域网地址：确认 Wi-Fi 已连接）')}`);
-    if (!phoneCode(s)) return L;
-    L.push(`  ${c.key('c')}  复制连接码    或用手机扫下面的二维码，打开后点「复制连接码」`);
-    L.push(...qrLines(phoneCode(s)));
+    if (!macOnly()) L.push(`  手机 ${s.phoneMode ? `${c.ok('已开启')} · 按 1 看连接码和二维码` : c.dim('没开 · 按 1 开启')}`);
     return L;
+}
+
+/** 「手机」页：模式状态、连接码、二维码、按键。rows = 终端高度，放不下二维码时不画，提示拉高窗口。 */
+export function renderPhone(s, sel = -1, msg = '', rows = process.stdout.rows ?? 0) {
+    const L = [...header('手机')];
+    const code = phoneCode(s);
+    const mode = s.phoneMode ? `已开启${s.watchdog ? '（守护中）' : '（守护没在运行）'}` : '没开';
+    const link = ['none', 'noadb', undefined].includes(s.phone) ? '' : `  ·  ${phoneText(s)}`; // 没插手机、没装 adb 不用说
+    L.push(`  手机模式：${s.phoneMode ? c.ok(mode) : c.dim(mode)}${link}`);
+    if (s.phoneMode) {
+        L.push('');
+        if (!code) L.push(`  连接码：${c.dim('没找到局域网地址：确认 Wi-Fi 已连接')}`);
+        else {
+            L.push(`  连接码：${code}`);
+            const qr = qrLines(code);
+            const need = (qr?.length ?? 0) + L.length + 9;
+            if (qr && (!rows || rows >= need)) L.push(...qr);
+            else if (qr) L.push(`  ${c.dim(`（窗口再拉高一点就能显示二维码，至少 ${need} 行）`)}`);
+            else L.push(`  ${c.dim('（二维码依赖没装好：在「更多」里选「修复依赖」；连接码照样能用）')}`);
+            L.push(`  ${c.dim('手机上：TauriTavern → 扩展 → CCST → 粘贴连接码 → 连接；或扫码后点「复制连接码」')}`);
+        }
+    } else {
+        L.push('', `  ${c.dim('开启后：同一 Wi-Fi 的手机用这台 Mac 的代理（要访问密码）；Mac 不空闲睡眠。')}`);
+        L.push(`  ${c.dim('不要在公共 Wi-Fi（咖啡店、学校、公司）开启。')}`);
+    }
+    L.push(RULE);
+    const items = [
+        ...(code ? [{ key: 'c', special: 'copy', label: '复制连接码' }] : []),
+        { key: 'x', special: 'toggle', label: s.phoneMode ? '关闭手机模式' : '开启手机模式' },
+        { key: 's', id: 'phone-sync', label: '同步手机', note: '电脑 <-> 手机：先预览，拿不准的问你' },
+        { key: 'l', id: 'lid', label: '合盖不睡', note: s.lidInstalled ? '已安装' : '没安装（输一次密码）' },
+    ];
+    items.forEach((it, i) => {
+        const line = `   ${c.key(it.key)}  ${pad(it.label, 14)}${c.dim(it.note ?? '')}`;
+        L.push(sel === i ? c.inv(line) : line);
+    });
+    L.push(RULE, `  ${c.dim(HINT_SUB)}`);
+    if (msg) L.push('', `  ${note(msg)}`);
+    return { text: L.join('\n'), actions: items };
 }
 
 // ── 执行动作 ──
@@ -235,7 +275,7 @@ export function statusLines(s, probs = problems(s)) {
 // 各系统还留在自己脚本里的动作
 const WIN_ACTIONS = { login: 'login', repair: 'repair', logs: 'logs', 'autostart-toggle': 'autostart' };
 const TERMUX_ACTIONS = { start: 'start', stop: 'stop', restart: 'restart', login: 'login', logs: 'logs' };
-const MAC_SHELL = new Set(['start', 'stop', 'restart']);
+const MAC_SHELL = new Set(['start', 'stop', 'restart', 'phone-on', 'phone-off']);
 
 /** 这个动作在这个系统上由 Node（core.mjs / phone.mjs）做（返回动作函数）还是交给系统脚本（返回 null）。 */
 export function nodeAction(id, os = OS, termux = IS_TERMUX) {
@@ -261,7 +301,7 @@ async function run(id, io) {
         } catch (err) {
             // 不把堆栈甩给玩家：一句话，细节在日志里
             code = 1;
-            process.stdout.write(`\n  ${c.bad('✗')} 出错了：${String(err?.message ?? err).split('\n')[0]}\n  ${c.dim('可以在「维护 > 打开日志」里找到详情。')}\n`);
+            process.stdout.write(`\n  ${c.bad('✗')} 出错了：${String(err?.message ?? err).split('\n')[0]}\n  ${c.dim('可以在「更多 > 打开日志」里找到详情。')}\n`);
         }
         process.stdout.write(code === 0 ? `\n  ${c.ok('✓ 完成')}\n` : `\n  ${c.bad(`✗ 没有成功（退出码 ${code}）`)}\n`);
         await io.pause();
@@ -270,7 +310,9 @@ async function run(id, io) {
     const env = { ...process.env, CM_MENU: '1' };
     let r;
     if (OS === 'mac') {
-        const f = join(HERE, 'mac', 'actions', `${id}.zsh`);
+        // 「手机」页里已经确认过：开 / 关手机模式直接带着答案进脚本
+        if (id === 'phone-on' || id === 'phone-off') env.CM_PHONE_ACTION = id.slice(6);
+        const f = join(HERE, 'mac', 'actions', `${id === 'phone-on' || id === 'phone-off' ? 'phone-mode' : id}.zsh`);
         if (!existsSync(f)) return `找不到动作脚本 ${id}`;
         r = spawnSync('/bin/zsh', [f], { stdio: 'inherit', env });
     } else if (OS === 'win') {
@@ -304,11 +346,10 @@ export function renderHome(s, sel = -1, msg = '') {
     const probs = problems(s);
     const L = [...header('首页'), ...statusLines(s, probs), RULE];
     const mark = (i, text) => (sel === i ? c.inv(text) : text);
-    L.push(`  ${mark(0, `${c.key('回车')}  ${home.primary.label}`)}`);
+    L.push(`  ${mark(0, `${c.key('回车')}  ${pad(home.primary.label, 14)}${c.dim(home.primary.note ?? '')}`)}`);
     let i = 1;
-    const colW = Math.max(...home.rows.flat().map((it) => width(`${it.key} ${it.label}`))) + 3;
-    for (const row of home.rows) {
-        L.push('  ' + row.map((it) => mark(i++, pad(it.why ? c.dim(`${it.key} ${it.label}`) : `${c.key(it.key)} ${it.label}`, colW))).join('').trimEnd());
+    for (const it of home.rows.flat()) {
+        L.push('  ' + mark(i++, `${it.why ? c.dim(it.key) : c.key(it.key)}     ${pad(it.label, 14)}${c.dim(it.why ?? it.note ?? '')}`).trimEnd());
     }
     L.push(RULE, `  ${c.dim(HINT_HOME)}`);
     if (msg) L.push('', `  ${note(msg)}`);
@@ -390,10 +431,19 @@ async function main() {
     const trail = []; // 从哪一层进来的：返回时回到上一层，不是一律回首页
     let sel = 0;
     let msg = '';
+    // 状态探测不便宜（几个 HTTP 请求 + 一个脚本，连着手机还有 adb）：方向键、说明这类不改状态的按键不重新采集，最多隔 5 秒；
+    // 进出页面、执行完动作后一定刷新
+    let s = null;
+    let sAt = 0;
+    let dirty = true;
     for (;;) {
-        const s = await readState();
-        if (screen === 'guard' && OS === 'mac') { s.guardLatest = await latestGuard(); s.pullJob = pullJob(); }
-        const view = screen === 'home' ? renderHome(s, sel, msg) : renderSub(s, screen, sel, msg);
+        if (dirty || !s || Date.now() - sAt > 5000) {
+            s = await readState();
+            if (screen === 'guard' && OS === 'mac') { s.guardLatest = await latestGuard(); s.pullJob = pullJob(); }
+            sAt = Date.now();
+            dirty = false;
+        }
+        const view = screen === 'home' ? renderHome(s, sel, msg) : screen === 'phone' ? renderPhone(s, sel, msg) : renderSub(s, screen, sel, msg);
         msg = '';
         if (!plain) process.stdout.write('\x1b[2J\x1b[H');
         process.stdout.write(view.text + '\n');
@@ -417,24 +467,50 @@ async function main() {
         if (k === 'h') { openHelp(); continue; }
         if (key.name === 'up') { sel = Math.max(0, sel - 1); continue; }
         if (key.name === 'down') { sel = Math.min(view.actions.length - 1, sel + 1); continue; }
-        if (screen !== 'home' && (k === '0' || key.name === 'escape' || key.name === 'backspace' || key.name === 'left')) { screen = trail.pop() ?? 'home'; sel = 0; continue; }
+        if (screen !== 'home' && (k === '0' || key.name === 'escape' || key.name === 'backspace' || key.name === 'left' || (screen === 'phone' && key.name === 'return'))) { screen = trail.pop() ?? 'home'; sel = 0; dirty = true; continue; }
 
         let item = null;
         if (key.name === 'return' || k === '\r') item = view.actions[sel] ?? null;
-        else if (screen === 'home' && k === 'c' && phoneCode(s) && !macOnly()) {
-            msg = copyToClipboard(phoneCode(s)) ? '已复制手机连接码' : '复制失败（没有 pbcopy？）';
-            continue;
-        }
-        else if (screen === 'home' && /^[a-z]$/.test(k) && view.probs?.[probLetters(s).indexOf(k)]) {
-            const p = view.probs[probLetters(s).indexOf(k)];
-            if (p.sub) { trail.push(screen); screen = p.sub; sel = 0; continue; }
+        else if (screen === 'home' && /^[a-z]$/.test(k) && view.probs?.[probLetters().indexOf(k)]) {
+            const p = view.probs[probLetters().indexOf(k)];
+            if (p.sub) { trail.push(screen); screen = p.sub; sel = 0; dirty = true; continue; }
             if (!p.fix) { msg = p.fixLabel; continue; }
             item = { id: p.fix, label: p.fixLabel };
         } else item = view.actions.find((a) => a.key === k) ?? null;
 
         if (!item) { if (k.trim()) msg = `没有「${k}」这一项`; continue; }
         if (item.why) { msg = `${item.label.replace(/ >$/, '')}：${item.why}`; continue; }
-        if (item.sub) { trail.push(screen); screen = item.sub; sel = 0; continue; }
+        if (item.sub) { trail.push(screen); screen = item.sub; sel = 0; dirty = true; continue; }
+        if (item.special === 'copy') {
+            msg = copyToClipboard(phoneCode(s)) ? '已复制手机连接码' : '复制失败（没有 pbcopy？）';
+            continue;
+        }
+        if (item.special === 'toggle') {
+            const on = !!s.phoneMode;
+            if (!plain) process.stdout.write('\x1b[2J\x1b[H');
+            if (on) {
+                process.stdout.write(`\n  关闭后手机连不上这个代理，Mac 恢复正常睡眠。\n\n`);
+            } else {
+                process.stdout.write([
+                    '',
+                    '  开启手机模式：',
+                    '  · 同一 Wi-Fi 的手机带访问密码就能用你的订阅；',
+                    '  · Mac 不会空闲睡眠，代理掉了会自动重启；',
+                    '  · 开启时代理会重启一次，Mac 可能弹出「是否允许 node 接受传入的网络连接」，请点「允许」。',
+                    '  · 不要在公共 Wi-Fi（咖啡店、学校、公司）开启；密码别发给别人。',
+                    '', ''].join('\n'));
+            }
+            const yes = /^y/i.test((await readLine(`  ${on ? '关闭' : '开启'}手机模式吗？ (y/N) `)) ?? '');
+            if (!yes) { msg = '没有改动'; continue; }
+            const err = await run(on ? 'phone-off' : 'phone-on', {
+                ask: async (q) => /^y/i.test((await readLine(`  ${q} (y/N) `)) ?? ''),
+                choose,
+                pause: async () => {},
+            });
+            msg = err ? `手机模式：${err}` : '';
+            dirty = true;
+            continue;
+        }
         if (!plain) process.stdout.write('\x1b[2J\x1b[H');
         const err = await run(item.id, {
             ask: async (q) => /^y/i.test((await readLine(`  ${q} (y/N) `)) ?? ''),
@@ -443,6 +519,7 @@ async function main() {
         });
         msg = err ? `${item.label.replace(/ >$/, '')}：${err}` : '';
         sel = screen === 'home' ? 0 : sel;
+        dirty = true;
     }
 }
 

@@ -1,19 +1,20 @@
 #!/bin/zsh
-# 启动酒馆：自检 → 启动 Claude 代理 → 启动酒馆 → 检查 → 打开浏览器
+# 启动代理：自检 → 启动 Claude 代理 → 启动酒馆 → 检查 → 打开浏览器
 source "${0:A:h}/../lib.zsh"
-banner "启动酒馆"
-explain "这个脚本会依次："
-explain "  ① 自检运行环境  ② 同时启动 Claude 代理和酒馆  ③ 检查是否正常  ④ 打开浏览器"
-explain "启动后两个程序都在后台运行，关掉这个窗口不影响使用。"
+banner "启动代理"
+explain "启动后代理在后台运行，关掉这个窗口不影响使用。"
 
-self_check
-if (( FAIL_COUNT > 0 )); then
-    print
-    print -r -- "${C_RED}自检发现 $FAIL_COUNT 个问题，先按上面的「解决办法」处理。${C_RESET}"
-    if ! ask_yes "仍然尝试启动吗？"; then
-        summary; pause_end 1
+# 代理已经在跑：不用再完整自检一遍，直接去打开 App
+if [[ -z "$(our_pids $PROXY_PORT)" ]]; then
+    self_check
+    if (( FAIL_COUNT > 0 )); then
+        print
+        print -r -- "${C_RED}自检发现 $FAIL_COUNT 个问题，先按上面的「解决办法」处理。${C_RESET}"
+        if ! ask_yes "仍然尝试启动吗？"; then
+            summary; pause_end 1
+        fi
+        # 不清零：选了「仍然启动」的问题照样算进最后的结果里
     fi
-    # 不清零：选了「仍然启动」的问题照样算进最后的结果里
 fi
 
 spawn_st      # 酒馆先在后台开始启动（编译前端最慢），和代理同时进行

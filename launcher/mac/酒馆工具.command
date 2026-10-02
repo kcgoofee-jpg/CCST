@@ -11,5 +11,16 @@ if ! command -v node >/dev/null; then
     read -k 1 -s "?按任意键关闭…"
     exit 1
 fi
+# 窗口高度不够时二维码会被挤出屏幕：把终端窗口拉到 84×32（Terminal.app 认这个转义序列，别的终端忽略）
+[[ -t 1 ]] && printf '\e[8;32;84t'
 node "$HERE/../menu.mjs"
+rc=$?
+if (( rc != 0 )); then
+    # 菜单自己出错了：窗口留着，让人看得到报错，不自动关
+    print
+    print "菜单异常退出（退出码 $rc）。把上面的内容发给帮你的人。"
+    read -r "?按回车关闭…"
+    exit $rc
+fi
+# 用户按 q 正常退出：关掉这个终端窗口
 source "$HERE/lib.zsh" >/dev/null 2>&1 && close_terminal_window

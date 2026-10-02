@@ -47,7 +47,7 @@ if sudo /usr/sbin/visudo -cf "$tmp" >/dev/null && sudo /usr/bin/install -m 0440 
             explain "守护 30 秒内会打开合盖不睡。"
         else
             warn "手机模式开着，但守护没有启动成功，合盖不睡暂时不会打开"
-            fix "看日志文件夹里的 watchdog.log，再选一次「手机模式」。"
+            fix "看日志文件夹里的 watchdog.log，再开一次手机模式。"
         fi
     else
         explain "切到手机模式后自动生效。"

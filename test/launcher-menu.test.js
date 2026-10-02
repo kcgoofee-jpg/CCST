@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { width, pad, problems, renderHome, screens, statusLines, phoneCode, probLetters, copyToClipboard } from '../launcher/menu.mjs';
+import { width, pad, problems, renderHome, renderPhone, screens, statusLines, nextStep, phoneCode, probLetters, copyToClipboard } from '../launcher/menu.mjs';
 import { macOnly } from '../launcher/core.mjs';
 
 const base = {
@@ -42,7 +42,7 @@ test('home: Enter starts when the proxy is down, opens when it runs', () => {
 });
 
 test('image-generation group only when ComfyUI is installed (macOS)', () => {
-    const keys = (s) => screens(s).other.items.map((i) => i.sub).filter(Boolean);
+    const keys = (s) => screens(s).more.items.map((i) => i.sub).filter(Boolean);
     if (process.platform === 'darwin') {
         assert.ok(!keys(base).includes('comfy'));
         assert.ok(keys({ ...base, hasComfy: true }).includes('comfy'));
@@ -51,10 +51,13 @@ test('image-generation group only when ComfyUI is installed (macOS)', () => {
     }
 });
 
-test('phone mode item flips its label with the mode', () => {
-    const item = (s) => screens(s).phone.items.find((i) => i.id === 'phone-mode');
-    assert.match(item(base).label, /切到手机模式/);
-    assert.match(item({ ...base, phoneMode: true }).label, /切到电脑模式/);
+test('phone page: the toggle flips with the mode; copy only when there is a code', () => {
+    const keys = (s) => renderPhone(s, -1, '', 60).actions.map((i) => i.key);
+    const toggle = (s) => renderPhone(s, -1, '', 60).actions.find((i) => i.special === 'toggle').label;
+    assert.equal(toggle(base), '开启手机模式');
+    assert.equal(toggle({ ...base, phoneMode: true }), '关闭手机模式');
+    assert.deepEqual(keys(base), ['x', 's', 'l']);
+    assert.deepEqual(keys({ ...base, phoneMode: true, ip: '10.0.0.2', port: 8901, lanKey: 'k' }), ['c', 'x', 's', 'l']);
 });
 
 test('problems: other backends need no login but need their settings', () => {
@@ -75,57 +78,64 @@ test('problems: TT guard restoring / unfinished restore on the phone', () => {
     assert.deepEqual(problems({ ...base, phoneTT: { restoring: true } }), []);
 });
 
-test('home: line 1 can-play, line 2 SillyTavern; phone lines only in phone mode', () => {
+test('home: can-play line, next step, SillyTavern line, phone line (mac only)', () => {
     const st = { ...base, stRunning: true, stPort: 8000, hasST: true };
     const ok = statusLines(st);
-    assert.equal(ok.length, 2);
+    assert.equal(ok.length, mac ? 4 : 3);
     assert.match(ok[0], /● 可以玩 +代理 \? · 订阅 · 已登录（Max）/);
-    assert.match(ok[1], /酒馆 运行中 · http:\/\/127\.0\.0\.1:8000/);
-    assert.match(statusLines({ ...st, stRunning: false })[1], /酒馆 没运行/);
-    assert.ok(!statusLines({ ...st, hasST: false }).join('\n').includes('酒馆'), 'TT-only: no ST line');
+    assert.match(ok[1], /下一步 +去 .+ 里用，面板点「一键连接」/);
+    assert.match(ok[2], /酒馆 运行中 · http:\/\/127\.0\.0\.1:8000/);
+    if (mac) assert.match(ok[3], /手机 +没开 · 按 1 开启/);
+    assert.match(statusLines({ ...st, stRunning: false })[2], /酒馆 没运行/);
+    assert.ok(!statusLines({ ...st, hasST: false }).join('\n').includes('酒馆 '), 'TT-only: no ST line');
     const down = statusLines({ ...st, proxy: false });
     assert.match(down[0], /● 还不能玩 +代理没运行/);
-    assert.match(down[1], /a  代理没在运行 +→ 启动代理/);
-    assert.match(down[2], /酒馆/);
-    const phoneMode = statusLines({ ...st, phoneMode: true, watchdog: true, macTTRunning: true, phone: 'usb', lastSyncAt: new Date(Date.now() - 2 * 3600e3),
-        phoneTT: { ttRunning: true, generating: true, root: true, guardVersion: '1.9', guardLastBackup: new Date() } });
-    if (mac) {
-        assert.match(phoneMode[2], /手机连接码：/);
-        assert.ok(!phoneMode.join('\n').match(/Mac TT|上次同步|TT 守护/), 'no advanced phone status on home');
-    } else {
-        assert.equal(phoneMode.length, 2);
-    }
+    assert.match(down[1], /下一步 +按 a：启动代理/);
+    assert.match(down[2], /a  代理没在运行 +→ 启动代理/);
+    assert.match(down[3], /酒馆/);
+    if (mac) assert.match(statusLines({ ...st, phoneMode: true, watchdog: true })[3], /手机 +已开启 · 按 1 看连接码和二维码/);
+    // 连接码和二维码不在首页
+    assert.ok(!statusLines({ ...st, phoneMode: true, ip: '10.0.0.2', port: 8901, lanKey: 'Kx9mPq2' }).join('\n').match(/Kx9mPq2|▀|█/));
 });
 
-test('home menu tree: Enter / 1 restart / 2 check / 3 login / 4 maintenance / 5 other', () => {
+test('nextStep: fix the blocker first, otherwise say where to go', () => {
+    assert.match(nextStep({ ...base, proxy: false }), /按 a：启动代理/);
+    assert.match(nextStep({ ...base, loggedIn: false }), /按 a：登录/);
+    assert.match(nextStep({ ...base, proxyVersion: '0.0.1' }), /按 a：重启代理/);
+    assert.match(nextStep(base), /去 .+ 里用/);
+    assert.match(nextStep({ ...base, stManaged: true }), /去 酒馆 里用/);
+});
+
+test('home menu tree: Enter / 1 phone / 2 restart / 3 check / 4 more', () => {
     const home = renderHome(base);
     assert.match(home.text, /CCST 酒馆工具 v\d+\.\d+/);
     assert.match(home.text, /回车  打开 TT/);
-    assert.deepEqual(home.actions.map((a) => a.key ?? 'enter'), ['enter', '1', '2', '3', '4', '5']);
-    assert.deepEqual(home.actions.map((a) => a.id ?? a.sub), ['start', 'restart', 'check', 'login', 'maint', 'other']);
-    // phone / TT guard / sync are no longer on the home page
-    assert.ok(!home.actions.some((a) => ['phone-sync', 'phone', 'guard'].includes(a.id ?? a.sub)));
+    assert.deepEqual(home.actions.map((a) => a.key ?? 'enter'), ['enter', '1', '2', '3', '4']);
+    assert.deepEqual(home.actions.map((a) => a.id ?? a.sub), ['start', 'phone', 'restart', 'check', 'more']);
+    // login moved into 更多; TT guard / sync are not on the home page
+    assert.ok(!home.actions.some((a) => ['login', 'phone-sync', 'guard'].includes(a.id ?? a.sub)));
 });
 
-test('maintenance: repair, logs, autostart, stop — login moved home', () => {
-    const ids = screens(base).maint.items.map((i) => i.id);
-    assert.deepEqual(ids, ['repair', 'logs', 'autostart-toggle', 'stop']);
+test('home fits an 80x24 terminal in every state (<= 22 lines)', () => {
+    const states = [
+        base,
+        { ...base, proxy: false },
+        { ...base, loggedIn: false, proxyVersion: '0.0.1', phoneMode: true, watchdog: false },
+        { ...base, phoneMode: true, ip: '10.0.0.2', port: 8901, lanKey: 'k', stRunning: true, hasST: true },
+    ];
+    for (const s of states) assert.ok(renderHome(s, -1, '检查状态：没有成功（退出码 1）').text.split('\n').length <= 22);
 });
 
-test('other: phone / TT guard / (ComfyUI) submenus and the import tools, numbered in order', () => {
-    const o = screens({ ...base, hasComfy: true, canTTImport: true }).other.items.filter((i) => !i.group);
-    if (mac) {
-        assert.deepEqual(o.map((i) => i.sub ?? i.id), ['phone', 'guard', 'comfy', 'tt-import', 'baibai-import', 'prompt-split']);
-        assert.ok(o.every((i) => !i.why));
-    } else {
-        assert.deepEqual(o.map((i) => i.sub ?? i.id), ['phone', 'guard', 'tt-import', 'baibai-import', 'prompt-split']);
-        assert.ok(o.every((i) => i.why === '只支持 Mac'));
-    }
-    assert.deepEqual(o.map((i) => i.key), o.map((_, i) => String(i + 1)));
-    // no TauriTavern import when there is nothing to import
-    assert.ok(!screens(base).other.items.some((i) => i.id === 'tt-import'));
-    // phone submenu keeps mode, sync and lid
-    assert.deepEqual(screens(base).phone.items.filter((i) => !i.group).map((i) => i.id), ['phone-sync', 'phone-mode', 'lid']);
+test('更多: login, repair, logs, autostart, stop — then TT guard, lid, and the import tools; keys are unique and skip h / q / x', () => {
+    const items = screens({ ...base, hasComfy: true, canTTImport: true }).more.items.filter((i) => !i.group);
+    assert.deepEqual(items.map((i) => i.sub ?? i.id), mac
+        ? ['login', 'repair', 'logs', 'autostart-toggle', 'stop', 'guard', 'lid', 'comfy', 'tt-import', 'baibai-import', 'prompt-split']
+        : ['login', 'repair', 'logs', 'autostart-toggle', 'stop', 'guard', 'lid', 'tt-import', 'baibai-import', 'prompt-split']);
+    const keys = items.map((i) => i.key);
+    assert.equal(new Set(keys).size, keys.length);
+    assert.ok(!keys.some((k) => ['h', 'q', 'x', '0'].includes(k)));
+    assert.deepEqual(keys.slice(0, 9), [...'123456789']);
+    assert.ok(!screens(base).more.items.some((i) => i.id === 'tt-import'), 'nothing to import: no entry');
 });
 
 test('TT guard screen: version vs latest, auto pull, KernelSU hint', () => {
@@ -149,28 +159,32 @@ test('home: key columns are CJK-aware and every line fits the rule width', () =>
     assert.match(text, /h 说明 · q 退出/);
 });
 
-test('home (phone mode on): shows 「手机连接码：<地址>#k=<密码>」 and a c key to copy it; the code is never on other lines', { skip: macOnly() }, () => {
+test('phone page (phone mode on): code once, QR when the window is tall enough, a hint when it is not', { skip: macOnly() }, () => {
     const s = { ...base, phoneMode: true, watchdog: true, ip: '192.168.31.7', port: 8901, lanKey: 'Kx9mPq2', stRunning: false };
     assert.equal(phoneCode(s), 'http://192.168.31.7:8901/v1#k=Kx9mPq2');
-    const lines = statusLines(s);
-    const line = lines.find((l) => l.includes('手机连接码'));
-    assert.match(line, /手机连接码：http:\/\/192\.168\.31\.7:8901\/v1#k=Kx9mPq2$/);
-    assert.ok(lines.some((l) => /\bc\b.*复制连接码/.test(l)));
-    assert.equal(lines.filter((l) => l.includes('Kx9mPq2')).length, 1);
-    assert.ok(lines.some((l) => /▀|▄|█/.test(l)), 'QR code shown');
-    assert.ok(renderHome(s).text.includes('手机连接码：http://192.168.31.7:8901/v1#k=Kx9mPq2'));
+    const tall = renderPhone(s, -1, '', 60).text;
+    assert.match(tall, /连接码：http:\/\/192\.168\.31\.7:8901\/v1#k=Kx9mPq2/);
+    assert.equal(tall.split('Kx9mPq2').length - 1, 1);
+    assert.match(tall, /▀|▄|█/, 'QR code shown');
+    assert.ok(tall.split('\n').length <= 32);
+    const short = renderPhone(s, -1, '', 20).text;
+    assert.ok(!/▀|▄|█/.test(short));
+    assert.match(short, /窗口再拉高一点就能显示二维码，至少 \d+ 行/);
+    assert.match(short, /连接码：http/);
+    // 关着的时候只有说明，没有码
+    const off = renderPhone({ ...base, ip: '192.168.31.7', port: 8901, lanKey: 'Kx9mPq2' }, -1, '', 60).text;
+    assert.ok(!off.includes('Kx9mPq2'));
+    assert.match(off, /不要在公共 Wi-Fi/);
 });
 
-test('home: no 连接码 line in computer mode; no LAN address or no key = no copyable code', () => {
-    assert.ok(!statusLines(base).join('\n').includes('手机连接码'));
+test('phone page: no LAN address or no key = no copyable code', () => {
     assert.equal(phoneCode({ ...base, phoneMode: true, ip: '', lanKey: 'k' }), '');
     assert.equal(phoneCode({ ...base, phoneMode: true, ip: '10.0.0.2', lanKey: '' }), '');
-    if (!macOnly()) assert.match(statusLines({ ...base, phoneMode: true, ip: '' }).join('\n'), /手机连接码：.*没找到局域网地址/);
+    assert.match(renderPhone({ ...base, phoneMode: true, ip: '' }, -1, '', 60).text, /连接码：.*没找到局域网地址/);
 });
 
-test('problem letters skip c while the copy key is on the home screen', () => {
-    assert.deepEqual(probLetters(base).slice(0, 3), ['a', 'b', 'c']);
-    if (!macOnly()) assert.deepEqual(probLetters({ ...base, phoneMode: true, ip: '10.0.0.2', port: 8901, lanKey: 'k' }).slice(0, 3), ['a', 'b', 'd']);
+test('problem letters are plain a b c…', () => {
+    assert.deepEqual(probLetters().slice(0, 4), ['a', 'b', 'c', 'd']);
 });
 
 test('copyToClipboard: pbcopy gets the text on stdin, never in the arguments', () => {

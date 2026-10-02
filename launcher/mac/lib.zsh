@@ -115,28 +115,23 @@ ask_yes() {
 }
 
 pause_end() {
-    # 按任意键后关闭这个终端窗口，并结束脚本
+    # 等用户按回车再结束。窗口不自动关：看得见结果，想关自己关（菜单里按 q 退出才会关窗口）
     local code=${1:-0}
     if [[ ! -t 0 ]]; then
         exit $code
     fi
     print
     if [[ -n "$CM_MENU" ]]; then
-        # 从「酒馆工具」菜单进来的：回到菜单，不关窗口
-        print -n -- "${C_BOLD}按任意键回到菜单…${C_RESET}"
-        read -k 1 -s
-        print
-        exit $code
+        print -n -- "${C_BOLD}按回车回到菜单…${C_RESET}"
+    else
+        print -n -- "${C_BOLD}按回车结束…${C_RESET}"
     fi
-    print -n -- "${C_BOLD}按任意键关闭窗口…${C_RESET}"
-    read -k 1 -s
-    print
-    close_terminal_window
+    read -r
     exit $code
 }
 
 close_terminal_window() {
-    # 脚本退出后，由后台的 AppleScript 关掉当前这个 Terminal 窗口。
+    # 只在用户在菜单里按 q 退出时用：脚本退出后，由后台的 AppleScript 关掉当前这个 Terminal 窗口。
     # 等脚本先退出再关，Terminal 就不会弹出「是否终止进程」的确认框。
     [[ -n "$CM_MENU" ]] && return   # 菜单里运行时窗口留给菜单
     local my_tty=$(tty 2>/dev/null)
@@ -198,16 +193,16 @@ diagnose_log() {
 
     _diag 'EADDRINUSE|address already in use' \
         "端口被占用，程序无法监听" \
-        "在酒馆工具里先选「关闭酒馆」，再选「启动酒馆」；如果还不行，重启电脑。"
+        "在酒馆工具「更多」里先选「关闭代理」，再回首页启动代理；如果还不行，重启电脑。"
     _diag 'ERR_MODULE_NOT_FOUND|Cannot find module|Cannot find package' \
         "缺少依赖文件（node_modules 不完整）" \
-        "在酒馆工具里选「修复依赖」重新安装。"
+        "在酒馆工具「更多」里选「修复依赖」重新安装。"
     _diag 'Native CLI binary|claude-agent-sdk-darwin' \
         "找不到 Claude 命令行程序（SDK 安装不完整）" \
-        "在酒馆工具里选「修复依赖」重新安装。"
+        "在酒馆工具「更多」里选「修复依赖」重新安装。"
     _diag 'Not logged in|Please run /login|authentication_failed|invalid_token|token has expired' \
         "Claude 订阅未登录或登录已失效" \
-        "在酒馆工具里选「登录 Claude」重新登录。"
+        "在酒馆工具「更多」里选「登录 Claude」重新登录。"
     _diag 'rate.limit|(^|[^0-9.,k])429([^0-9.,k]|$)|Too many requests' \
         "触发了订阅额度限流（请求太频繁或额度用完）" \
         "稍等几分钟再试；在酒馆的 CCST 面板里可以看到额度重置时间。"
@@ -354,7 +349,7 @@ self_check() {
         ok "Claude 命令行程序（SDK 自带）"
     else
         fail "缺少 Claude 命令行程序（SDK 的平台包没装上）"
-        fix "在酒馆工具里选「修复依赖」重新安装。"
+        fix "在酒馆工具「更多」里选「修复依赖」重新安装。"
     fi
 
     # 5. 登录状态
@@ -418,7 +413,7 @@ check_login() {
         yes) ok "Claude 订阅已登录（$(plan_name "$plan") 套餐）" ;;
         no)
             warn "Claude 订阅还没有登录 —— 酒馆能打开，但发消息会失败"
-            fix "在酒馆工具里选「登录 Claude」，在浏览器里完成授权。"
+            fix "在酒馆工具「更多」里选「登录 Claude」，在浏览器里完成授权。"
             ;;
         *)
             warn "无法读取 Claude 登录状态"
@@ -826,12 +821,13 @@ start_proxy() {
     fi
     if wait_port $PROXY_PORT 20 $pid; then
         rm -f "$RESTART_MARK"
-        ok "代理已启动：http://127.0.0.1:$PROXY_PORT/v1"
+        if [[ -s "$LAN_KEY_FILE" ]]; then ok "代理已启动（手机模式：同一 Wi-Fi 的手机能连）"
+        else ok "代理已启动：http://127.0.0.1:$PROXY_PORT/v1"; fi
         if [[ -s "$LAN_KEY_FILE" ]]; then
             if watchdog_start; then
                 ok "手机模式守护在运行：防睡眠、掉线自动重启"
             else
-                warn "手机模式守护没有启动成功：看日志文件夹里的 watchdog.log，或再选一次「手机模式」"
+                warn "手机模式守护没有启动成功：看日志文件夹里的 watchdog.log，或再开一次手机模式"
             fi
         fi
         return 0
@@ -965,11 +961,11 @@ health_check() {
             local repo_v=${f[6]}
             if [[ -n "$repo_v" && "${f[2]}" != "$repo_v" ]]; then
                 warn "代理还在跑旧版本 v${f[2]}，程序已经更新到 v$repo_v"
-                fix "没在生成回复时在酒馆工具里选「重启酒馆」（手机模式下代理会自动重启，手机不用动）。"
+                fix "没在生成回复时在酒馆工具里选「重启代理」（手机模式下代理会自动重启，手机不用动）。"
             fi
         else
             warn "代理正常，但没有找到 Claude 登录凭据"
-            fix "在酒馆工具里选「登录 Claude」。"
+            fix "在酒馆工具「更多」里选「登录 Claude」。"
         fi
     fi
 
@@ -992,19 +988,21 @@ show_running() {
         if [[ -n "$(our_pids $ST_PORT)" ]]; then ok "酒馆：运行中 → http://127.0.0.1:$ST_PORT"
         else explain "· 酒馆：未运行"; fi
     fi
-    if [[ -n "$(our_pids $PROXY_PORT)" ]]; then ok "Claude 代理：运行中 → http://127.0.0.1:$PROXY_PORT/v1"
+    if [[ -n "$(our_pids $PROXY_PORT)" ]]; then
+        if [[ -s "$LAN_KEY_FILE" ]]; then ok "Claude 代理：运行中（手机模式，本机 http://127.0.0.1:$PROXY_PORT/v1）"
+        else ok "Claude 代理：运行中 → http://127.0.0.1:$PROXY_PORT/v1"; fi
     else explain "· Claude 代理：未运行（TauriTavern 需要它才能对话）"; fi
     local mismatch why
     if mismatch=$(proxy_mode_mismatch) && [[ -n "$mismatch" ]]; then
         warn "$mismatch"
         if [[ -s "$LAN_KEY_FILE" ]]; then
-            fix "守护会在代理空闲时自动重启它；也可以没在生成回复时选「重启酒馆」。"
+            fix "守护会在代理空闲时自动重启它；也可以没在生成回复时选「重启代理」。"
         else
-            fix "没在生成回复时选「重启酒馆」，重启后手机就连不上了。"
+            fix "没在生成回复时选「重启代理」，重启后手机就连不上了。"
         fi
     fi
     if [[ -s "$LAN_KEY_FILE" ]]; then
-        if watchdog_running; then ok "手机模式守护：运行中"; else warn "手机模式开着，但守护没在运行：在酒馆工具里选「手机模式」修复"; fi
+        if watchdog_running; then ok "手机模式守护：运行中"; else warn "手机模式开着，但守护没在运行：在酒馆工具首页按 1（手机）修复"; fi
         if lid_awake_on; then ok "合盖不睡：开着"
         elif lid_supported; then
             if ! watchdog_running; then why="守护没在运行"
@@ -1020,18 +1018,16 @@ show_running() {
 }
 
 summary() {
-    print
-    print -r -- "${C_BOLD}──────── 结果 ────────${C_RESET}"
-    if (( FAIL_COUNT > 0 )); then
-        print -r -- "  ${C_RED}有 $FAIL_COUNT 个问题需要处理${C_RESET}，见上面标 ✗ 的项目和「解决办法」。"
-    elif (( WARN_COUNT > 0 )); then
-        print -r -- "  ${C_YELLOW}可以使用，但有 $WARN_COUNT 条提醒${C_RESET}，见上面标 ! 的项目。"
-    else
-        print -r -- "  ${C_GREEN}一切正常。${C_RESET}"
-    fi
-    print -r -- "  日志文件夹：$LOG_DIR"
-    print -r -- "${C_DIM}    launcher.log = 本工具箱的操作记录 · proxy.log = 代理 · sillytavern.log = 酒馆${C_RESET}"
     log_event "结果：错误 $FAIL_COUNT，提醒 $WARN_COUNT"
+    print
+    if (( FAIL_COUNT > 0 )); then
+        print -r -- "  ${C_RED}✗ 有 $FAIL_COUNT 个问题需要处理${C_RESET}，见上面标 ✗ 的项目和「解决办法」。"
+        print -r -- "${C_DIM}    要找人帮忙：菜单「更多 > 打开日志」，把最后几十行发过去。${C_RESET}"
+    elif (( WARN_COUNT > 0 )); then
+        print -r -- "  ${C_YELLOW}! 可以使用，但有 $WARN_COUNT 条提醒${C_RESET}，见上面标 ! 的项目。"
+    else
+        print -r -- "  ${C_GREEN}✓ 一切正常${C_RESET}"
+    fi
 }
 
 # ── 修复依赖 ─────────────────────────────────

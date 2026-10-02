@@ -475,14 +475,14 @@ function selfCheck(cfg, r, st, proc) {
     r.ok(`Claude 代理程序：${cfg.root}`);
     for (const [dir, name] of [...(managed ? [[cfg.stDir, '酒馆']] : []), [cfg.root, 'Claude 代理']]) {
         if (existsSync(join(dir, 'node_modules'))) r.ok(`${name} 依赖已安装`);
-        else { r.failLine(`${name} 缺少依赖（没有 node_modules 文件夹）`); r.fix('在酒馆工具「维护」里选「修复依赖」。'); }
+        else { r.failLine(`${name} 缺少依赖（没有 node_modules 文件夹）`); r.fix('在酒馆工具「更多」里选「修复依赖」。'); }
     }
     if (existsSync(join(cfg.root, 'node_modules', '@anthropic-ai', `claude-agent-sdk-${process.platform}-${process.arch}`, 'package.json'))) r.ok('Claude 命令行程序（SDK 自带）');
-    else { r.failLine('缺少 Claude 命令行程序（SDK 的平台包没装上）'); r.fix('在酒馆工具「维护」里选「修复依赖」。'); }
+    else { r.failLine('缺少 Claude 命令行程序（SDK 的平台包没装上）'); r.fix('在酒馆工具「更多」里选「修复依赖」。'); }
     // 代理在跑就问它（快）；没在跑才起一次命令行查
     const login = st.proxy ? { logged: st.loggedIn, plan: st.plan } : loginByCli(cfg);
     if (login.logged === true) r.ok(`Claude 订阅已登录（${planName(login.plan) || '未知'} 套餐）`);
-    else if (login.logged === false) { r.warnLine('Claude 订阅还没有登录 —— 酒馆能打开，但发消息会失败'); r.fix('在酒馆工具「维护」里选「登录 Claude」。'); }
+    else if (login.logged === false) { r.warnLine('Claude 订阅还没有登录 —— 酒馆能打开，但发消息会失败'); r.fix('在酒馆工具「更多」里选「登录 Claude」。'); }
     else { r.warnLine('无法读取 Claude 登录状态'); r.explain('  可能是代理依赖不完整，先处理上面的错误。'); }
     if (managed) {
         let yaml = '';
@@ -508,12 +508,12 @@ async function healthCheck(cfg, r, fetchImpl = globalThis.fetch) {
     if (!s) { r.explain('· Claude 代理：没在运行（TauriTavern 需要它才能对话）'); }
     else if (!s.ok) { r.failLine('代理有响应，但报告异常（SDK 未加载）'); }
     else if (s.credential?.present) {
-        r.ok(`代理正常：http://127.0.0.1:${cfg.proxyPort}/v1（v${s.version}，${planName(s.credential.subscriptionType) || '未知'} 订阅）`);
+        r.ok(`代理正常（本机地址 http://127.0.0.1:${cfg.proxyPort}/v1，v${s.version}，${planName(s.credential.subscriptionType) || '未知'} 订阅）`);
         if (s.version && VERSION !== '?' && s.version !== VERSION) {
             r.warnLine(`代理还在跑旧版本 v${s.version}，程序已经更新到 v${VERSION}`);
             r.fix('没在生成回复时在酒馆工具里选「重启代理」。');
         }
-    } else { r.warnLine('代理正常，但没有找到 Claude 登录凭据'); r.fix('在酒馆工具「维护」里选「登录 Claude」。'); }
+    } else { r.warnLine('代理正常，但没有找到 Claude 登录凭据'); r.fix('在酒馆工具「更多」里选「登录 Claude」。'); }
     if (!cfg.stDir) return;
     if (!(await portOpen(cfg.stPort))) { r.explain('· 酒馆没在运行，不检查网页（只用 TauriTavern 的话不需要它）'); return; }
     let code = 0;
@@ -539,7 +539,7 @@ export async function actionCheck(io = {}) {
         r.step('手机');
         if (st.modeMismatch) r.warnLine(st.modeMismatch);
         if (st.phoneMode) {
-            if (st.watchdog) r.ok('手机模式守护：运行中'); else { r.warnLine('手机模式开着，但守护没在运行'); r.fix('在酒馆工具「手机」里选「手机模式」修复。'); }
+            if (st.watchdog) r.ok('手机模式守护：运行中'); else { r.warnLine('手机模式开着，但守护没在运行'); r.fix('在酒馆工具首页按 1（手机），开启手机模式修复。'); }
             if (st.lidOn) r.ok('合盖不睡：开着');
             else r.explain(st.lidInstalled ? '· 合盖不睡：已安装，现在放开着' : '· 合盖不睡：未安装（合盖会睡，手机连不上）');
         } else {
@@ -710,8 +710,8 @@ async function startAll(cfg, r, proc) {
 
 function preflight(cfg, r) {
     if (cfg.termux) return;
-    if (!existsSync(join(cfg.root, 'node_modules'))) { r.failLine('Claude 代理缺少依赖（没有 node_modules 文件夹）'); r.fix('在酒馆工具「维护」里选「修复依赖」。'); }
-    if (cfg.stDir && cfg.stAutostart && !existsSync(join(cfg.stDir, 'node_modules'))) { r.failLine('酒馆缺少依赖（没有 node_modules 文件夹）'); r.fix('在酒馆工具「维护」里选「修复依赖」。'); }
+    if (!existsSync(join(cfg.root, 'node_modules'))) { r.failLine('Claude 代理缺少依赖（没有 node_modules 文件夹）'); r.fix('在酒馆工具「更多」里选「修复依赖」。'); }
+    if (cfg.stDir && cfg.stAutostart && !existsSync(join(cfg.stDir, 'node_modules'))) { r.failLine('酒馆缺少依赖（没有 node_modules 文件夹）'); r.fix('在酒馆工具「更多」里选「修复依赖」。'); }
 }
 
 async function afterStart(cfg, r, { stOk }, io) {
