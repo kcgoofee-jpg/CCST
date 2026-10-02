@@ -96,13 +96,17 @@ export async function connect(settings) {
     }
 }
 
-/** 「预设带正则脚本…」 when the selected preset's data carries enabled regex scripts; '' when unknown. */
-function presetRegexNote(ctx) {
+/** The selected chat-completion preset's data, or null when it cannot be read. */
+function activePreset(ctx) {
     try {
         const name = ctx.chatCompletionSettings?.preset_settings_openai;
-        const preset = name ? ctx.getPresetManager?.('openai')?.getCompletionPresetByName?.(name) : null;
-        return libs.presetReco?.presetRegexNote?.(preset) ?? '';
-    } catch { return ''; }
+        return name ? ctx.getPresetManager?.('openai')?.getCompletionPresetByName?.(name) ?? null : null;
+    } catch { return null; }
+}
+
+/** 「预设带正则脚本…」 when the selected preset's data carries enabled regex scripts; '' when unknown. */
+function presetRegexNote(ctx) {
+    return libs.presetReco?.presetRegexNote?.(activePreset(ctx)) ?? '';
 }
 
 // 同一个预设的提示只说一次（重新连接、再点一键连接时不要又弹一遍）
@@ -130,7 +134,7 @@ async function connectProfile(settings, keepModel = '') {
         if (res.ok) {
             notify('ok', '已连接', profileNotice({ existed: res.existed, modelOk, modelLabel: shortModel(target) }), { ms: 10000, replace: 'connect-profile' });
             const preset = ctx.chatCompletionSettings?.preset_settings_openai ?? '';
-            for (const a of connectAdvice({ presetNote: libs.presetReco?.presetMismatchNote?.(preset) ?? '', regexNote: presetRegexNote(ctx) })) {
+            for (const a of connectAdvice({ presetNote: libs.presetReco?.presetMismatchNote?.(preset, activePreset(ctx)) ?? '', regexNote: presetRegexNote(ctx) })) {
                 const once = `${preset}|${a.key}`;
                 if (advised.has(once)) continue;
                 advised.add(once);

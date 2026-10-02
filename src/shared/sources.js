@@ -42,12 +42,13 @@ export function isClaudeModel(id) {
 }
 
 /**
- * Models that always think (the 「不思考」 choice does nothing on them): Fable / Mythos, Opus 4.7 and newer,
- * Sonnet 5.5 and newer. Mirrors the proxy catalog (src/proxy/core/models.js adaptiveOnly). False for non-Claude ids.
+ * Models that always think (the 「不思考」 choice does nothing on them): Fable / Mythos, Opus 5.5 and newer,
+ * Sonnet 5.5 and newer. Opus 4.7 / 4.8 / 5 accept thinking off (measured live). Mirrors the proxy catalog (src/proxy/core/models.js adaptiveOnly). False for non-Claude ids.
  */
 export function isAdaptiveOnly(id) {
     const c = canonicalModel(id);
     if (!c) return false;
+    if (/^claude-opus-(?:4-[78]|5)$/.test(c)) return false;
     return /fable|mythos/.test(c)
         || /^claude-opus-(?:4-(?:[7-9]|\d{2,})|[5-9]|\d{2,})(?:-|$)/.test(c)
         || /^claude-sonnet-(?:5-(?:[5-9]|\d{2,})|[6-9]|\d{2,})(?:-|$)/.test(c);

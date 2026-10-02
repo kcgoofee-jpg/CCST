@@ -30,7 +30,7 @@ SillyTavern on its own only talks to pay-per-token APIs. CCST is a SillyTavern p
 | --- | --- |
 | 🎟️ **Use your subscription**<br>Claude Pro / Max, no separate API credit; API keys, Bedrock, Vertex and OpenRouter work too | 💰 **Long chats should cost less (estimate)**<br>In long chats the prompt cache can usually save re-processing part of the history; how much depends on your preset, world info and extensions |
 | 🛟 **Replies survive disconnects**<br>Close the browser or drop the connection; the reply still finishes and is filled in later | 🔀 **Switch models in one click**<br>Opus 5.5 / Opus 4.6 / Sonnet 5.5, thinking depth on demand |
-| 🩺 **Refusal / truncation alerts**<br>When the model refuses or the reply is cut off or empty, the status says so; length, banned-word and similar checks are in 「其他」 (Other), experimental | 📦 **Short install**<br>SillyTavern: download the one-click installer and double-click; Mac for TauriTavern and phone: paste one line in Terminal, it ends in the menu |
+| 🩺 **Refusal / truncation alerts**<br>When the model refuses or the reply is cut off or empty, the status says so; length, banned-word and similar checks are in 「其他」 (Other), experimental | 📦 **Short install**<br>SillyTavern: paste one line in Terminal (Mac) or double-click the installer (Windows); Mac for TauriTavern and phone: paste a different line in Terminal, it ends in the menu |
 
 The panel also shows your quota and per-turn usage.
 
@@ -55,13 +55,18 @@ No terminal, no editing files.
 https://github.com/kcgoofee-jpg/CCST
 ```
 
-**2. Download the one-click installer.** Open the **CCST** panel. A card says it can't reach the CCST proxy; click **下载一键安装（Mac）** (Mac) or **下载一键安装（Windows）** (Windows).
+**2. Get the one-click installer.** Open the **CCST** panel. A card says it can't reach the CCST proxy; on Mac click "复制命令" (copy command), on Windows click **下载一键安装（Windows）**.
 
-**3. Double-click it and sign in to Claude.** On Mac you get a zip: double-click to unzip, then double-click `CCST安装`. It finds SillyTavern, installs what's needed and opens your browser once to sign in to Claude. It says 「装好了」 (done) at the end.
+**3. Run it and sign in to Claude.** Mac: open Terminal, paste the line below and press Enter (Terminal downloads it itself, so macOS does not block it); Windows: double-click the downloaded file. It finds SillyTavern, installs what's needed and opens your browser once to sign in to Claude. It says 「装好了」 (done) at the end.
 
-- Mac "cannot verify the developer": on macOS 15 and later double-clicking is blocked outright (known issue, [#22](https://github.com/kcgoofee-jpg/CCST/issues/22); a Terminal command is planned): **System Settings → Privacy & Security → scroll down → Open Anyway**. On older macOS, right-click the file → Open → Open.
+
+```
+zsh -c "$(curl -fsSL https://raw.githubusercontent.com/kcgoofee-jpg/CCST/main/install-plugin-mac.sh)"
+```
+
+- Mac: don't double-click a downloaded `.command` file. On macOS 15 and later it is blocked ("cannot verify the developer", only "Done / Move to Trash"). The Terminal line above avoids that.
 - Windows "Windows protected your PC": **More info → Run anyway**.
-- No Node.js yet: it opens the download page; install it and double-click again.
+- No Node.js yet: it opens the download page; install it and run it again (paste the same line on Mac, double-click again on Windows).
 
 **4. Restart SillyTavern.** Close and reopen it, then hard-refresh the browser (`Ctrl+F5`, Mac `Cmd+Shift+R`). The panel connects by itself.
 

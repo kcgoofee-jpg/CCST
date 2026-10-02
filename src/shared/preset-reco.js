@@ -71,9 +71,51 @@ export function presetRegexNote(preset) {
     return presetRegexCount(preset) ? '预设带正则脚本：先点酒馆提示里的『点击此处立即刷新』，正则才生效。' : '';
 }
 
-/** Note for the connect notice when the active preset looks made for another family; '' when unsure or fine. */
-export function presetMismatchNote(name) {
-    const fam = presetFamily(name);
+/** The prompt entries a preset has switched ON (prompt_order's longest list, entries with enabled: true). */
+export function presetEnabledPrompts(preset) {
+    const orders = Array.isArray(preset?.prompt_order) ? preset.prompt_order : [];
+    const order = orders.reduce((best, o) => ((o?.order?.length ?? 0) > (best?.order?.length ?? 0) ? o : best), null)?.order ?? [];
+    const on = new Set(order.filter((it) => it?.enabled).map((it) => it.identifier));
+    return (Array.isArray(preset?.prompts) ? preset.prompts : []).filter((p) => p && on.has(p.identifier));
+}
+
+const ENTRY_WORDS = {
+    claude: /claude|opus|sonnet|haiku|克劳德/i,
+    gemini: /gemini|谷歌|google/i,
+    gpt: /\bgpt|chatgpt|openai/i,
+    deepseek: /deepseek|\bR1\b/i,
+};
+
+/**
+ * Which model family the ENABLED entries of a preset were written for, ignoring its name (a preset can be renamed,
+ * and a name can say nothing). 'claude' as soon as any enabled entry mentions Claude; another family only when its
+ * word is in an entry's NAME, or in the text of two or more entries, and no other family is. Null when unsure.
+ */
+export function presetFamilyFromEntries(preset) {
+    const prompts = presetEnabledPrompts(preset);
+    if (!prompts.length) return null;
+    const hits = {};
+    for (const [fam, re] of Object.entries(ENTRY_WORDS)) {
+        let strong = 0;
+        let weak = 0;
+        for (const p of prompts) {
+            if (re.test(String(p.name ?? ''))) strong++;
+            else if (re.test(String(p.content ?? ''))) weak++;
+        }
+        hits[fam] = { strong, weak };
+    }
+    if (hits.claude.strong + hits.claude.weak > 0) return 'claude';
+    const others = Object.keys(FAMILY_NAMES).filter((f) => hits[f].strong >= 1 || hits[f].weak >= 2);
+    return others.length === 1 ? others[0] : null;
+}
+
+/**
+ * Note for the connect notice when the active preset looks made for another family; '' when unsure or fine.
+ * The preset's enabled entries decide when they give a verdict; the name is the fallback (and the only
+ * evidence when the preset's data cannot be read).
+ */
+export function presetMismatchNote(name, preset = null) {
+    const fam = presetFamilyFromEntries(preset) ?? presetFamily(name);
     if (!fam || fam === 'claude') return '';
     return `当前预设『${name}』看起来是给 ${FAMILY_NAMES[fam]} 用的，Claude 可能表现不好；可以在『AI 回复配置』换成给 Claude 的预设。`;
 }

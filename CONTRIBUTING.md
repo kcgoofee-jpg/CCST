@@ -15,7 +15,7 @@ Node 18 以上。代理本地运行：`npm start`（默认 `127.0.0.1:8901`）�
 
 先读 [docs/架构.md](docs/架构.md)；产品边界在 [docs/产品定位.md](docs/产品定位.md)，计划在 [docs/路线图.md](docs/路线图.md)，用户向说明在 [docs/使用指南.md](docs/使用指南.md)（改了面板行为要同步这里和 README）。要点：
 
-- 面板在 `src/panel/`，代理在 `src/proxy/`，两边共用的纯函数在 `src/shared/`；原版酒馆的一键安装包在 `installer/`（改了 `CCST安装.command` 要跑 `python3 scripts/build-installer-zip.py` 重新打 `CCST-mac.zip`；这个 zip 在 macOS 15 以上会被系统拦，见 [#22](https://github.com/kcgoofee-jpg/CCST/issues/22)）；「酒馆工具」菜单（`launcher/menu.mjs`，Mac / Windows / Termux 共用）和手机同步在 `launcher/`，手机 / TauriTavern 连电脑上的代理目前只有 Mac 有。
+- 面板在 `src/panel/`，代理在 `src/proxy/`，两边共用的纯函数在 `src/shared/`；原版酒馆的一键安装包在 `installer/`（Mac 用根目录 `install-plugin-mac.sh` 在终端下载运行 `CCST安装.command`；改了它要跑 `python3 scripts/build-installer-zip.py` 重新打 `CCST-mac.zip`，zip 只留给旧版面板的链接）；「酒馆工具」菜单（`launcher/menu.mjs`，Mac / Windows / Termux 共用）和手机同步在 `launcher/`，手机 / TauriTavern 连电脑上的代理目前只有 Mac 有。
 - Mac 给 TauriTavern 和手机用的独立代理，安装走根目录的 `install-mac.sh`（终端一行，装到 `~/CCST`，再交给 `launcher/mac/首次安装.command`）；服务器安装脚本和 compose 示例在 `deploy/`，`Dockerfile` 和 GHCR 镜像发布流程（`.github/workflows/release-image.yml`，打 `v*` 标签触发）在根目录和 `.github/`。
 - 路径从 `src/proxy/paths.js` 取；面板不静态导入酒馆模块。
 - 挪动面板文件时同时改 `manifest.json` 和 `src/proxy/plugin.js` 的 `UI_EXTENSION_FILES`。

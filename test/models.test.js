@@ -33,7 +33,7 @@ test('CLAUDE_SUBSCRIPTION_MODELS contains Claude Fable 5.1 and Claude Opus 5', (
     assert.equal(opus5.name, 'Claude Opus 5');
     assert.equal(opus5.tier, 'opus');
     assert.equal(opus5.oneM, true);
-    assert.equal(opus5.adaptiveOnly, true);
+    assert.equal(opus5.adaptiveOnly, false);
     assert.equal(opus5.context, 200000);
 
     // Existing models preserved
@@ -94,7 +94,7 @@ test('parseModelRequest correctly handles base and 1M requests for Claude Opus 5
     assert.equal(base.tier, 'opus');
     assert.equal(base.oneM, false);
     assert.equal(base.sdkModel, 'claude-opus-5');
-    assert.equal(base.adaptiveOnly, true);
+    assert.equal(base.adaptiveOnly, false);
     assert.equal(base.envPins.ANTHROPIC_DEFAULT_OPUS_MODEL, 'claude-opus-5');
     assert.equal(base.envPins.ANTHROPIC_DEFAULT_FABLE_MODEL, 'claude-fable-5-1');
 
@@ -103,7 +103,7 @@ test('parseModelRequest correctly handles base and 1M requests for Claude Opus 5
     assert.equal(oneM.tier, 'opus');
     assert.equal(oneM.oneM, true);
     assert.equal(oneM.sdkModel, 'opus[1m]');
-    assert.equal(oneM.adaptiveOnly, true);
+    assert.equal(oneM.adaptiveOnly, false);
     assert.equal(oneM.envPins.ANTHROPIC_DEFAULT_OPUS_MODEL, 'claude-opus-5');
 });
 
@@ -128,10 +128,13 @@ test('isAdaptiveOnlyModel identifies adaptive-only model families', () => {
     assert.equal(isAdaptiveOnlyModel('fable-future-variant'), true);
 
     // Opus family
-    assert.equal(isAdaptiveOnlyModel('claude-opus-5'), true);
+    assert.equal(isAdaptiveOnlyModel('claude-opus-5-5'), true);
     assert.equal(isAdaptiveOnlyModel('claude-opus-5-1'), true);
-    assert.equal(isAdaptiveOnlyModel('claude-opus-4-8'), true);
-    assert.equal(isAdaptiveOnlyModel('claude-opus-4-7'), true);
+    // measured live (5.1, #23): thinking off gives no thinking block on these three
+    for (const id of ['claude-opus-5', 'claude-opus-4-8', 'claude-opus-4-7']) {
+        assert.equal(isAdaptiveOnlyModel(id), false, id);
+        assert.equal(parseModelRequest(id).noBudget, true, id);
+    }
     assert.equal(isAdaptiveOnlyModel('claude-opus-4-6'), false);
     assert.equal(isAdaptiveOnlyModel('claude-opus-4-5'), false);
 
@@ -192,7 +195,7 @@ test('Sonnet 5 rejects budgets but can turn thinking off (noBudget)', () => {
     assert.equal(info.adaptiveOnly, false);
     assert.equal(info.noBudget, true);
     assert.equal(parseModelRequest('claude-sonnet-4-6').noBudget, false);
-    assert.equal(parseModelRequest('claude-opus-5').noBudget, false);
+    assert.equal(parseModelRequest('claude-opus-5').noBudget, true, 'Opus 5 takes no budget either');
 });
 
 test('effortForModel: nothing for the 4.5 generation, xhigh→high on 4.6, others untouched', async () => {

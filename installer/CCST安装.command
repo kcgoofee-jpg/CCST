@@ -1,10 +1,10 @@
 #!/bin/zsh
-# CCST 一键安装（Mac）：双击运行，跟着提示做。可以重复运行（相当于更新）。
+# CCST 一键安装（Mac，原版酒馆）：双击运行，或在终端用 install-plugin-mac.sh 一行运行，跟着提示做。可以重复运行（相当于更新）。
 # 做的事：找到酒馆文件夹 -> 检查 Node.js -> 打开酒馆的「插件开关」（先备份）-> 装 CCST -> 装依赖 -> 登录 Claude。
 # 不会删除你的任何数据。
 # 测试用环境变量（平时不用）：CCST_ST_DIR 指定酒馆文件夹；CCST_NO_PROCESS_SCAN=1 不去找正在运行的酒馆；
 #   CCST_SKIP_LOGIN=1 跳过登录；CCST_YES=1 不问问题；CCST_REPO_URL / CCST_ZIP_URL 换下载地址；
-#   CCST_BRANCH 指定分支（默认用仓库默认分支）。
+#   CCST_BRANCH 指定分支（默认用仓库默认分支）；CCST_FROM_TERMINAL=1 由终端一行安装调用（不等回车、提示改成「再运行一次那一行」）。
 
 setopt NO_NOMATCH
 export PATH="$PATH:/opt/homebrew/bin:/usr/local/bin"
@@ -12,6 +12,8 @@ REPO_URL="${CCST_REPO_URL:-https://github.com/kcgoofee-jpg/CCST}"
 BRANCH="${CCST_BRANCH:-}"
 ZIP_URL="${CCST_ZIP_URL:-https://github.com/kcgoofee-jpg/CCST/archive/refs/heads/${BRANCH:-main}.zip}"
 ASSUME_YES="${CCST_YES:-0}"
+FROM_TERMINAL="${CCST_FROM_TERMINAL:-0}"
+if [[ "$FROM_TERMINAL" == 1 ]]; then AGAIN_FILE="再运行一次安装那一行"; else AGAIN_FILE="再双击一次本文件"; fi
 STAMP=$(date +%Y%m%d-%H%M%S)
 
 say()  { print -r -- "$*"; }
@@ -20,7 +22,7 @@ warn() { print -r -- "  ! $*"; }
 step() { print -r -- ""; print -r -- "【$1】"; }
 finish() { # $1=退出码
     print -r -- ""
-    if [[ "$ASSUME_YES" != 1 ]]; then print -n -- "按回车键关闭这个窗口。"; read -r _ </dev/tty 2>/dev/null; fi
+    if [[ "$ASSUME_YES" != 1 && "$FROM_TERMINAL" != 1 ]]; then print -n -- "按回车键关闭这个窗口。"; read -r _ </dev/tty 2>/dev/null; fi
     exit ${1:-0}
 }
 stop_with() { # 出错：说清楚发生了什么、下一步做什么
@@ -105,12 +107,12 @@ has_ext "$ST" || warn "这个酒馆里还没装 CCST 面板。先在酒馆里 �
 step "2/6 检查 Node.js（代理靠它运行）"
 if ! command -v node >/dev/null 2>&1; then
     open "https://nodejs.org/zh-cn/download" 2>/dev/null
-    stop_with "这台电脑上没有 Node.js。" "刚才已经帮你打开了 Node.js 官网：下载「LTS」版本的 macOS 安装包，一路点「继续」装好。" "装好以后，再双击一次本文件就行。"
+    stop_with "这台电脑上没有 Node.js。" "刚才已经帮你打开了 Node.js 官网：下载「LTS」版本的 macOS 安装包，一路点「继续」装好。" "装好以后，${AGAIN_FILE}就行。"
 fi
 nv=$(node -v)
 if (( ${${nv#v}%%.*} < 18 )); then
     open "https://nodejs.org/zh-cn/download" 2>/dev/null
-    stop_with "Node.js 版本太旧（$nv），需要 18 或更高。" "刚才已经帮你打开了 Node.js 官网：下载「LTS」版本装上，再双击一次本文件。"
+    stop_with "Node.js 版本太旧（$nv），需要 18 或更高。" "刚才已经帮你打开了 Node.js 官网：下载「LTS」版本装上，${AGAIN_FILE}。"
 fi
 ok "Node.js $nv"
 
@@ -122,7 +124,7 @@ if [[ ! -f "$CFG" ]]; then
         cp "$ST/default/config.yaml" "$CFG" || stop_with "没法创建 config.yaml" "请检查酒馆文件夹有没有写入权限。"
         ok "酒馆还没生成设置文件，已按默认内容建了一个"
     else
-        stop_with "酒馆文件夹里没有 config.yaml。" "先把酒馆启动一次（让它自己生成），关掉，再双击本文件。"
+        stop_with "酒馆文件夹里没有 config.yaml。" "先把酒馆启动一次（让它自己生成），关掉，${AGAIN_FILE}。"
     fi
 fi
 if grep -Eq '^enableServerPlugins:[[:space:]]*true([[:space:]]|#|$)' "$CFG"; then
@@ -152,7 +154,8 @@ zip_install() {
     local tmp; tmp=$(mktemp -d) || return 1
     say "  正在下载…"
     curl -fL --retry 2 -o "$tmp/ccst.zip" "$ZIP_URL" || { rm -rf "$tmp"; return 1; }
-    unzip -q -o "$tmp/ccst.zip" -d "$tmp/x" || { rm -rf "$tmp"; return 1; }
+    # ditto 认 UTF-8 文件名；unzip 在非 UTF-8 的区域设置下会把中文文件名变成问号并反复问「覆盖吗」
+    { ditto -x -k "$tmp/ccst.zip" "$tmp/x" 2>/dev/null || unzip -q -o "$tmp/ccst.zip" -d "$tmp/x"; } || { rm -rf "$tmp"; return 1; }
     local top=("$tmp"/x/*(/N[1]))
     [[ -n "$top" && -f "$top/package.json" ]] || { rm -rf "$tmp"; return 1; }
     mkdir -p "$DEST" && cp -R "$top/." "$DEST/"; local rc=$?  # 只覆盖同名文件，从不删除 DEST 里已有的东西
@@ -166,7 +169,7 @@ elif [[ -f "$DEST/package.json" ]]; then
     say "  已经装过（下载版），更新文件…"
     zip_install && ok "已更新到最新" || warn "没能更新（没联网？）。继续使用现在这个版本。"
 elif [[ -e "$DEST" && -n "$(/bin/ls -A "$DEST" 2>/dev/null)" ]]; then
-    stop_with "plugins/CCST 已经存在，但里面不像是 CCST。" "为了不弄坏你的东西，没有动它。把它改个名字（比如 CCST-旧）再双击本文件。"
+    stop_with "plugins/CCST 已经存在，但里面不像是 CCST。" "为了不弄坏你的东西，没有动它。把它改个名字（比如 CCST-旧）${AGAIN_FILE}。"
 else
     installed=0
     if (( have_git )); then
@@ -174,17 +177,17 @@ else
         git clone --quiet ${BRANCH:+--branch} ${BRANCH:+"$BRANCH"} "$REPO_URL" "$DEST" && installed=1 || { warn "用 git 下载失败，换个办法再试"; rm -rf "$DEST" 2>/dev/null; }
     fi
     (( installed )) || zip_install && installed=1
-    (( installed )) || stop_with "下载 CCST 失败。" "多半是没联网，或者访问 GitHub 很慢。检查网络（需要能打开 github.com），然后再双击本文件。"
+    (( installed )) || stop_with "下载 CCST 失败。" "多半是没联网，或者访问 GitHub 很慢。检查网络（需要能打开 github.com），然后${AGAIN_FILE}。"
     ok "已下载到 $DEST"
 fi
-[[ -f "$DEST/package.json" ]] || stop_with "CCST 没装完整（缺少 package.json）。" "再双击一次本文件试试；还不行请把这个窗口的内容截图发给作者。"
+[[ -f "$DEST/package.json" ]] || stop_with "CCST 没装完整（缺少 package.json）。" "${AGAIN_FILE}试试；还不行请把这个窗口的内容截图发给作者。"
 
 # ── 5. 依赖 ──
 step "5/6 安装依赖（第一次要联网下载，约 1–3 分钟）"
 if (cd "$DEST" && npm install --no-audit --no-fund --loglevel=error); then
     ok "依赖装好了"
 else
-    stop_with "依赖没装成功。" "先检查网络能不能上外网，再双击本文件重试。" "如果窗口里提示 EACCES / 权限，把酒馆文件夹放到「文稿」或「桌面」里再试。"
+    stop_with "依赖没装成功。" "先检查网络能不能上外网，${AGAIN_FILE}重试。" "如果窗口里提示 EACCES / 权限，把酒馆文件夹放到「文稿」或「桌面」里再试。"
 fi
 
 # ── 6. 登录 Claude ──
@@ -200,7 +203,7 @@ else
         else
             warn "登录没完成。不影响安装，之后随时可以补："
             say "  打开「终端」，输入 cd 后面加一个空格，把 $DEST 这个文件夹拖进去，回车，再输入 npm run login"
-            say "  或者再双击一次本文件，它会重新打开登录。"
+            say "  或者${AGAIN_FILE}，它会重新打开登录。"
         fi
     fi
 fi

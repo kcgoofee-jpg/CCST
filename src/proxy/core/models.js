@@ -39,16 +39,17 @@ export const CANONICAL_TIER_MODELS = {
 
 // `adaptiveOnly` = always-thinking model families; sampling params are
 // rejected and `thinking: { type: 'enabled' | 'disabled' }` is invalid — only
-// adaptive applies (Opus 4.7+, Fable, Mythos).
+// adaptive applies (Opus 5.5, Sonnet 5.5, Fable, Mythos). Measured live (5.1): `thinking: disabled` is accepted
+// on all of them, but Opus 5.5 / Sonnet 5.5 still return a thinking block, so for them "off" does nothing.
 // `noBudget` = thinking can be turned off, but `budget_tokens` is rejected —
-// "always on" maps to adaptive instead of enabled+budget (Sonnet 5).
+// "always on" maps to adaptive instead of enabled+budget (Sonnet 5, Opus 4.7 / 4.8 / 5: measured live, off gives no thinking block).
 export const CLAUDE_SUBSCRIPTION_MODELS = [
     { id: 'claude-fable-5-1', name: 'Claude Fable 5.1', tier: 'fable', oneM: true, adaptiveOnly: true, context: 200000 },
     { id: 'claude-fable-5', name: 'Claude Fable 5', tier: 'fable', oneM: true, adaptiveOnly: true, context: 200000 },
     { id: 'claude-opus-5-5', name: 'Claude Opus 5.5', tier: 'opus', oneM: true, adaptiveOnly: true, context: 200000 },
-    { id: 'claude-opus-5', name: 'Claude Opus 5', tier: 'opus', oneM: true, adaptiveOnly: true, context: 200000 },
-    { id: 'claude-opus-4-8', name: 'Claude Opus 4.8', tier: 'opus', oneM: true, adaptiveOnly: true, context: 200000 },
-    { id: 'claude-opus-4-7', name: 'Claude Opus 4.7', tier: 'opus', oneM: true, adaptiveOnly: true, context: 200000 },
+    { id: 'claude-opus-5', name: 'Claude Opus 5', tier: 'opus', oneM: true, adaptiveOnly: false, noBudget: true, context: 200000 },
+    { id: 'claude-opus-4-8', name: 'Claude Opus 4.8', tier: 'opus', oneM: true, adaptiveOnly: false, noBudget: true, context: 200000 },
+    { id: 'claude-opus-4-7', name: 'Claude Opus 4.7', tier: 'opus', oneM: true, adaptiveOnly: false, noBudget: true, context: 200000 },
     { id: 'claude-opus-4-6', name: 'Claude Opus 4.6', tier: 'opus', oneM: true, adaptiveOnly: false, context: 200000 },
     // Sonnet 5.5: 1M is native (no [1m] variant) and thinking can't be turned off (CLI capability rejects_disabled_thinking).
     { id: 'claude-sonnet-5-5', name: 'Claude Sonnet 5.5', tier: 'sonnet', oneM: false, adaptiveOnly: true, context: 1000000 },

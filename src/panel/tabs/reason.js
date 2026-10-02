@@ -125,7 +125,7 @@ export function buildReasonTab(pane, settings, save) {
     }
     const depth = segmented({
         label: '思考深度', hideLabel: true,
-        options: [...EFFORT_OPTIONS, { value: 'off', label: '不思考', hint: '回得最快。Fable、Opus 4.7 及以上总会思考，对它们无效。' }],
+        options: [...EFFORT_OPTIONS, { value: 'off', label: '不思考', hint: '回得最快。Fable、Opus 5.5、Sonnet 5.5 总会思考，对它们无效。' }],
         current: settings.thinking === 'off' ? 'off' : settings.effort,
         onChange: (v) => {
             if (v === 'off') settings.thinking = 'off';

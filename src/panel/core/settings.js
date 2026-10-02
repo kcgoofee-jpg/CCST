@@ -79,7 +79,7 @@ export const EFFORT_OPTIONS = [
 export const THINKING_OPTIONS = [
     { value: 'adaptive', label: '自适应', hint: '模型自己判断要不要思考（推荐）。' },
     { value: 'on', label: '始终思考', hint: '每次都先思考。Sonnet 5 按自适应处理。' },
-    { value: 'off', label: '关闭', hint: '不思考。Fable、Opus 4.7 及以上总会思考。' },
+    { value: 'off', label: '关闭', hint: '不思考。Fable、Opus 5.5、Sonnet 5.5 总会思考。' },
 ];
 
 /** 省电显示: on for phones and TauriTavern unless the debug switch says otherwise. */

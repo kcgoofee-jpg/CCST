@@ -8,18 +8,18 @@ import { makeConnectCode } from './connect-code.js';
 
 export const REPO_URL = 'https://github.com/kcgoofee-jpg/CCST';
 
-// 一键安装程序（装成酒馆服务器插件）只给「本机浏览器里的原版酒馆」：它在扩展自己的文件夹里（installer/），
-// 用相对地址下载，离线 / 镜像环境也能用。Mac 给 zip：浏览器下载的 .command 没有「可执行」权限；zip 解压后权限是对的。
+// 一键安装程序（装成酒馆服务器插件）只给「本机浏览器里的原版酒馆」：Windows 的 .bat 在扩展自己的文件夹里（installer/），
+// 用相对地址下载，离线 / 镜像环境也能用。Mac 不给下载文件：下载来的 .command 在 macOS 15 以上会被系统拦住，改给终端一行命令。
 // TauriTavern / 手机 / 别处打开的酒馆都装不了这个插件，给的是别的路：见 hostKind。
 const INSTALLER_BASE = new URL('../../../installer/', import.meta.url);
 export const INSTALLERS = [
-    { key: 'mac', label: '下载一键安装（Mac）', file: 'CCST-mac.zip' },
     { key: 'win', label: '下载一键安装（Windows）', file: 'CCST安装.bat' },
 ];
-// 下载链接的备份：GitHub 上的同一批文件。.bat 在 raw 地址会当文本显示，所以只给 Mac 的 zip 和整个仓库的 zip。
+// 下载链接的备份：.bat 在 raw 地址会当文本显示，所以给 installer 文件夹的页面。
 export const RAW_BASE = `${REPO_URL}/raw/main/installer/`;
 export const REPO_ZIP_URL = `${REPO_URL}/archive/refs/heads/main.zip`;
 export const DOCS_URL = `${REPO_URL}/blob/main/docs/%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97.md`;
+export const MAC_PLUGIN_CMD = 'zsh -c "$(curl -fsSL https://raw.githubusercontent.com/kcgoofee-jpg/CCST/main/install-plugin-mac.sh)"';
 export const MAC_INSTALL_CMD = 'zsh -c "$(curl -fsSL https://raw.githubusercontent.com/kcgoofee-jpg/CCST/main/install-mac.sh)"';
 // 电脑上装代理（Mac）：不给 zip，下载的 .command 会被系统拦住；给一行终端命令，按钮打开安装说明。
 const macInstallItem = (label) => ({ key: 'mac-cmd', label, file: '', href: DOCS_URL, copy: MAC_INSTALL_CMD, copyLabel: '复制命令', download: false });
@@ -38,10 +38,10 @@ export function hostKind({ tauri = false, elsewhere = false } = {}) {
 
 /** A download / link item: `href` is what the button opens; `copy` is the URL to show and copy. */
 const remoteItem = (key, label, url) => ({ key, label, file: '', href: url, copy: url, download: false });
-const desktopDownloads = () => INSTALLERS.map((d) => {
-    const href = new URL(d.file, INSTALLER_BASE).href;
-    return { ...d, href, download: true, copy: d.key === 'mac' ? `${RAW_BASE}${d.file}` : REPO_URL + '/tree/main/installer' };
-});
+const desktopDownloads = () => [
+    { key: 'mac-plugin-cmd', label: 'Mac：打开「终端」粘贴下面这行（打开安装说明）', file: '', href: DOCS_URL, copy: MAC_PLUGIN_CMD, copyLabel: '复制命令', download: false },
+    ...INSTALLERS.map((d) => ({ ...d, href: new URL(d.file, INSTALLER_BASE).href, download: true, copy: REPO_URL + '/tree/main/installer' })),
+];
 
 const LOOPBACK = /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])([:/]|$)/i;
 export const CODE_PLACEHOLDER = 'http://192.168.x.x:8901/v1#k=…';
@@ -84,14 +84,14 @@ export function connectHelp({ endpoint = DEFAULT_ENDPOINT, accessKey = '', host 
     }
     return {
         ...base,
-        sub: '代理没在运行：重启酒馆。没装或删了：下载一键安装，双击运行。',
+        sub: '代理没在运行：重启酒馆。没装或删了：Mac 在「终端」粘贴下面一行，Windows 下载一键安装并双击运行。',
         downloads: desktopDownloads(),
-        hint: 'Mac 双击被拦时：系统设置 → 隐私与安全性 → 拉到底点「仍要打开」。',
+        hint: '',
     };
 }
 
 const REFRESH = '回到浏览器，按 Cmd+Shift+R（Windows 按 Ctrl+F5）刷新酒馆页面。';
-const DESKTOP_HINT = '双击下载的文件，按提示做完后重启酒馆';
+const DESKTOP_HINT = 'Mac 在终端粘贴上面那行，Windows 双击下载的文件，按提示做完后重启酒馆';
 
 /**
  * 「面板和代理版本不一致」卡片：情况 → 影响 → 怎么办（编号步骤）。
@@ -135,7 +135,7 @@ ${impact}
         };
     }
     const pluginSteps = [
-        { text: '双击之前下载的「CCST安装」再运行一次，它会把代理更新到最新。找不到了，点下面的按钮重新下载。' },
+        { text: 'Mac：在「终端」再粘贴一次下面那行。Windows：双击之前下载的「CCST安装」再运行一次，找不到了点下面的按钮重新下载。它会把代理更新到最新。' },
         { text: '关掉酒馆的黑色窗口，重新打开酒馆。' },
     ];
     let steps;

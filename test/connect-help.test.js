@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { connectHelp, mismatchHelp, hostKind, formPrefill, connectOutcome, MAC_INSTALL_CMD } from '../src/panel/core/connect-help.js';
+import { connectHelp, mismatchHelp, hostKind, formPrefill, connectOutcome, MAC_INSTALL_CMD, MAC_PLUGIN_CMD } from '../src/panel/core/connect-help.js';
 import { makeConnectCode, parseConnectCode } from '../src/panel/core/connect-code.js';
 import { submitConnect, revealGroup } from '../src/panel/core/connect-form.js';
 import { readFileSync } from 'node:fs';
@@ -16,16 +16,19 @@ test('hostKind: facts only', () => {
     assert.equal(hostKind({}), 'desktop');
 });
 
-test('desktop installers exist in the extension folder and carry a copyable GitHub link', () => {
+test('desktop: Mac gets a terminal line (downloaded .command files are blocked), Windows gets the .bat from the extension folder', () => {
     const h = connectHelp({ endpoint: 'http://192.168.31.7:8901/v1/', host: 'desktop' });
     assert.equal(h.key, 'offline');
-    assert.deepEqual(h.downloads.map((d) => d.label), ['下载一键安装（Mac）', '下载一键安装（Windows）']);
-    for (const d of h.downloads) {
-        assert.ok(existsSync(fileURLToPath(d.href)), `${d.file} exists in installer/`);
-        assert.match(d.href, /\/installer\//);
-        assert.equal(d.download, true);
-        assert.match(d.copy, /^https:\/\/github\.com\/kcgoofee-jpg\/CCST\//, 'a copyable GitHub link as the fallback');
-    }
+    assert.deepEqual(h.downloads.map((d) => d.key), ['mac-plugin-cmd', 'win']);
+    const [mac, win] = h.downloads;
+    assert.equal(mac.copy, MAC_PLUGIN_CMD);
+    assert.equal(mac.download, false);
+    assert.match(MAC_PLUGIN_CMD, /install-plugin-mac\.sh/);
+    assert.ok(existsSync(fileURLToPath(new URL('../install-plugin-mac.sh', import.meta.url))), 'the script the line downloads exists');
+    assert.equal(win.label, '下载一键安装（Windows）');
+    assert.ok(existsSync(fileURLToPath(win.href)), `${win.file} exists in installer/`);
+    assert.equal(win.download, true);
+    assert.match(win.copy, /^https:\/\/github\.com\/kcgoofee-jpg\/CCST\//, 'a copyable GitHub link as the fallback');
 });
 
 const noLoopback = (h) => assert.doesNotMatch(JSON.stringify(h), /127\.0\.0\.1|localhost/);
@@ -60,13 +63,14 @@ test('elsewhere (cloud / phone browser): same box, a docs link instead of an ins
     assert.equal(h.downloads.length, 1);
 });
 
-test('desktop browser ST: one sentence, installers, one visible Mac 15 line, no form, nothing collapsed', () => {
+test('desktop browser ST: one sentence, a Mac line and a Windows installer, no form, nothing collapsed', () => {
     const h = connectHelp({ host: 'desktop' });
     assert.deepEqual(h.steps, []);
     assert.equal(h.form, undefined);
     assert.equal(h.fold, undefined);
-    assert.match(h.hint, /系统设置 → 隐私与安全性 → 拉到底点「仍要打开」/);
-    assert.deepEqual(h.downloads.map((d) => d.key), ['mac', 'win']);
+    assert.match(h.sub, /Mac 在「终端」粘贴下面一行/);
+    assert.doesNotMatch(cardText(h), /仍要打开|CCST-mac/, 'no zip to double-click on Mac any more');
+    assert.deepEqual(h.downloads.map((d) => d.key), ['mac-plugin-cmd', 'win']);
 });
 
 test('connectOutcome: the proxy\'s own answer decides the message', () => {
@@ -164,6 +168,7 @@ test('version mismatch, proxy older: TauriTavern gets the standalone steps only'
 test('version mismatch on a desktop browser keeps the plugin path', () => {
     const plugin = mismatchHelp({ side: 'proxy', proxyVersion: '4.0.0', panelVersion: '4.5.1', runtime: 'plugin' });
     assert.equal(plugin.downloads.length, 2);
+    assert.match(allText(plugin), /Mac：在「终端」再粘贴一次/);
     assert.match(allText(plugin), /CCST安装/);
     const standalone = mismatchHelp({ side: 'proxy', proxyVersion: '4.0.0', panelVersion: '4.5.1', runtime: 'standalone' });
     assert.equal(standalone.downloads.length, 0);

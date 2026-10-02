@@ -144,7 +144,7 @@ function buildSdkOptions({ modelInfo, oneMActive, settings, systemText, abortCon
     // CLAUDE_CODE_MAX_OUTPUT_TOKENS, which 400s below ~2048 max tokens
     // ("thinking.enabled.budget_tokens: Input should be >= 1024", verified
     // live). Rules:
-    //   • Adaptive-only families (Opus 4.7+, Fable) natively adapt; no
+    //   • Adaptive-only families (Opus 5.5, Sonnet 5.5, Fable) natively adapt; no
     //     budget field is ever sent — safe at any max_tokens. Always adaptive.
     //   • Other models translate adaptive/enabled into a budgeted request;
     //     with max_tokens set below MIN_MAX_TOKENS_FOR_THINKING the budget

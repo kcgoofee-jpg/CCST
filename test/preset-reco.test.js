@@ -41,3 +41,34 @@ test('preset regex note: only for enabled regex scripts in the preset data', () 
         assert.equal(presetRegexNote(none), '');
     }
 });
+
+import { presetFamilyFromEntries, presetEnabledPrompts, presetMismatchNote as mismatchNote } from '../src/shared/preset-reco.js';
+
+const mkPreset = (entries) => ({
+    prompts: entries.map(([identifier, name, content]) => ({ identifier, name, content })),
+    prompt_order: [{ character_id: 100001, order: entries.map(([identifier, , , enabled = true]) => ({ identifier, enabled })) }],
+});
+
+test('preset family comes from the ENABLED entries, not the name (#2)', () => {
+    const claude = mkPreset([['a', '破限', '你是 Claude，按下面的规则写。'], ['b', '文风', '细腻']]);
+    assert.equal(presetFamilyFromEntries(claude), 'claude');
+    // a Claude preset with a Gemini-sounding NAME gets no warning
+    assert.equal(mismatchNote('智脑-Z(3.1P)', claude), '');
+    // a preset with a bland name whose entries are written for Gemini does
+    const gem = mkPreset([['a', 'Gemini 破限', '...'], ['b', '文风', '细腻']]);
+    assert.equal(presetFamilyFromEntries(gem), 'gemini');
+    assert.match(mismatchNote('我的预设', gem), /看起来是给 Gemini 用的/);
+});
+
+test('preset family: disabled entries count for nothing; weak evidence needs two entries; unsure falls back to the name', () => {
+    const offClaude = { prompts: [{ identifier: 'a', name: 'Claude 破限', content: '' }, { identifier: 'b', name: 'Gemini 越狱', content: '' }],
+        prompt_order: [{ order: [{ identifier: 'a', enabled: false }, { identifier: 'b', enabled: true }] }] };
+    assert.deepEqual(presetEnabledPrompts(offClaude).map((p) => p.identifier), ['b']);
+    assert.equal(presetFamilyFromEntries(offClaude), 'gemini');
+    assert.equal(presetFamilyFromEntries(mkPreset([['a', '规则', '参考 OpenAI 的写法'], ['b', '文风', '细腻']])), null, 'one passing mention is not enough');
+    assert.equal(presetFamilyFromEntries(mkPreset([['a', '规则', '参考 OpenAI 的写法'], ['b', '文风', 'GPT 风格']])), 'gpt');
+    assert.equal(presetFamilyFromEntries(mkPreset([['a', 'Gemini 破限', ''], ['b', 'GPT 规则', '']])), null, 'two families: no verdict');
+    assert.equal(presetFamilyFromEntries(null), null);
+    assert.match(mismatchNote('智脑-Z(3.1P)', mkPreset([['a', '文风', '细腻']])), /Gemini/, 'entries say nothing: the name still counts');
+    assert.match(mismatchNote('智脑-Z(3.1P)'), /Gemini/, 'preset data unreadable: the name');
+});

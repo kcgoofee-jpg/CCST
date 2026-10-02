@@ -81,8 +81,8 @@ test('TauriTavern named in the connect texts', () => {
 });
 
 test('always-thinking models: disabled 不思考, and the list matches the proxy catalog', () => {
-    for (const id of ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-fable-5-1', 'claude-opus-4-7', 'claude-opus-4-8', 'anthropic/claude-opus-4.7', 'claude-opus-5']) assert.equal(isAdaptiveOnly(id), true, id);
-    for (const id of ['claude-opus-4-6', 'claude-opus-4-6[1m]', 'claude-sonnet-5', 'claude-sonnet-4-6', 'claude-haiku-4-5', 'gemini-2.5-pro', '']) assert.equal(isAdaptiveOnly(id), false, id);
+    for (const id of ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-fable-5-1', 'claude-opus-5-1']) assert.equal(isAdaptiveOnly(id), true, id);
+    for (const id of ['claude-opus-4-7', 'claude-opus-4-8', 'anthropic/claude-opus-4.7', 'claude-opus-5', 'claude-opus-4-6', 'claude-opus-4-6[1m]', 'claude-sonnet-5', 'claude-sonnet-4-6', 'claude-haiku-4-5', 'gemini-2.5-pro', '']) assert.equal(isAdaptiveOnly(id), false, id);
     for (const id of ['claude-fable-5-1', 'claude-fable-5', 'claude-opus-5-5', 'claude-opus-5', 'claude-opus-4-8', 'claude-opus-4-7', 'claude-opus-4-6', 'claude-sonnet-5-5', 'claude-sonnet-5', 'claude-sonnet-4-6', 'claude-opus-4-5', 'claude-sonnet-4-5', 'claude-haiku-4-5']) assert.equal(isAdaptiveOnly(id), isAdaptiveOnlyModel(id), id);
     assert.match(src('panel/tabs/reason.js'), /这个模型总会思考/);
 });
