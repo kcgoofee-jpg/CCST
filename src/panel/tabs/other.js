@@ -54,9 +54,9 @@ export function buildOtherTab(pane, settings, save) {
     );
     pane.append(lan.root);
 
-    const quiet = collapsible('省电显示', '旧楼层动画只播一遍，手机上通常更省电、更不卡。', { id: 'claude_max_quiet' });
-    quiet.body.append(segmented({
-        label: '省电显示', hideLabel: true,
+    // 一个控件的设置不再套一层折叠：标题和说明直接摆出来。
+    pane.append(el('small', 'cm-hint', '旧楼层动画只播一遍，手机上通常更省电、更不卡。'), segmented({
+        label: '省电显示',
         options: [
             { value: 'auto', label: '自动', hint: '手机和 TauriTavern 上开，电脑上关。' },
             { value: 'on', label: '开', hint: '旧楼层动画只播一遍、不做毛玻璃，悬浮挂件约 20 秒后停。' },
@@ -65,7 +65,6 @@ export function buildOtherTab(pane, settings, save) {
         current: ['on', 'off'].includes(settings.quietRender) ? settings.quietRender : 'auto',
         onChange: (v) => { settings.quietRender = v; F.quiet.applyQuietRender(); save(); F.perf.renderPerfNote(); },
     }));
-    pane.append(quiet.root);
 
     const perf = collapsible('性能诊断', '测几秒，找出让页面卡的楼层。', { id: 'claude_max_perf_section' });
     const perfNote = el('small', 'cm-hint');
@@ -77,12 +76,10 @@ export function buildOtherTab(pane, settings, save) {
     F.perf.renderPerfNote(perfNote); // not in the document yet
     pane.append(perf.root);
 
-    const compact = collapsible('脚本按钮并排', '酒馆助手的脚本按钮排成一行。', { id: 'claude_max_compact' });
-    compact.body.append(toggleRow({
-        id: 'claudeMaxCompactButtons', title: '输入栏脚本按钮并排', desc: '省一行输入栏高度。',
+    pane.append(toggleRow({
+        id: 'claudeMaxCompactButtons', title: '脚本按钮并排', desc: '酒馆助手的脚本按钮排成一行，省一行输入栏高度。',
         checked: settings.compactScriptButtons, onChange: (v) => { settings.compactScriptButtons = v; save(); F.compact.applyCompactButtons(); },
     }));
-    pane.append(compact.root);
 
     const dbg = collapsible('查看发给模型的请求', '排查缓存和提示词时，看最近一次发出的完整内容。', { id: 'claude_max_debug' });
     dbg.body.append(toggleRow({
