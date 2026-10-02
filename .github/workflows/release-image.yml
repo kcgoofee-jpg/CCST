@@ -47,9 +47,9 @@ jobs:
           tags: ccst:arm64-smoke
       - name: arm64 起容器并检查
         run: |
-          docker run -d --name ccst-arm --platform linux/arm64 -p 8901:8901 ccst:arm64-smoke
+          docker run -d --name ccst-arm --platform linux/arm64 -p 127.0.0.1:8901:8901 -e CLAUDE_SUBSCRIPTION_LAN_KEY=ci-test-key ccst:arm64-smoke
           for i in $(seq 1 60); do
-            if curl -fsS http://127.0.0.1:8901/status | grep -q '"plugin":"claude-subscription"'; then ok=1; break; fi
+            if curl -fsS -H 'Authorization: Bearer ci-test-key' http://127.0.0.1:8901/status | grep -q '"plugin":"claude-subscription"'; then ok=1; break; fi
             sleep 2
           done
           docker logs ccst-arm | tail -20
