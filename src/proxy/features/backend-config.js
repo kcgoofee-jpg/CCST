@@ -34,6 +34,7 @@ import { dirname, join } from 'node:path';
 import { BACKENDS, BACKEND_LABELS, isApiBilled, normalizeBackend } from '../../shared/backends.js';
 import { busyCount } from '../platform/control.js';
 import { DATA_DIR } from '../paths.js';
+import { envValue } from '../env-value.js';
 
 // field → { secret, env override }
 export const FIELDS = {
@@ -96,13 +97,13 @@ export function resolveBackendConfig({ env = process.env, file = readFileConfig(
     for (const [b, defs] of Object.entries(FIELDS)) {
         fields[b] = {};
         for (const [name, def] of Object.entries(defs)) {
-            const fromEnv = String(env[def.env] ?? '').trim();
+            const fromEnv = envValue(env[def.env]);
             const fromFile = typeof file?.[b]?.[name] === 'string' ? file[b][name].trim() : '';
             if (fromEnv) envFields.push(`${b}.${name}`);
             fields[b][name] = fromEnv || fromFile;
         }
     }
-    const envBackend = String(env.CLAUDE_SUBSCRIPTION_BACKEND ?? '').trim();
+    const envBackend = envValue(env.CLAUDE_SUBSCRIPTION_BACKEND);
     let backend; let source;
     if (BACKENDS.includes(envBackend)) { backend = envBackend; source = 'env'; }
     else if (BACKENDS.includes(file?.backend)) { backend = file.backend; source = 'file'; }

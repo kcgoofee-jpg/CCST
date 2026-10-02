@@ -6,6 +6,7 @@
 // of these each endpoint gets; listener.js installs the global ones.
 
 import { timingSafeEqual } from 'node:crypto';
+import { envValue } from '../env-value.js';
 
 // Reflect only loopback origins — a wildcard would let ANY web page the user
 // visits read subscription/billing data off these unauthenticated GETs.
@@ -126,7 +127,7 @@ export function guardRemote(req, res, next) {
         res.setHeader('Access-Control-Allow-Origin', req.headers.origin);
         res.setHeader('Vary', 'Origin');
     }
-    const expected = process.env.CLAUDE_SUBSCRIPTION_LAN_KEY;
+    const expected = envValue(process.env.CLAUDE_SUBSCRIPTION_LAN_KEY);
     // 手机相机扫了酒馆工具的二维码、在浏览器里打开：给一张能看懂的页面，不给 JSON
     if (req.method === 'GET' && /text\/html/.test(String(req.headers.accept ?? ''))) return res.status(200).type('html').send(CONNECT_PAGE);
     if (!expected) {

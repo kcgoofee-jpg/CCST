@@ -68,7 +68,7 @@ case "$PORT" in *[!0-9]*) die "--port 必须是数字" ;; esac
 case "$DIR" in *" "*) die "安装目录不能有空格：$DIR" ;; esac
 
 # 读 env 文件里的一项（不 source，避免执行任何东西）
-env_get() { if [ -f "$ENV_FILE" ]; then sed -n "s/^$1=//p" "$ENV_FILE" | tail -n 1; fi; }
+env_get() { if [ -f "$ENV_FILE" ]; then sed -n "s/^$1=//p" "$ENV_FILE" | tail -n 1 | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"; fi; }
 
 have_systemd_user() {
     [ "${CCST_NO_SYSTEMD:-}" != 1 ] || return 1
