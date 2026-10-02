@@ -129,7 +129,7 @@ https://github.com/kcgoofee-jpg/CCST
   zsh -c "$(curl -fsSL https://raw.githubusercontent.com/kcgoofee-jpg/CCST/main/install-mac.sh)"
   ```
   ② 在 TauriTavern 里装 CCST 扩展，面板点「一键连接」；③ 手机上用：菜单首页按 `1` 进「手机」页，按 `x` 开启手机模式，把那一页的「手机连接码」整串粘贴到手机面板的卡片里，点「连接」（也可以扫二维码后点复制）。更新：在终端再运行一次那一行（覆盖代码，保留登录和数据），然后在酒馆工具里选「重启代理」。[详细](docs/使用指南.md#用法二-tauritavern-与手机)。Windows / Linux 请用用法一或用法三。
-- 用法三 服务器 / 云酒馆：一条命令或 Docker，[详细](docs/使用指南.md#用法三-服务器与-docker)（CI 已在 Linux 上实测安装和 Docker；Docker 镜像还没发布，需自己构建，发布流程已就绪，随 5.0 发布）。
+- 用法三 服务器 / 云酒馆：一条命令或 Docker，[详细](docs/使用指南.md#用法三-服务器与-docker)（CI 已在 Linux 上实测安装和 Docker；Docker 镜像还没发布，需自己构建，发布流程已就绪，随下一个版本发布）。
 
 更多细节（缓存原理、环境变量、所有设置项）在 **[使用指南](docs/使用指南.md)**，计划在 **[路线图](docs/路线图.md)**。
 

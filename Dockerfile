@@ -1,5 +1,5 @@
 # CCST 独立代理（不含酒馆）。构建：docker build -t ccst .   运行示例见 deploy/docker-compose.yml
-# 镜像还没发布，需要自己构建；发布流程（.github/workflows/release-image.yml）已就绪，随 5.0 发布。
+# 镜像还没发布，需要自己构建；发布流程（.github/workflows/release-image.yml）已就绪，随下一个版本发布。
 FROM node:22-bookworm-slim
 
 LABEL org.opencontainers.image.source="https://github.com/kcgoofee-jpg/CCST" \

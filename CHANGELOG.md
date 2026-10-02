@@ -6,7 +6,7 @@
 
 主版本升级的原因（按[版本规范](docs/版本规范.md)）：Mac 的安装方式变了（终端一行安装，取代双击下载的 `.command`），启动器菜单结构变了，手机 / TauriTavern 连电脑上的代理明确只支持 Mac。原计划的 4.6（预设体检、连接提示）并入这一版。
 
-**已知问题（计划 5.1）**：原版酒馆的「下载一键安装（Mac）」zip 在 macOS 15 以上仍会被系统拦住（[#22](https://github.com/kcgoofee-jpg/CCST/issues/22)）；Opus 4.7 / 4.8 / 5 是否接受「关思考」没实测（[#23](https://github.com/kcgoofee-jpg/CCST/issues/23)）；手机模式从关到开的完整流程和未登录状态下的一行安装还没在真机上补测（[#24](https://github.com/kcgoofee-jpg/CCST/issues/24)）；GHCR 镜像首次发布后需要仓库主人把包改成公开（[#25](https://github.com/kcgoofee-jpg/CCST/issues/25)）。
+**已知问题（计划 5.1）**：原版酒馆的「下载一键安装（Mac）」zip 在 macOS 15 以上仍会被系统拦住（[#22](https://github.com/kcgoofee-jpg/CCST/issues/22)）；Opus 4.7 / 4.8 / 5 是否接受「关思考」没实测（[#23](https://github.com/kcgoofee-jpg/CCST/issues/23)）；手机模式从关到开的完整流程和未登录状态下的一行安装还没在真机上补测（[#24](https://github.com/kcgoofee-jpg/CCST/issues/24)）；GHCR 镜像还没发布：v5.0.0 标签触发的发布流程在 arm64 冒烟测试这一步失败（测试脚本没带访问密码，已修，手动运行已通过），所以 5.0.0 没有镜像，随下一个标签发布，之后还要把包改成公开（[#25](https://github.com/kcgoofee-jpg/CCST/issues/25)）。
 
 ### 改动（Mac 终端启动器重新设计）
 - **一个窗口走到底**：一行安装做完后不再关窗口，写出「接下来」三步，按回车直接进「酒馆工具」菜单。菜单正常退出（按 q）才关窗口；菜单出错时窗口保留并显示报错。窗口自动拉到 84×32，放得下二维码。
