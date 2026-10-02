@@ -193,6 +193,7 @@ export async function refreshStats() {
         const data = await res.json();
         glancePatch({ cache: data.lastCache?.hitPct ?? null });
         store.set({ stats: { phase: 'ok', data } });
+        store.set({ statsAt: Date.now() }); // 回复后自动刷新也要更新「更新于」时间
     } catch (err) {
         store.set({ stats: { phase: 'error', error: err } });
     }

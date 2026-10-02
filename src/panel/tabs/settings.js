@@ -52,15 +52,6 @@ export function buildSettingsTab(pane, settings, save) {
     thinking.id = 'claude_max_thinking';
     queueMicrotask(syncAlwaysThinks);
     think.body.append(thinking);
-    think.body.append(segmented({
-        label: '后台请求思考深度',
-        options: [
-            { value: 'low', label: '低', hint: '其他插件的后台请求（生图 tag、总结）用「低」，通常更快、更省额度。' },
-            { value: 'follow', label: '跟随', hint: '后台请求也用「推理」页的深度。' },
-        ],
-        current: settings.quietEffort === 'follow' ? 'follow' : 'low',
-        onChange: (v) => { settings.quietEffort = v === 'follow' ? 'follow' : 'low'; save(); },
-    }));
     think.body.append(toggleRow({
         id: 'claudeMaxShowReasoning', title: '显示思考过程', desc: '跟随酒馆「显示模型思维」；关掉则总不显示。',
         checked: settings.showReasoning, onChange: (v) => { settings.showReasoning = v; save(); },
@@ -76,6 +67,17 @@ export function buildSettingsTab(pane, settings, save) {
     // chat). Kept for chasing cache problems, folded away so nobody has to think about it.
     const adv = collapsible('高级', '缓存与上下文的开关，一般不用动。', { id: 'claude_max_advanced' });
     const add = (x) => adv.body.append(x);
+    // 只管「借用酒馆当前连接、被酒馆标成静默生成」的请求；扩展自己配了独立 API 的不经过代理，管不到。
+    // 能关思考的模型上后台请求本来就不思考，这项只对总会思考的模型（Opus 5.5、Sonnet 5.5…）有影响。
+    add(segmented({
+        label: '后台请求思考深度',
+        options: [
+            { value: 'low', label: '低', hint: '借用酒馆连接的后台请求（总结、变量更新等）用「低」。只对总会思考的模型有影响；扩展自己配了独立 API 的管不到。' },
+            { value: 'follow', label: '跟随', hint: '后台请求也用「推理」页的深度。' },
+        ],
+        current: settings.quietEffort === 'follow' ? 'follow' : 'low',
+        onChange: (v) => { settings.quietEffort = v === 'follow' ? 'follow' : 'low'; save(); },
+    }));
     add(toggleRow({
         id: 'claudeMaxResume', title: '会话续接', desc: '按真实多轮发送，预计能用上缓存。',
         more: '关掉会把聊天记录压成一整段，只在排查时关。',

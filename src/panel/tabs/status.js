@@ -166,7 +166,9 @@ function backendUsageLine(backends, pricesAsOf) {
 }
 
 /** The cache result in plain words (the proxy's headline has the numbers; this says what they mean). */
-function cacheVerdict(hitPct) {
+function cacheVerdict(hitPct, firstTurn = false) {
+    // 第一轮本来就读不到缓存：不是出错，用中性提示，别用黄色警告
+    if (firstTurn) return { tone: 'info', text: '本聊天第一轮：整段写入缓存，下一轮起读取' };
     if (hitPct >= 80) return { tone: 'ok', text: `缓存命中 ${hitPct}%，大部分读了缓存` };
     if (hitPct >= 50) return { tone: 'ok', text: `缓存命中 ${hitPct}%，大半读了缓存` };
     return { tone: 'warn', text: `缓存命中 ${hitPct}%，大部分重写了，通常偏慢、偏耗额度` };
@@ -176,7 +178,7 @@ function cacheVerdict(hitPct) {
 function lastTurnCard(data) {
     const c = data.lastCache;
     const last = data.lastRequest;
-    const v = cacheVerdict(c.hitPct);
+    const v = cacheVerdict(c.hitPct, c.firstTurn);
     const card = note(v.tone, v.text);
     if (last) {
         card.append(el('small', 'cm-hint',

@@ -102,3 +102,11 @@ test('体检: sub-toggles are greyed while the master switch is off', () => {
     assert.match(check, /input\.disabled = !settings\.heuristicChecks/);
     assert.match(check, /claudeMaxCheckupToast', 'claude_max_card_audit_on/);
 });
+
+test('explainCache flags a first turn so the panel can show a neutral note', async () => {
+    const { explainCache } = await import('../src/proxy/features/cache-diag.js');
+    const base = { ok: true, cacheReadTokens: 0, cacheCreationTokens: 1000, inputTokens: 3, outputTokens: 10, model: 'm' };
+    assert.equal(explainCache({ ...base, cacheDiag: { firstTurn: true, chat: 'a' } }).firstTurn, true);
+    assert.equal(explainCache({ ...base }).firstTurn, true);
+    assert.equal(explainCache({ ...base, cacheDiag: { firstTurn: false, chat: 'a', systemChanged: false, historyDiffAt: null } }, { ...base, model: 'm', cacheDiag: { chat: 'a' } }).firstTurn, false);
+});

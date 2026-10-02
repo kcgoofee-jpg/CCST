@@ -105,6 +105,9 @@ function presetRegexNote(ctx) {
     } catch { return ''; }
 }
 
+// 同一个预设的提示只说一次（重新连接、再点一键连接时不要又弹一遍）
+const advised = new Set();
+
 /** After connecting: Opus 4.6, then the 「CCST」 profile (slash commands of ST's connection manager). */
 async function connectProfile(settings, keepModel = '') {
     try {
@@ -128,6 +131,9 @@ async function connectProfile(settings, keepModel = '') {
             notify('ok', '已连接', profileNotice({ existed: res.existed, modelOk, modelLabel: shortModel(target) }), { ms: 10000, replace: 'connect-profile' });
             const preset = ctx.chatCompletionSettings?.preset_settings_openai ?? '';
             for (const a of connectAdvice({ presetNote: libs.presetReco?.presetMismatchNote?.(preset) ?? '', regexNote: presetRegexNote(ctx) })) {
+                const once = `${preset}|${a.key}`;
+                if (advised.has(once)) continue;
+                advised.add(once);
                 notify('warn', '提示', a.text, { ms: 12000, replace: a.key });
             }
         }
