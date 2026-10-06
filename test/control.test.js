@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 import { ACTIONS, handleControlAction, countInFlight, busyCount, markStandalone, __setInFlight, LID_PAUSE_FILE } from '../src/proxy/platform/control.js';
 
@@ -91,6 +91,18 @@ test('inside SillyTavern (plugin mode) restart-proxy is refused: it would stop S
     if (res.statusCode === 501) return; // no launcher checkout here
     assert.equal(res.statusCode, 409);
     assert.match(res.body.message, /酒馆/);
+});
+
+test('restart-proxy re-checks busy inside the detached script, right before it stops (closes the TOCTOU window)', () => {
+    const script = ACTIONS['restart-proxy'].script;
+    assert.ok(script.includes('proxy_busy'), '脚本要用 proxy_busy 再确认一次空闲');
+    assert.ok(script.indexOf('proxy_busy') < script.indexOf('stop_one'), '确认空闲在 stop_one 之前');
+});
+
+test('a detached action reports what actually happened: handed over, still waiting for idle', () => {
+    const src = readFileSync(new URL('../src/proxy/platform/control.js', import.meta.url), 'utf8');
+    assert.match(src, /action\.script[\s\S]{0,120}已交给后台/);
+    assert.ok(src.includes('idleNote ? `，${action.idleNote}`'), 'says 写完再重启 rather than 已执行');
 });
 
 test('the lid pause file lives in launcher/ and is git-ignored (*.local)', () => {

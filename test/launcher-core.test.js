@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import {
     classify, diagnoseText, loadConfig, parseConfig, parseLsofCwd, parseNetstat, parseTsv, readState, recentLog,
-    restartRefusal, services, stopService,
+    reportedProxyPid, restartRefusal, services, startService, stopAll, stopService,
 } from '../launcher/core.mjs';
 import { nodeAction } from '../launcher/menu.mjs';
 
@@ -124,6 +124,87 @@ function jsonFetch(map) {
         return { ok: true, json: async () => hit[1] };
     };
 }
+
+/** 收下行输出、够用的 reporter（stopAll / startService 只用这些方法）。 */
+function rec() {
+    const lines = [];
+    return {
+        warn: 0, fail: 0, lines,
+        step() {}, banner() {}, head() {}, explain() {}, ok() {}, fix() {},
+        warnLine(t) { lines.push(t); this.warn++; },
+        failLine(t) { lines.push(t); this.fail++; },
+    };
+}
+const proxyCfg = { root: ROOT, stDir: '', stPort: 8000, proxyPort: 8901, logDir: '/logs', restartMark: '/nope/restarting.local', lanKeyFile: '/nope/lan-key.local' };
+const proxySvc = services(proxyCfg)[0];
+
+// ── C1：端口上是酒馆内插件时，绝不能把酒馆的 PID 当代理关掉 ──
+
+test('reportedProxyPid 只认「单独运行的代理」报的 PID；插件占用时认出来但不给 PID', async () => {
+    const plugin = await reportedProxyPid(proxyCfg, jsonFetch({ '/status': { ok: true, plugin: 'claude-subscription', runtime: 'plugin', pid: 400 } }));
+    assert.deepEqual(plugin, { pid: null, plugin: true });
+    const alone = await reportedProxyPid(proxyCfg, jsonFetch({ '/status': { ok: true, plugin: 'claude-subscription', runtime: 'standalone', pid: 400 } }));
+    assert.deepEqual(alone, { pid: 400, plugin: false });
+});
+
+test('stopAll：/status 报 runtime=plugin 时不杀那个 PID，并提示直接关酒馆', async () => {
+    const pid = 400;
+    const proc = fakeProc({ listeners: [pid], cwds: { [pid]: '/Applications/SillyTavern' }, names: { [pid]: 'node' } });
+    const r = rec();
+    await stopAll(proxyCfg, r, proc, { fetchImpl: jsonFetch({ '/status': { ok: true, plugin: 'claude-subscription', runtime: 'plugin', pid } }) });
+    assert.deepEqual(proc.killed, [], '酒馆内插件的 PID 不能被关');
+    assert.match(r.lines.join('\n'), /酒馆内插件占用/);
+});
+
+test('stopAll：runtime=standalone 时照旧按代理自己报的 PID 关掉（Termux 没有 lsof）', async () => {
+    const pid = 400;
+    const proc = fakeProc({ listeners: null });
+    const r = rec();
+    await stopAll(proxyCfg, r, proc, { fetchImpl: jsonFetch({ '/status': { ok: true, plugin: 'claude-subscription', runtime: 'standalone', pid } }) });
+    assert.deepEqual(proc.killed, [[pid, 'SIGTERM']]);
+    assert.ok(!r.lines.join('\n').includes('酒馆内插件占用'));
+});
+
+// ── C2：端口通了要确认应答的就是我们刚启动的进程 ──
+
+test('startService 只在 /status 确认是自己启动的进程后才报「已启动」', async () => {
+    const noop = async () => {};
+    const freeProc = fakeProc({ listeners: [] });
+    const cfg = { logDir: '/logs' };
+
+    // 端口开、进程在、/status 报的就是刚启动的 PID → 成功
+    const okRep = rec();
+    const ok = await startService(proxySvc, okRep, freeProc, cfg, {
+        launch: () => ({ pid: 1234, exited: () => false }),
+        probe: async () => true,
+        wait: noop,
+        fetchImpl: jsonFetch({ '/status': { ok: true, plugin: 'claude-subscription', runtime: 'standalone', pid: 1234 } }),
+    });
+    assert.equal(ok, true);
+    assert.equal(okRep.fail, 0);
+
+    // 端口开、进程在，但 /status 报的是另一个 PID（别的程序占着端口）→ 失败，不算「已启动」
+    const badRep = rec();
+    const bad = await startService(proxySvc, badRep, freeProc, cfg, {
+        launch: () => ({ pid: 1234, exited: () => false }),
+        probe: async () => true,
+        wait: noop,
+        fetchImpl: jsonFetch({ '/status': { ok: true, plugin: 'claude-subscription', runtime: 'standalone', pid: 9999 } }),
+    });
+    assert.equal(bad, false);
+    assert.equal(badRep.fail, 1);
+
+    // 端口开，但本工具启动的进程马上就退了 → 失败
+    const deadRep = rec();
+    const dead = await startService(proxySvc, deadRep, freeProc, cfg, {
+        launch: () => ({ pid: 1234, exited: () => true }),
+        probe: async () => true,
+        wait: noop,
+        fetchImpl: jsonFetch({ '/status': { ok: true, pid: 1234 } }),
+    });
+    assert.equal(dead, false);
+    assert.equal(deadRep.fail, 1);
+});
 
 test('readState on Windows: proxy/HTTP fields filled, Mac-only probes n/a', async () => {
     const cfg = loadConfig({ root: ROOT, env: {}, os: 'win', termux: false, exists: () => false, read: () => { throw new Error(); }, home: 'C:\\Users\\u' });

@@ -67,7 +67,10 @@ export const ACTIONS = {
     'restart-proxy': {
         label: '重启代理',
         // Detached: the old proxy is stopped from outside, then started again.
-        script: 'sleep 1; stop_one $PROXY_PORT "Claude 代理" >/dev/null 2>&1; start_proxy >/dev/null 2>&1',
+        // The idle precheck above is a TOCTOU window — a reply can start during the sleep.
+        // Re-check busy right before stop_one (proxy_busy) and wait, or give up, so a reply
+        // being written is never cut from here.
+        script: 'sleep 1; for i in {1..30}; do proxy_busy || break; sleep 2; done; proxy_busy || { stop_one $PROXY_PORT "Claude 代理" >/dev/null 2>&1; start_proxy >/dev/null 2>&1; }',
         whenIdle: true,
         idleNote: '写完再重启',
         standaloneOnly: true,
@@ -141,7 +144,10 @@ export async function handleControlAction(req, res) {
     }
     await logEvent(action.label);
     if (action.run) action.run();
-    res.json({ ok: true, message: `${action.label}：已执行` });
+    // A detached script has only been handed over — it still waits for the proxy to go idle.
+    res.json({ ok: true, message: action.script
+        ? `${action.label}：已交给后台${action.idleNote ? `，${action.idleNote}` : ''}`
+        : `${action.label}：已执行` });
     if (action.script) zsh(action.script, { detached: true });
 }
 

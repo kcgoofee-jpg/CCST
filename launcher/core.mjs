@@ -675,16 +675,8 @@ export async function stopService(svc, r, proc, { reportedPid = null, wait = sle
 }
 function cleanPid(svc) { try { unlinkSync(svc.pidFile); } catch { /* 没有 */ } }
 
-/** 在后台启动一个程序（自己一个进程组，关掉菜单窗口不影响），等端口出现。 */
-export async function startService(svc, r, proc, cfg, { reportedPid = null } = {}) {
-    const c = classify(svc, proc, { reportedPid });
-    if (c.ours.length) { r.ok(`${svc.label} 已经在运行，跳过`); return true; }
-    if (c.foreign.length) {
-        const owner = proc.name(c.foreign[0]) || '未知程序';
-        r.failLine(`端口 ${svc.port} 被其他程序占着：${owner}，${svc.label}启动不了`);
-        r.fix(`关闭「${owner}」后再试，或重启电脑。`);
-        return false;
-    }
+/** 在后台拉起一个程序（自己一个进程组，关掉菜单窗口不影响），返回 { pid, exited() }。测试里换成假的。 */
+function launchService(svc, cfg, r) {
     mkdirSync(cfg.logDir, { recursive: true });
     // 超过 5MB 改名为 .old，只留一份旧日志
     try { if (statSync(svc.log).size > 5 * 1024 * 1024) renameSync(svc.log, svc.log + '.old'); } catch { /* 还没有日志 */ }
@@ -707,42 +699,87 @@ export async function startService(svc, r, proc, cfg, { reportedPid = null } = {
     child.on('error', () => { exited = true; });
     child.unref();
     if (child.pid) writeFileSync(svc.pidFile, String(child.pid));
+    return { pid: child.pid, exited: () => exited };
+}
+
+/** 端口通了不代表是我们启动的：确认进程还在，代理还要 /status 报的 PID 就是刚起的这个。 */
+async function startedByUs(svc, child, fetchImpl, wait) {
+    if (child.exited()) return false;
+    if (svc.key !== 'proxy') return true;
+    const url = `http://127.0.0.1:${svc.port}/status`;
+    // 端口刚通 /status 可能还没就绪：读不到就再试；读到但 PID 对不上就是别的程序占着端口
+    for (let i = 0; i < 10; i++) {
+        const s = await getJson(url, fetchImpl);
+        if (s) return s.pid === child.pid;
+        if (child.exited()) return false;
+        await wait(200);
+    }
+    return false;
+}
+
+/** 在后台启动一个程序，等端口出现，再确认应答端口的是我们自己启动的那个（别的程序占着端口不算启动成功）。 */
+export async function startService(svc, r, proc, cfg, { reportedPid = null, launch = launchService, probe = portOpen, fetchImpl = globalThis.fetch, wait = sleep } = {}) {
+    const c = classify(svc, proc, { reportedPid });
+    if (c.ours.length) { r.ok(`${svc.label} 已经在运行，跳过`); return true; }
+    if (c.foreign.length) {
+        const owner = proc.name(c.foreign[0]) || '未知程序';
+        r.failLine(`端口 ${svc.port} 被其他程序占着：${owner}，${svc.label}启动不了`);
+        r.fix(`关闭「${owner}」后再试，或重启电脑。`);
+        return false;
+    }
+    const child = launch(svc, cfg, r);
+    if (!child.pid) {
+        r.failLine(`${svc.label}启动后马上退出了`);
+        diagnoseLog(r, [svc.log], svc.label);
+        return false;
+    }
     const start = Date.now();
     let next = 10;
+    let opened = false;
     while (Date.now() - start < svc.secs * 1000) {
-        if (await portOpen(svc.port)) { r.ok(`${svc.label} 已启动：http://127.0.0.1:${svc.port}${svc.key === 'proxy' ? '/v1' : ''}`); return true; }
-        if (exited) break;
-        await sleep(300);
+        if (await probe(svc.port)) { opened = true; break; }
+        if (child.exited()) break;
+        await wait(300);
         if ((Date.now() - start) / 1000 >= next) { r.explain(`已等待 ${next} 秒…`); next += 10; }
     }
-    r.failLine(exited ? `${svc.label}启动后马上退出了` : `${svc.label} ${svc.secs} 秒内没有启动成功`);
+    if (opened && (await startedByUs(svc, child, fetchImpl, wait))) {
+        r.ok(`${svc.label} 已启动：http://127.0.0.1:${svc.port}${svc.key === 'proxy' ? '/v1' : ''}`);
+        return true;
+    }
+    r.failLine(child.exited() ? `${svc.label}启动后马上退出了` : opened ? `${svc.label} 端口已经通了，但应答的不是本工具启动的进程` : `${svc.label} ${svc.secs} 秒内没有启动成功`);
     diagnoseLog(r, [svc.log], svc.label);
     return false;
 }
 
-async function reportedProxyPid(cfg) {
-    return (await getJson(`http://127.0.0.1:${cfg.proxyPort}/status`))?.pid ?? null;
+/** 端口上应答的进程号：只认 /status 自己说是「单独运行的代理」时报的 PID。plugin = 端口上是酒馆内插件（PID 属于酒馆，绝不能去关它）。 */
+export async function reportedProxyPid(cfg, fetchImpl = globalThis.fetch) {
+    const s = await getJson(`http://127.0.0.1:${cfg.proxyPort}/status`, fetchImpl);
+    if (!s || s.plugin !== 'claude-subscription') return { pid: null, plugin: false };
+    if (s.runtime === 'standalone') return { pid: s.pid ?? null, plugin: false };
+    return { pid: null, plugin: s.runtime === 'plugin' };
 }
 
-async function stopAll(cfg, r, proc) {
+export async function stopAll(cfg, r, proc, { fetchImpl = globalThis.fetch } = {}) {
     r.step(cfg.stDir ? '关闭酒馆和 Claude 代理' : '关闭 Claude 代理');
-    const pid = await reportedProxyPid(cfg);
+    const { pid, plugin } = await reportedProxyPid(cfg, fetchImpl);
+    if (plugin) r.warnLine(`端口 ${cfg.proxyPort} 被酒馆内插件占用，要关闭请直接关酒馆`);
     let ok = true;
     for (const svc of services(cfg)) {
         const mark = svc.key === 'proxy' ? () => { try { writeFileSync(cfg.restartMark, ''); } catch { /* 标记写不了不要紧 */ } } : undefined;
-        ok = (await stopService(svc, r, proc, { reportedPid: svc.key === 'proxy' ? pid : null, mark })) && ok;
+        // 酒馆内插件的 PID 属于酒馆，不能当成我们的代理去关
+        ok = (await stopService(svc, r, proc, { reportedPid: svc.key === 'proxy' && !plugin ? pid : null, mark })) && ok;
     }
     return ok;
 }
 
-async function startAll(cfg, r, proc) {
+async function startAll(cfg, r, proc, { fetchImpl = globalThis.fetch } = {}) {
     const managed = cfg.stDir && cfg.stAutostart;
     const list = services(cfg).filter((s) => s.key === 'proxy' || managed);
     r.step(managed ? `启动 Claude 代理（端口 ${cfg.proxyPort}）和酒馆（端口 ${cfg.stPort}）` : `启动 Claude 代理（端口 ${cfg.proxyPort}）`);
     if (managed) r.explain('酒馆首次启动或更新后需要编译前端，可能要 10–60 秒，请耐心等待。');
-    const pid = await reportedProxyPid(cfg);
+    const { pid, plugin } = await reportedProxyPid(cfg, fetchImpl);
     // 酒馆编译前端最慢：两个同时启动
-    const res = await Promise.all(list.map((svc) => startService(svc, r, proc, cfg, { reportedPid: svc.key === 'proxy' ? pid : null })));
+    const res = await Promise.all(list.map((svc) => startService(svc, r, proc, cfg, { reportedPid: svc.key === 'proxy' && !plugin ? pid : null })));
     try { unlinkSync(cfg.restartMark); } catch { /* 没有 */ }
     return { proxyOk: res[list.findIndex((s) => s.key === 'proxy')], stOk: managed ? res[0] : false };
 }
