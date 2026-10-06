@@ -24,24 +24,20 @@
 
 酒馆本身只能用按量付费的 API。CCST 是一个酒馆插件，装上以后：
 
-| | |
-| --- | --- |
-| 🎟️ **用订阅聊天**<br>Claude Pro / Max 直接用，不用另买额度；API 密钥、Bedrock、Vertex、OpenRouter 也行 | 💰 **长聊预计更省额度**<br>长聊天里通常能少重算一部分内容，靠缓存 |
-| 🛟 **断线回复不丢**<br>浏览器关了、断网了，回复照样写完，回来自动补上 | 🔀 **一键切换模型**<br>Opus 5.5 / Opus 4.6 / Sonnet 5.5，思考深度随时调 |
-| 🩺 **回复拒绝 / 截断提示**<br>模型拒绝、回复被截断或为空时，状态里直接写明；字数、禁词等检查在「其他」里，实验性 | 📦 **装起来很短**<br>原版酒馆：Mac 终端粘贴一行 / Windows 双击一键安装；Mac 上给 TauriTavern 和手机用：终端粘贴另一行，做完直接进菜单 |
+| 🎟️ **用订阅聊天**<br>Claude Pro / Max ；| 💰 **长聊更省额度**<br>长聊天里通常能少重算一部分内容|
+| 🛟 **断线回复不丢**<br>浏览器意外关闭、断网，回复照样写完，回来自动补上 | 
+| 🩺 **回复拒绝 / 截断提示**<br>模型拒绝、回复被截断或为空时，消息提示；字数、禁词等检查在「其他」里，实验性 | 
 
-面板里还能看订阅额度和每轮用量。
-
-> 关于效果：缓存、省额度等好处的大小取决于预设、世界书和其他扩展，只是预计，没有在所有组合上实测；面板里显示的每轮缓存命中率是实测值。
+> 关于效果：缓存、省额度等好处的大小取决于预设、世界书和其他扩展的组合，请注意自行debug或携带信息联系作者；面板里显示的每轮缓存命中率是实测值。
 
 > [!CAUTION]
 > 用订阅跑第三方程序**不在** Anthropic 允许的范围内，账号可能被限制或封禁。不能接受就用 API 密钥（见下面「其他用法」）。详见[风险提示](#风险提示)。
 
-## 你需要
+## 通常你需要
 
-- 一台电脑（Mac / Windows / Linux），装好 [SillyTavern](https://github.com/SillyTavern/SillyTavern)。[Node.js](https://nodejs.org) 18 以上（没有的话一键安装会提醒你）。只用 TauriTavern / 手机、不用电脑上的酒馆：见下面「其他用法」的用法二（目前只支持 Mac）。
-- Claude Pro 或 Max 订阅（或 API 密钥）。
-- 浏览器用 Chrome 或 Edge。
+- 一台电脑或服务器（vps），装好 [SillyTavern](https://github.com/SillyTavern/SillyTavern)。[Node.js](https://nodejs.org) 18 以上
+- Claude Pro 或 Max 订阅
+- 浏览器使用 Chrome 或 Edge
 
 ## 安装（5 分钟）
 
@@ -51,10 +47,11 @@
 https://github.com/kcgoofee-jpg/CCST
 ```
 
-**2. 拿到一键安装。** 装好后打开 **CCST** 面板，会看到一张「连不上 CCST 代理」的卡片：Mac 点「复制命令」，Windows 点 **下载一键安装（Windows）**。（这是给电脑浏览器里的原版酒馆用的；TauriTavern 和手机不能装酒馆插件，卡片会改给别的步骤，见[使用指南「连不上时看哪一条」](docs/使用指南.md#连不上时看哪一条)。）
+**2. 拿到一键安装。** 装好后打开 **CCST** 面板，会看到一张「连不上 CCST 代理」的指引卡片：Mac 点「复制命令」，Windows 点 **下载一键安装（Windows）**。
 
-**3. 运行它，跟着提示登录 Claude。** Mac：打开「终端」，粘贴下面这行，回车（用终端下载，不会被 macOS 拦）；Windows：双击下载的文件。它会自己找到酒馆、装好需要的东西，中间会打开浏览器让你登录 Claude 账号（只需一次）。全部完成时窗口里会写「装好了」。
-
+**3. 运行它，跟着提示登录 Claude。** 
+Mac：打开「终端」，粘贴下面这行，回车；
+Windows：双击下载的文件。它会自己找到酒馆、装好需要的东西，中间会打开浏览器让你登录 Claude 账号（只需一次）。全部完成时窗口里会写「装好了」。
 
 ```
 zsh -c "$(curl -fsSL https://raw.githubusercontent.com/kcgoofee-jpg/CCST/main/install-plugin-mac.sh)"
@@ -62,9 +59,9 @@ zsh -c "$(curl -fsSL https://raw.githubusercontent.com/kcgoofee-jpg/CCST/main/in
 
 - Mac 不要双击下载来的 `.command`：macOS 15 以上会提示「无法验证开发者」，只有「完成 / 移到废纸篓」。用上面这行终端命令就不会遇到。
 - Windows 可能弹出蓝色的「Windows 已保护你的电脑」：点「更多信息」→「仍要运行」。
-- 电脑里没有 Node.js 的话，它会替你打开下载页；装好后再运行一次（Mac 粘贴同一行，Windows 再双击）就行。
+- 电脑里没有 Node.js 的话，它会替你打开下载页；装好后再运行一次（Mac 粘贴同一行，Windows 再双击）
 
-**4. 重启酒馆。** 关掉酒馆再打开，浏览器按 `Ctrl+F5`（Mac 是 `Cmd+Shift+R`）刷新。面板会自动连上，之后就能聊天了。
+**4. 重启酒馆。** 关掉酒馆再打开，浏览器刷新。面板会自动连接，之后就能聊天了。
 
 以后只要正常启动酒馆，CCST 会跟着启动，不用再做任何事。想更新：再双击一次同一个文件。
 
@@ -96,14 +93,7 @@ zsh -c "$(curl -fsSL https://raw.githubusercontent.com/kcgoofee-jpg/CCST/main/in
 4. 重启酒馆，在 **CCST** 面板点 **一键连接**。
 
 常见问题：
-
-- **面板说「连不上 CCST 代理」**：确认 `config.yaml` 里是 `true`，并且重启过酒馆。酒馆的黑窗口里应该有一行 `[claude-subscription] initialised`。
-- **一键安装说找不到酒馆**：把酒馆文件夹（里面有 `server.js`）拖进安装窗口，再按回车。
-- **`npm install` 报错**：不要加 `--omit=optional`；Node 版本要 18 以上（终端运行 `node -v` 查看）。
-- **面板说「没登录 Claude」**：再双击一次一键安装，或在 `plugins/CCST` 里运行 `npm run login`。
-- **面板没出现**：强制刷新浏览器；还不行就在「扩展 → 管理扩展」里看 CCST 有没有被关掉。
-- **一键安装被安全软件拦了 / 网页里没有下载按钮**：直接从[本仓库的 installer 文件夹](installer)下载，或按上面的手动步骤做。
-- **状态页显示「缓存命中 0%」，换预设也没用**：5.1.0 之前的版本碰上 Claude 底层组件（SDK）升级会这样，重 roll 有命中、新发言没有。更新到 5.2 及以上会自动恢复；等不及的话，在 CCST 文件夹里运行 `npm install @anthropic-ai/claude-agent-sdk@0.3.285 --save-exact`，删掉 `data/cli-context.json`，重启代理——只回退 CCST 版本没有用，出问题的是 SDK。
+- **状态页显示「缓存命中 0%」，换预设也没用**：5.1.0 之前的版本碰上 Claude 底层组件（SDK）升级会这样，重 roll 有命中、新发言无。
 
 </details>
 
@@ -115,9 +105,9 @@ zsh -c "$(curl -fsSL https://raw.githubusercontent.com/kcgoofee-jpg/CCST/main/in
 | 页 | 干什么 |
 | --- | --- |
 | **推理** | 选模型、调思考深度（越深越慢越费额度） |
-| **状态** | 当前聊天上一轮用了多久、缓存命中多少（回复结束自动刷新，还没回复时会写明）；最新回复被拒绝 / 截断 / 为空时写一行；订阅额度（点刷新，之后每条回复自动查）；近 7 天用量（可折叠） |
-| **设置** | 代理地址、切换后端（订阅 / API 密钥 / Bedrock …）、思考选项、高级（缓存与上下文开关，后台请求的思考深度） |
-| **其他** | 手机连接、Mac 遥控、省电显示、性能诊断、调试等不常用的功能；另有「体检（实验）」，默认关（字数、禁词、重复段落、角色卡检查，受预设和其他扩展影响，可能误报） |
+| **状态** | 聊天用时、缓存命中；回复被拒绝 / 截断 / 为空时具体提示；订阅额度 |
+| **设置** | 代理地址、切换后端、思考选项、高级（缓存与上下文开关，后台请求的思考深度） |
+| **其他** | 手机连接、Mac 遥控、省电显示、性能诊断、调试、体检（实验）、角色卡检查 |
 
 ## 其他用法
 
@@ -137,12 +127,6 @@ zsh -c "$(curl -fsSL https://raw.githubusercontent.com/kcgoofee-jpg/CCST/main/in
 
 更多细节（缓存原理、环境变量、所有设置项）在 **[使用指南](docs/使用指南.md)**，计划在 **[路线图](docs/路线图.md)**。
 
-## 限制
-
-- 不支持温度、Top-P、Top-K。
-- 手机 / TauriTavern 连电脑上的代理（手机连接码、二维码、酒馆工具）目前只支持 Mac。
-- 额度和 Claude 网页版共用，受 5 小时和 7 天窗口限制。
-- 首字要等几秒，比直接用 API 慢一点。
 
 ## 风险提示
 
@@ -153,10 +137,6 @@ zsh -c "$(curl -fsSL https://raw.githubusercontent.com/kcgoofee-jpg/CCST/main/in
 作者不对账号被限制、封禁或其他损失负责。
 
 > 基于 [LukaTheHero/SillyTavern-ClaudeSubscription](https://github.com/LukaTheHero/SillyTavern-ClaudeSubscription)（AGPL-3.0）独立维护，感谢原作者。
-
-## 相关项目
-
-- [tt-root-module（TT 守护）](https://github.com/kcgoofee-jpg/tt-root-module)：给已 root 的安卓手机用的 KernelSU 模块，自动备份、校验并同步手机上的 TauriTavern（及 SillyDroid、Termux 里的酒馆）数据，可一键恢复。手机上用 TauriTavern、担心聊天记录丢失的 CCST 用户可以装它。
 
 ## 许可证
 
