@@ -122,7 +122,9 @@ test('entries older than the window leave memory when the next request is record
     }
     // Asked as of the stale moment, so a still-present entry would be counted.
     assert.equal(stats.summarizeStats(realNow() - 8 * 24 * 3600 * 1000).week.requests, 1, 'trimmed at record time');
-    assert.equal(stats.summarizeStats(realNow() + WEEK).week.requests, 1, 'and never came back');
+    // As of just inside the 7-day window: the kept entry counts, and the three
+    // trimmed ones (8 days old) would too if they ever came back.
+    assert.equal(stats.summarizeStats(realNow() - WEEK + 60_000).week.requests, 1, 'and never came back');
 });
 
 test('Opus 5.5 safeguard refusals are recognized', () => {
