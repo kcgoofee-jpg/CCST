@@ -2,7 +2,9 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规则见 [docs/版本规范.md](docs/版本规范.md)。
 
-## 未发布
+## 5.2.0 - 2026-10-06
+
+两大主题：**缓存命中持续 0% 的根因修复**（SDK 版本从此锁死，代理能自己发现并恢复逐轮还原失效），以及一轮全面审查修掉的 15 个缺陷（错误分类、prefill 回档、本机网页滥用订阅、环境变量搭车、启动器安全、内存与写盘健壮性）。
 
 ### 新增
 - **「更多」里多了「检查更新」**（Mac）：问 GitHub 最新的 Release，有新版本就下载、覆盖代码（登录、聊天记录、设置都保留；git 下载的用 git pull），依赖有变就重装，最后问要不要重启代理；更新到新版后菜单会用新代码自动重开。菜单启动时在后台问一次（缓存 12 小时），有新版本时首页多一行黄色提醒，按它的字母键就更新。
@@ -10,6 +12,12 @@
 
 ### 修复
 - **缓存命中率一直 0%（[#26](https://github.com/kcgoofee-jpg/CCST/issues/26)）**：SDK 版本锁死在 0.3.285，`package-lock.json` 随仓库发布，Docker 镜像改用 `npm ci` 装同一份依赖表；逐轮还原用的上下文 pin 文件现在带 SDK 版本，版本一变就自动丢弃、这一轮全量重写一次；代理还会自己发现坏了——连着三轮没捕获到逐轮还原的上下文，或连着两轮「内容和上一轮一样却没读到缓存」，就清空逐轮还原状态并在面板提示一行，下一轮起重新写缓存。**已经受影响的用户**：在 CCST 文件夹里运行 `npm install @anthropic-ai/claude-agent-sdk@0.3.285 --save-exact`，删掉 `data/cli-context.json`，重启代理即可恢复（只回退 CCST 版本没用，出问题的是 SDK）。
+- **额度用完 / 登录过期被报成「原因不明」的服务器错误（[#27](https://github.com/kcgoofee-jpg/CCST/issues/27)，[#21](https://github.com/kcgoofee-jpg/CCST/issues/21)）**：新版 Claude 组件的两句报错（`You've hit your weekly limit`、`OAuth access token has expired`）代理不认识，归成了「原因不明」+ 500。现在分别正确报为「订阅额度到上限了」（429）和「订阅没登录，或登录已过期」（401）。顺带修了两个误判：报错文字里恰好带 429/401 数字（如 `242900 tokens`）不再被当成限流/登录过期。
+- **用「开头续写」（prefill）的预设：下一轮起玩家的话被整段替换（[#28](https://github.com/kcgoofee-jpg/CCST/issues/28)）**：带世界书的预设 + 结尾 assistant 续写的那一轮，上下文捕获错归档到玩家消息名下，之后每一轮回放都用续写指令顶掉了玩家的发言。现在该轮按续写指令自己的键归档，玩家原文完整保留。
+- **本机其他网页可以用你的订阅聊天（[#29](https://github.com/kcgoofee-jpg/CCST/issues/29)）**：电脑上任何跑在 localhost 的网页（开发服务器、本地工具）都能不带密码调用代理、按你的订阅计费，还能读到调试转储里的聊天内容。现在带网页来源的请求只信 TauriTavern 和明确配置的来源，其余要访问密码。
+- **环境变量跟着酒馆进程「搭车」（[#31](https://github.com/kcgoofee-jpg/CCST/issues/31)）**：shell 里导出过 `CLAUDE_CODE_OAUTH_TOKEN` 时，面板里明确填的 API 密钥会被订阅登录压过、仍按订阅计费；导出过 `CLAUDE_CODE_MAX_OUTPUT_TOKENS` 时会拿到指错方向的截断提示。两种继承现在都会被清掉。
+- **服务器安装脚本在 macOS 上直接崩（[#32](https://github.com/kcgoofee-jpg/CCST/issues/32)）**：`$变量` 后面紧跟全角逗号，macOS 自带的旧 bash 会把整段当变量名报 unbound variable。已全部加花括号，并加了静态扫描测试防止再犯；自带测试在 macOS 上全绿（400 项）。
+- **长期运行的内存与写盘健壮性（[#35](https://github.com/kcgoofee-jpg/CCST/issues/35)）**：不装面板直连代理时，用量记录在内存里只增不减（现在记录时就按 7 天裁剪）；同一条消息在历史里出现两次时，回放会生成重复的会话编号（现在每次回放换新号并重接链）；上下文 pin 和缓存学习的文件改原子写，断电不会再写坏。
 - **SDK / CLI 升级带来的静默失效（[#30](https://github.com/kcgoofee-jpg/CCST/issues/30)）**：启动时检查代理要用的 SDK 导出还在不在，`/status` 多一个 `compat` 字段，不兼容时面板状态页顶部给一条横幅（「当前 SDK 版本与代理不兼容，请按文档锁定版本」）；启动日志和 `data/sdk-version.json` 记下当前 SDK 版本，和上次运行不一样时打一行「SDK 已从 A 变为 B」；清理会话记录时找不到目录或删除失败不再一声不吭；连续多少轮没能用上逐轮还原变成 `foldStreak`，超过 3 轮状态页提示一行。
 - **启动器（[#34](https://github.com/kcgoofee-jpg/CCST/issues/34)）**：按端口关代理时只认「单独运行的代理」自己报的进程号，端口上是酒馆里的插件时不再去关酒馆，改成提示「端口被酒馆内插件占用，要关闭请直接关酒馆」；启动代理不再只看端口通没通——还要确认应答的是自己刚起的那个进程，别人的程序占着端口不再谎报「已启动」；手机上按「重启代理」后，后台脚本真正下手前会再看一次代理是不是在写回复（原来只在按下按钮那一刻查过一次）。
 - **关闭流程（[#33](https://github.com/kcgoofee-jpg/CCST/issues/33)）**：关闭时立刻断开空闲的长连接，不用等它们自己超时；5 秒还没关完就直接结束进程；正在关闭时再按一次 Ctrl+C 会立刻退出，不再被吞掉。
