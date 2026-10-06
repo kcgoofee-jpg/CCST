@@ -12,7 +12,7 @@
 // If SillyTavern with the server plugin starts later, the plugin detects
 // this listener on the port and reuses it instead of failing.
 
-import { startStandaloneListener, stopStandaloneListener, portInUseMessage } from './api/listener.js';
+import { startStandaloneListener, stopStandaloneListener, portInUseMessage, probeExistingProxy } from './api/listener.js';
 import { networkInterfaces } from 'node:os';
 
 import { credentialSummary } from './features/oauth.js';
@@ -33,6 +33,15 @@ process.on('unhandledRejection', (reason) => {
 markStandalone();
 
 try {
+    // Probe before binding, exactly like the plugin side does: on macOS a proxy
+    // already listening on 127.0.0.1:<port> does not stop this one from binding
+    // 0.0.0.0:<port>, and then two proxies share a port — the local app talks to
+    // this copy while the phone talks to the other one (possibly older code).
+    if (await probeExistingProxy({ port, host: host === '0.0.0.0' || host === '::' ? '127.0.0.1' : host })) {
+        console.error(`${TAG} 端口 ${port} 上已经有一个 CCST 代理在运行，本次启动退出，免得两个代理共用一个端口。` +
+            `先停掉在跑的那个（「酒馆工具」首页按 2，或到它的终端窗口按 Ctrl+C），再重新运行 npm start。`);
+        process.exit(1);
+    }
     await startStandaloneListener({ port, host });
 } catch (err) {
     if (err?.code === 'EADDRINUSE') console.error(portInUseMessage(port));

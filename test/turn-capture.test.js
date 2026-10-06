@@ -2,6 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { randomUUID } from 'node:crypto';
+import { mkdtempSync, readdirSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import { createTurnCollector, replayTurn, hasPinnedContext, pinnedContext, historyReplay, replyBefore, repliesBefore, sentTextFor, __resetTurnCaptures } from '../src/proxy/features/turn-capture.js';
 import { assembleEntries } from '../src/proxy/features/jsonl-entries.js';
@@ -23,7 +26,7 @@ test('collector keeps the current user entry and its attachments, replay re-chai
     const r = replayTurn('去溪边', 'prev', meta);
     assert.deepEqual(r.map((e) => e.type), ['user', 'attachment', 'attachment']);
     assert.equal(r[0].parentUuid, 'prev');
-    assert.equal(r[1].parentUuid, 'u1');
+    assert.equal(r[1].parentUuid, r[0].uuid, 'the chain follows the replay uuids');
     assert.ok(r.every((e) => e.sessionId === 's2' && e.cwd === '/tmp/x'));
     assert.equal(replayTurn('别的话', null, meta), null);
 });
@@ -38,7 +41,7 @@ test('assembleEntries splices replayed turns and chains the next entry after the
         [{ role: 'assistant', content: '开场' }, { role: 'user', content: '去溪边' }, { role: 'assistant', content: '好' }],
         meta, 'm', { replay: historyReplay(null).replay });
     assert.deepEqual(entries.map((e) => e.type), ['assistant', 'user', 'attachment', 'attachment', 'assistant']);
-    assert.equal(entries[4].parentUuid, 'a2');
+    assert.equal(entries[4].parentUuid, entries[3].uuid, 'the next entry chains after the replay');
     // without replay: plain synthetic entries, unchanged behavior
     assert.deepEqual(assembleEntries([{ role: 'user', content: '去溪边' }], meta, 'm').map((e) => e.type), ['user']);
 });
@@ -62,7 +65,55 @@ test('the CLI context is pinned after the first entry and replayed turns lose th
     c2.onAppend([{ type: 'user', uuid: 'u9', message: { role: 'user', content: '再走' } },
         { type: 'attachment', uuid: 'a9', attachment: { type: 'date', date: '明天' } }, { type: 'assistant' }]);
     assert.deepEqual(pinnedContext('opus[1m]', null, meta).map((e) => e.uuid), ['a1', 'a2']);
-    assert.deepEqual(replayTurn('再走', null, meta, { pinOn: true, context: '好' }).map((e) => e.uuid), ['u9', 'a9']);
+    const again = replayTurn('再走', null, meta, { pinOn: true, context: '好' });
+    assert.deepEqual(again.map((e) => e.parentUuid), [null, again[0].uuid], 'chained to the fresh uuids');
+    assert.notEqual(again[1].uuid, 'a9', 'the replay does not reuse the stored uuid');
+});
+
+// The stored uuids are the CLI's from whatever session produced the turn.
+// Replaying them unchanged can put one uuid in a transcript twice — the same
+// capture reached by two history messages, or a replay beside the pinned copy
+// of those very attachments — and a parent chain with repeats lets the CLI
+// walk to the wrong branch.
+test('a replayed turn carries fresh uuids', () => {
+    __resetTurnCaptures();
+    createTurnCollector('去溪边').onAppend(cliEntries);
+    const one = replayTurn('去溪边', null, meta);
+    const two = replayTurn('去溪边', 'x', meta);
+    const ids = [...one, ...two].map((e) => e.uuid);
+    assert.equal(new Set(ids).size, ids.length, 'the same turn replayed twice repeats no uuid');
+    assert.equal(two[1].parentUuid, two[0].uuid, 'children chain onto the new uuids');
+    assert.equal(cliEntries[1].uuid, 'u1', 'the stored capture keeps its own copy');
+    __resetTurnCaptures();
+    createTurnCollector('去溪边', '去溪边', 'opus[1m]').onAppend(cliEntries);
+    const pin = pinnedContext('opus[1m]', null, meta);
+    const replayed = replayTurn('去溪边', null, meta, { pinOn: false, context: '' });
+    assert.equal(replayed.filter((r) => pin.some((p) => p.uuid === r.uuid)).length, 0, 'the pin and its own turn stay distinct');
+});
+
+// A half-written cli-context.json reads as "none yet" on the next start, and
+// the pin for that model is then rebuilt on a turn that sits elsewhere in the
+// transcript — every later turn re-writes the whole history.
+test('the pin file lands whole, with no temp left behind', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'cm-pin-'));
+    const file = join(dir, 'cli-context.json');
+    const saved = process.env.CLAUDE_SUBSCRIPTION_CONTEXT_PIN_FILE;
+    process.env.CLAUDE_SUBSCRIPTION_CONTEXT_PIN_FILE = file;
+    try {
+        const mod = await import(`../src/proxy/features/turn-capture.js?atomic=${Date.now()}`);
+        mod.pinContext('m-atomic', [{ type: 'attachment', uuid: 'z1', attachment: { type: 'model', id: 'm-atomic' } }]);
+        assert.deepEqual(JSON.parse(readFileSync(file, 'utf8'))['m-atomic'].map((e) => e.uuid), ['z1']);
+        assert.deepEqual(readdirSync(dir).filter((f) => f !== 'cli-context.json'), [], 'the temp file was renamed away');
+        const reread = await import(`../src/proxy/features/turn-capture.js?reread=${Date.now()}`);
+        assert.equal(reread.hasPinnedContext('m-atomic'), true, 'a restart reads it back');
+        const src = readFileSync(new URL('../src/proxy/features/turn-capture.js', import.meta.url), 'utf8');
+        for (const [, target] of src.matchAll(/writeFileSync\(\s*([^,]+),/g)) {
+            assert.match(target, /tmp/, `${target.trim()} would be written in place`);
+        }
+    } finally {
+        if (saved === undefined) delete process.env.CLAUDE_SUBSCRIPTION_CONTEXT_PIN_FILE; else process.env.CLAUDE_SUBSCRIPTION_CONTEXT_PIN_FILE = saved;
+        __resetTurnCaptures();
+    }
 });
 
 test('replyBefore / repliesBefore: the last non-blank assistant message before each index', () => {
@@ -180,4 +231,69 @@ test('CLAUDE_SUBSCRIPTION_CONTEXT_PIN_FILE=off keeps the pin in memory only', as
     } finally {
         if (saved === undefined) delete process.env.CLAUDE_SUBSCRIPTION_CONTEXT_PIN_FILE; else process.env.CLAUDE_SUBSCRIPTION_CONTEXT_PIN_FILE = saved;
     }
+});
+
+// ── A prefill turn under a real request ──
+// 「结尾 assistant 预填」 sends the synthetic continuation instruction instead of
+// the player's message, so its capture must not be filed under the player's
+// text: next turn that text is history and would replay the instruction.
+const TMP = mkdtempSync(join(tmpdir(), 'cm-prefill-'));
+process.env.CLAUDE_SUBSCRIPTION_DEBUG_DIR = join(TMP, 'debug');
+process.env.CLAUDE_SUBSCRIPTION_SCRATCH_CWD = join(TMP, 'scratch');
+process.env.CLAUDE_SUBSCRIPTION_CONTEXT_PIN_FILE = 'off';
+process.env.CLAUDE_SUBSCRIPTION_CACHE_MEMORY_FILE = 'off';
+
+const { handleChatCompletions } = await import('../src/proxy/core/chat.js');
+const { __setSdkForTesting } = await import('../src/proxy/core/sdk-loader.js');
+const { diagnoseCache, __resetCacheDiag } = await import('../src/proxy/features/cache-diag.js');
+const { EventEmitter } = await import('node:events');
+
+/** One dry-run request: build everything, dump the transcript, never call Claude. */
+async function turn(messages) {
+    const res = new EventEmitter();
+    res.statusCode = 200;
+    res.writableFinished = false;
+    res.write = () => true;
+    res.end = () => res;
+    res.status = (c) => { res.statusCode = c; return res; };
+    res.json = (b) => { res.body = b; return res; };
+    const log = console.log; const warn = console.warn;
+    console.log = () => {}; console.warn = () => {};
+    try {
+        await handleChatCompletions({ body: { model: 'claude-opus-5', messages, claude_subscription: { dry_run: true, debug_dump: true } }, get: () => '' }, res);
+    } finally {
+        console.log = log; console.warn = warn;
+    }
+    assert.equal(res.statusCode, 200, JSON.stringify(res.body));
+    return JSON.parse(readFileSync(join(process.env.CLAUDE_SUBSCRIPTION_DEBUG_DIR, 'last-entries.json'), 'utf8'));
+}
+const text = (e) => (typeof e.message?.content === 'string' ? e.message.content : (e.message?.content ?? []).map((b) => b?.text ?? '').join('\n'));
+
+test('a prefill turn is filed under its own instruction, not under the player message', async () => {
+    __setSdkForTesting({ query: () => (async function* () {})() });
+    __resetTurnCaptures();
+    __resetCacheDiag();
+    const rules = '规则'.repeat(2000);
+    // world_info changes every turn, so lore-tail moves it onto the player message.
+    const sys = (wi) => `<rules>${rules}</rules>\n<world_info>${wi}</world_info>`;
+    await turn([{ role: 'system', content: sys('甲') }, { role: 'assistant', content: '开场' }, { role: 'user', content: '我推门' }]);
+
+    // The prefill round: SillyTavern ends with the assistant text it wants continued.
+    const prefill = await turn([
+        { role: 'system', content: sys('乙') }, { role: 'assistant', content: '开场' },
+        { role: 'user', content: '我推门' }, { role: 'assistant', content: '门开了' },
+    ]);
+    assert.ok(!prefill.some((e) => text(e).includes('Continue the assistant')), 'the instruction is not history');
+    assert.equal(sentTextFor('我推门', '开场'), '我推门', 'the prefill round does not refile the player message');
+
+    // Next turn: the player message is back in history and must still be there.
+    const next = await turn([
+        { role: 'system', content: sys('乙') }, { role: 'assistant', content: '开场' },
+        { role: 'user', content: '我推门' }, { role: 'assistant', content: '门开了' },
+        { role: 'user', content: '我点灯' },
+    ]);
+    const players = next.filter((e) => text(e).includes('我推门'));
+    assert.equal(players.length, 1, 'the player message is replayed once');
+    assert.ok(!next.some((e) => text(e).includes('Continue the assistant')), 'no continuation instruction replaces it');
+    __setSdkForTesting(null);
 });

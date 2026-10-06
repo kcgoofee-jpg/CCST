@@ -19,6 +19,19 @@ test('common upstream errors get Chinese explanations', () => {
     assert.match(text, /原始错误：Not logged in/);
 });
 
+// Verbatim from the newer CLI: the client must see 429 (back off) and 401
+// (log in again) for these, not a generic 500.
+test('new CLI limit and token wordings classify with the right HTTP status', async () => {
+    const { statusForError } = await import('../src/proxy/core/chat.js');
+    const weekly = "You've hit your weekly limit · resets 5pm (Asia/Shanghai)";
+    assert.equal(explainError(weekly).code, 'usage_limit');
+    assert.equal(statusForError(weekly), 429);
+    assert.equal(statusForError('You have hit your 5-hour limit · resets 11pm (Asia/Shanghai)'), 429);
+    const expired = 'OAuth access token has expired';
+    assert.equal(explainError(expired).code, 'not_logged_in');
+    assert.equal(statusForError(expired), 401);
+});
+
 test('served-model guard ignores the CLI synthetic error message', () => {
     assert.doesNotThrow(() => assertServedModel('fable', '<synthetic>', 'claude-fable-5'));
     assert.doesNotThrow(() => assertServedModel('fable', 'claude-fable-5', 'claude-fable-5'));
@@ -81,6 +94,35 @@ test('usage stats record metadata only and aggregate today / week', async () => 
     assert.ok(!/mes|content|秘密日记|小美|规则|开场/.test(file), 'no message or prompt text persisted, cache diagnosis included');
     assert.match(file, /"cacheDiag":\{/);
     delete process.env.CLAUDE_SUBSCRIPTION_STATS_FILE;
+});
+
+// A proxy that runs for weeks without the panel being opened appended every
+// request to memory: summarizeStats is what trimmed, and only for whoever
+// reads the cards. Recording is now the trim point.
+test('entries older than the window leave memory when the next request is recorded', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'cm-trim-'));
+    process.env.CLAUDE_SUBSCRIPTION_STATS_FILE = join(dir, 'usage.jsonl');
+    const stats = await import('../src/proxy/features/usage-stats.js');
+    stats.__resetStatsForTesting();
+    const realNow = Date.now;
+    const WEEK = 7 * 24 * 3600 * 1000;
+    const log = console.log;
+    console.log = () => {};
+    try {
+        Date.now = () => realNow() - 8 * 24 * 3600 * 1000; // three out-of-window requests
+        stats.recordRequest({ model: 'claude-opus-5', stream: false, startedAt: Date.now(), textChars: 10, finish: 'stop' });
+        stats.recordRequest({ model: 'claude-opus-5', stream: false, startedAt: Date.now(), textChars: 10, finish: 'stop' });
+        stats.recordRequest({ model: 'claude-opus-5', stream: false, startedAt: Date.now(), textChars: 10, finish: 'stop' });
+        Date.now = realNow;
+        stats.recordRequest({ model: 'claude-opus-5', stream: false, startedAt: realNow() - 500, textChars: 10, finish: 'stop' });
+    } finally {
+        Date.now = realNow;
+        console.log = log;
+        delete process.env.CLAUDE_SUBSCRIPTION_STATS_FILE;
+    }
+    // Asked as of the stale moment, so a still-present entry would be counted.
+    assert.equal(stats.summarizeStats(realNow() - 8 * 24 * 3600 * 1000).week.requests, 1, 'trimmed at record time');
+    assert.equal(stats.summarizeStats(realNow() + WEEK).week.requests, 1, 'and never came back');
 });
 
 test('Opus 5.5 safeguard refusals are recognized', () => {

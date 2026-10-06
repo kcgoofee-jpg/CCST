@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, existsSync, readdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, existsSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -53,4 +53,13 @@ test('install.sh --uninstall --dry-run on a clean home is harmless', { skip }, (
         assert.equal(r.status, 0, r.stderr);
         assert.deepEqual(readdirSync(home), []);
     } finally { rmSync(home, { recursive: true, force: true }); }
+});
+
+// bash 3.2 (macOS /bin/sh) folds the bytes of a following fullwidth 「，」 or
+// 「（」 into the variable name, so `$DIR，` is an unbound variable and the
+// script dies under `set -u`. Every $NAME must end at an ASCII character.
+test('install.sh braces every variable that a fullwidth punctuation follows', () => {
+    const src = readFileSync(SCRIPT, 'utf8');
+    const bad = [...src.matchAll(/\$[A-Za-z_][A-Za-z0-9_]*(?=[^\x00-\x7f])/g)].map((m) => m[0]);
+    assert.deepEqual(bad, [], `$NAME followed by a multibyte character: ${bad.join(' ')}`);
 });

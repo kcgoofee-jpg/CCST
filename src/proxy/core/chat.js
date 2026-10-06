@@ -246,9 +246,16 @@ function buildQueryConfig({ messages: rawMessages, modelInfo, oneMActive, settin
                 const currentText = typeof split.current?.content === 'string' ? split.current.content : null;
                 // Filed under its text and the reply it answers; background
                 // calls record nothing (no capture, no pin).
+                // A trailing-assistant prefill sends the synthetic continuation
+                // instruction, not the player's message: filing that entry
+                // under settings.captureKey (what SillyTavern sends back next
+                // turn) would replay the INSTRUCTION in place of the player's
+                // text, so it goes under its own text — a key no future
+                // history message has.
+                const keyText = split.shape === 'trailing-assistant-continue' ? null : settings.captureKey;
                 const collector = settings.auxiliary
                     ? null
-                    : createTurnCollector(currentText, settings.captureKey, pinKey, replyBefore(split.history, split.history.length));
+                    : createTurnCollector(currentText, keyText, pinKey, replyBefore(split.history, split.history.length));
                 const resume = { sessionId, store: new ResumeSessionStore(sessionId, entries, collector?.onAppend), cwd };
                 if (settings.debugDump) dumpEntries(entries, prompt);
                 const options = buildSdkOptions({ modelInfo, oneMActive, settings, systemText, abortController, stream, env, resume, boundary: sdk?.SYSTEM_PROMPT_DYNAMIC_BOUNDARY });

@@ -24,8 +24,8 @@
 // message is replayed, survives the oldest turns being trimmed off, and
 // differs between chats.
 
-import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { DATA_DIR } from '../paths.js';
 
@@ -125,6 +125,35 @@ function remember(text, context, entries, contextPinned) {
 }
 
 /**
+ * Copies of `entries` re-chained after `parentUuid`, with sessionId and cwd
+ * of the new transcript.
+ *
+ * Each copy gets a FRESH uuid. The captured uuids are the ones the CLI wrote
+ * in whatever session produced this turn, and the same captured entries can
+ * land in one transcript twice — a turn's attachments are also the pinned
+ * context, so a replay that keeps them next to the pin repeats their uuids.
+ * A parent chain with duplicate uuids lets the CLI walk the transcript to the
+ * wrong branch, which changes the bytes the cache was built for.
+ */
+function rechain(entries, parentUuid, meta) {
+    const uuids = new Map();
+    for (const e of entries) if (e?.uuid) uuids.set(e.uuid, randomUUID());
+    let parent = parentUuid;
+    return entries.map((e) => {
+        const prev = e?.parentUuid;
+        const copy = {
+            ...JSON.parse(JSON.stringify(e)),
+            parentUuid: prev && uuids.has(prev) ? uuids.get(prev) : parent,
+            uuid: uuids.get(e?.uuid) ?? randomUUID(),
+            sessionId: meta.sessionId,
+            cwd: meta.cwd,
+        };
+        parent = copy.uuid;
+        return copy;
+    });
+}
+
+/**
  * Captured entries for a past user message, re-chained into the new
  * transcript (parentUuid / sessionId / cwd rewritten). Null when unknown —
  * e.g. the first turn after a proxy restart; the caller then falls back to
@@ -142,13 +171,8 @@ function remember(text, context, entries, contextPinned) {
 export function replayTurn(text, parentUuid, meta, { pinOn = false, context = '' } = {}) {
     const found = captures.get(turnKey(text, context));
     if (!found) return null;
-    let parent = parentUuid;
     const list = pinOn && found.contextPinned ? found.entries.filter((e) => e?.type !== 'attachment') : found.entries;
-    return list.map((e) => {
-        const copy = { ...JSON.parse(JSON.stringify(e)), parentUuid: parent, sessionId: meta.sessionId, cwd: meta.cwd };
-        parent = copy.uuid;
-        return copy;
-    });
+    return rechain(list, parentUuid, meta);
 }
 
 /** The text a past user message was actually sent with (null if unknown). */
@@ -214,7 +238,12 @@ export function pinContext(model, entries) {
     if (!f) return;
     try {
         mkdirSync(dirname(f), { recursive: true });
-        writeFileSync(f, JSON.stringify(Object.fromEntries(pins)), { mode: 0o600 }); // account details
+        // Write-through-rename like the token file: a proxy killed mid-write
+        // would otherwise leave half a JSON here, and loadPins reads it at
+        // startup with no way back to the pinned context.
+        const tmp = `${f}.${process.pid}.tmp`;
+        writeFileSync(tmp, JSON.stringify(Object.fromEntries(pins)), { mode: 0o600 }); // account details
+        renameSync(tmp, f);
     } catch { /* memory only */ }
 }
 

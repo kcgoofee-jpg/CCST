@@ -12,16 +12,33 @@ import { envValue } from '../env-value.js';
 // visits read subscription/billing data off these unauthenticated GETs.
 // TauriTavern's WebView serves the UI from tauri://localhost (macOS/Linux)
 // or http(s)://tauri.localhost (Windows/Android).
+// (One GET is stricter still: the chat-text dump, see allowCorsGetTrusted.)
 const LOOPBACK_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
 const TAURI_ORIGIN = /^(tauri:\/\/localhost|https?:\/\/tauri\.localhost)$/i;
 
 // Browser pages served from your own domain (SillyTavern behind an HTTPS
 // reverse proxy) are listed by exact origin in CLAUDE_SUBSCRIPTION_ALLOWED_ORIGINS.
+function inAllowList(origin, extra) {
+    const want = String(origin).toLowerCase();
+    return String(extra ?? '').split(',').map((o) => o.trim().replace(/\/+$/, '').toLowerCase()).filter(Boolean).includes(want);
+}
+
 export function isAllowedOrigin(origin, extra = process.env.CLAUDE_SUBSCRIPTION_ALLOWED_ORIGINS) {
     if (!origin) return false;
     if (LOOPBACK_ORIGIN.test(origin) || TAURI_ORIGIN.test(origin)) return true;
-    const want = String(origin).toLowerCase();
-    return String(extra ?? '').split(',').map((o) => o.trim().replace(/\/+$/, '').toLowerCase()).filter(Boolean).includes(want);
+    return inAllowList(origin, extra);
+}
+
+// Endpoints that SPEND the subscription or change how it bills (POST chat,
+// POST backend, the control actions) are not for just any page on this
+// machine: a dev server on http://localhost:5173, or any local web app the
+// user happens to open, is a browser page that can drive them. Only the
+// TauriTavern WebView and origins the user listed are trusted here; a
+// loopback page must carry the access key like any other remote caller.
+// SillyTavern's server-side forward sends no Origin at all and is unaffected.
+export function isTrustedPostOrigin(origin, extra = process.env.CLAUDE_SUBSCRIPTION_ALLOWED_ORIGINS) {
+    if (!origin) return false;
+    return TAURI_ORIGIN.test(origin) || inAllowList(origin, extra);
 }
 
 // DNS rebinding guard: a web page on evil.example can point its own name at
@@ -54,7 +71,14 @@ export function guardHost(bindHost) {
 // A browser page from another origin always sends one — refuse it.
 export function guardPostOrigin(req, res, next) {
     const origin = req.headers.origin;
-    if (!origin || isAllowedOrigin(origin)) return next();
+    if (!origin || isTrustedPostOrigin(origin)) return next();
+    if (LOOPBACK_ORIGIN.test(origin)) {
+        // A page on this machine: only its caller's identity proves it isn't
+        // some other local web app, and that proof is the access key.
+        if (keyMatches(presentedKey(req), envValue(process.env.CLAUDE_SUBSCRIPTION_LAN_KEY))) return next();
+        res.status(401).json({ error: { message: `代理要求访问密码才接受来自本机网页（${origin}）的写入请求：这类请求会花你的订阅或改动后端设置。酒馆自己的聊天请求不受影响；确实要让这个页面用的话，把它加进 CLAUDE_SUBSCRIPTION_ALLOWED_ORIGINS，或在请求里带上 CLAUDE_SUBSCRIPTION_LAN_KEY。` } });
+        return;
+    }
     res.status(403).json({ error: { message: `代理拒绝了来自其他网站（${origin}）的请求：只有酒馆页面可以用这个代理。` } });
 }
 
@@ -162,13 +186,21 @@ export function allowCors(req, res, next) {
     });
 }
 
-export function allowCorsGet(req, res, next) {
+const corsGetWith = (trusted) => (req, res, next) => {
     const origin = req.headers.origin;
-    if (isAllowedOrigin(origin)) {
+    if (trusted(origin)) {
         res.setHeader('Access-Control-Allow-Origin', origin);
         res.setHeader('Vary', 'Origin');
     }
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Claude-Max-Key');
     next();
-}
+};
+
+export const allowCorsGet = corsGetWith(isAllowedOrigin);
+
+// /v1/debug/last is a dump of whole chats, so a page on this machine gets no
+// read access by being on this machine: only the TauriTavern WebView and the
+// listed origins see it cross-origin. SillyTavern's panel reads it same-origin
+// through the plugin route (fetchProxy falls back there).
+export const allowCorsGetTrusted = corsGetWith(isTrustedPostOrigin);

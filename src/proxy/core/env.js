@@ -71,6 +71,10 @@ export function buildSubprocessEnv({ envPins, maxTokens, apiKey, backend = null 
 
     if (maxTokens) {
         env.CLAUDE_CODE_MAX_OUTPUT_TOKENS = String(maxTokens);
+    } else {
+        // No "Max response length" in this request: an inherited shell value
+        // would cap the reply without anything in the request asking for it.
+        delete env.CLAUDE_CODE_MAX_OUTPUT_TOKENS;
     }
 
     const chosen = backend?.backend ?? 'subscription';
@@ -85,6 +89,10 @@ export function buildSubprocessEnv({ envPins, maxTokens, apiKey, backend = null 
     if (apiKey) {
         // Opt-in API-billing fallback — overrides subscription auth.
         env.ANTHROPIC_API_KEY = apiKey;
+        // ... and really does: a CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`
+        // outranks ANTHROPIC_API_KEY, so the chat would bill the subscription
+        // while the user pays for the key (same reason the other backends unset it).
+        delete env.CLAUDE_CODE_OAUTH_TOKEN;
         // On a subscription the CLI already caches the conversation for 1 hour; with an API key it
         // falls back to 5 minutes, and roleplay turns are often further apart than that (measured:
         // cache reads still hit after 12–25 min on the subscription). 1h writes cost 2x base instead

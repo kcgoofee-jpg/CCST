@@ -161,6 +161,9 @@ export function backendEnv(backend, f) {
     const unset = [];
     switch (backend) {
         case 'apikey':
+            // A token from the CLI's login would outrank ANTHROPIC_API_KEY and the
+            // chat would bill the subscription while the user expects per-token.
+            unset.push('CLAUDE_CODE_OAUTH_TOKEN');
             set.ANTHROPIC_API_KEY = f.apikey.apiKey;
             break;
         case 'bedrock': {

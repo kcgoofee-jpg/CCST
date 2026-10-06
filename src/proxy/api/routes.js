@@ -15,10 +15,14 @@
 //   method               'get' | 'post'
 //   handler              the request handler
 //   async                wrap in asyncRoute (rejections → the error handler)
-//   cors                 standalone only: 'get' (GET, OPTIONS) | 'full' (GET, POST, OPTIONS);
-//                        also answers the OPTIONS preflight for the path
-//   origin               standalone only: refuse browser Origins outside the allow-list
-//                        (POST endpoints; chat is called server-side and sends none)
+//   cors                 standalone only: 'get' (GET, OPTIONS) | 'get-trusted'
+//                        (GET, OPTIONS, but only the TauriTavern WebView and the
+//                        listed origins may read it cross-origin) | 'full'
+//                        (GET, POST, OPTIONS); also answers the OPTIONS preflight
+//   origin               standalone only: POST endpoints. No Origin (SillyTavern's
+//                        server-side forward) and the TauriTavern / listed origins
+//                        pass; a page on this machine needs the access key, any
+//                        other browser origin is refused (guards.js)
 
 import { handleChatCompletions, rejectEmbeddings } from '../core/chat.js';
 import { listModelsHandler } from '../core/models.js';
@@ -29,14 +33,14 @@ import { handleBackendGet, handleBackendPost } from '../features/backend-config.
 import { handleDebugLast } from '../features/debug-dump.js';
 import { handleCancelReply, handleKeptReply } from '../features/reply-keeper.js';
 import { countInFlight, handleControlAction, handleControlLog, handleControlStatus, handleDiagRequest, handleDiagResult } from '../platform/control.js';
-import { asyncRoute, allowCors, allowCorsGet, guardPostOrigin } from './guards.js';
+import { asyncRoute, allowCors, allowCorsGet, allowCorsGetTrusted, guardPostOrigin } from './guards.js';
 
 export const ROUTES = [
     { method: 'get', standalone: '/status', plugin: '/status', handler: handleStatus, async: true, cors: 'get' },
     { method: 'get', standalone: '/v1/models', handler: listModelsHandler, cors: 'get' },
     { method: 'get', standalone: '/v1/usage/quota', plugin: '/quota', handler: handleQuota, async: true, cors: 'get' },
     { method: 'get', standalone: '/v1/usage/stats', plugin: '/stats', handler: handleStats, cors: 'get' },
-    { method: 'get', standalone: '/v1/debug/last', plugin: '/debug', handler: handleDebugLast, cors: 'get' },
+    { method: 'get', standalone: '/v1/debug/last', plugin: '/debug', handler: handleDebugLast, cors: 'get-trusted' },
     // countInFlight also catches the handler's rejections.
     { method: 'post', standalone: '/v1/chat/completions', handler: countInFlight(handleChatCompletions), origin: true },
     // Kept replies (features/reply-keeper.js): fetch one back, or cancel (the panel's Stop).
@@ -63,6 +67,8 @@ export function routeKeys(mount) {
 }
 
 /** Register the table on an express app / router. mount = 'standalone' | 'plugin'. */
+const CORS = { get: allowCorsGet, 'get-trusted': allowCorsGetTrusted, full: allowCors };
+
 export function registerRoutes(router, mount) {
     const standalone = mount === 'standalone';
     const preflight = new Map();
@@ -70,11 +76,11 @@ export function registerRoutes(router, mount) {
         const path = r[mount];
         if (!path) continue;
         const chain = [];
-        if (standalone && r.cors) chain.push(r.cors === 'full' ? allowCors : allowCorsGet);
+        if (standalone && r.cors) chain.push(CORS[r.cors]);
         if (standalone && r.origin) chain.push(guardPostOrigin);
         chain.push(r.async ? asyncRoute(r.handler) : r.handler);
         router[r.method](path, ...chain);
-        if (standalone && r.cors && !preflight.has(path)) preflight.set(path, r.cors === 'full' ? allowCors : allowCorsGet);
+        if (standalone && r.cors && !preflight.has(path)) preflight.set(path, CORS[r.cors]);
     }
     for (const [path, cors] of preflight) router.options(path, cors, (_req, res) => res.sendStatus(204));
 }

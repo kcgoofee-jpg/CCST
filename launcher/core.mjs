@@ -117,6 +117,10 @@ const mtimeOf = (f) => { try { return statSync(f).mtime; } catch { return null; 
 const two = (n) => String(n).padStart(2, '0');
 export const fmtTime = (d) => `${two(d.getMonth() + 1)}-${two(d.getDate())} ${two(d.getHours())}:${two(d.getMinutes())}`;
 
+/** 要塞进 shell 命令行的值：单引号里什么都不展开，值本身带的 ' 写成 '\\''。
+ *  JSON.stringify 给的是双引号，路径里的 $ 和反引号还会继续被执行。 */
+export const shQuote = (v) => `'${String(v).replace(/'/g, `'\\''`)}'`;
+
 export const PLAN = { max: 'Max', pro: 'Pro', team: 'Team', enterprise: 'Enterprise' };
 export const planName = (t) => PLAN[t] ?? t ?? null;
 

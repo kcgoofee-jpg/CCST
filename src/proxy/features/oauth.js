@@ -95,22 +95,29 @@ export function readCredentials() {
 
 // ── Error classifiers (regex sets validated by Meridian in production) ──
 
+// Bare status numbers only where they stand alone as a status: 「429」 in
+// "processed 242900 tokens" or "(4012)" in a message id is not an HTTP code.
+const STATUS_401 = /(?<!\d)401(?!\d)/;
+const STATUS_429 = /(?<!\d)429(?!\d)/;
+
 export function isExpiredTokenError(text) {
     const s = String(text ?? '').toLowerCase();
     return (
-        s.includes('oauth token has expired') ||
+        // The CLI says 「OAuth access token has expired」 — one word more than the
+        // older 「OAuth token has expired」.
+        /oauth.{0,20}token has expired/.test(s) ||
         s.includes('token_expired') ||
         s.includes('invalid_token') ||
         s.includes('not logged in') ||
         s.includes('authentication expired') ||
         s.includes('authentication_failed') ||
-        (s.includes('401') && (s.includes('authentication') || s.includes('unauthorized') || s.includes('invalid')))
+        (STATUS_401.test(s) && (s.includes('authentication') || s.includes('unauthorized') || s.includes('invalid')))
     );
 }
 
 export function isRateLimitError(text) {
     const s = String(text ?? '').toLowerCase();
-    return s.includes('429') || s.includes('rate limit') || s.includes('too many requests');
+    return STATUS_429.test(s) || s.includes('rate limit') || s.includes('too many requests');
 }
 
 export function isExtraUsageRequiredError(text) {

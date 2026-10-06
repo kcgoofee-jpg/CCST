@@ -155,7 +155,7 @@ case "$DIR" in *" "*) die "安装目录不能有空格：$DIR" ;; esac
 [ -n "$BIND" ] || BIND=$(env_get CLAUDE_SUBSCRIPTION_HOST)
 [ -n "$BIND" ] || BIND=127.0.0.1
 
-say "CCST 安装：目录 $DIR，端口 $PORT，监听 $BIND，Node $(node -v)"
+say "CCST 安装：目录 ${DIR}，端口 ${PORT}，监听 ${BIND}，Node $(node -v)"
 [ -z "$ST_DIR" ] || say "找到同一台服务器上的 SillyTavern：$ST_DIR"
 
 # ───────── 下载 / 更新 ─────────
@@ -213,7 +213,7 @@ if [ -z "$KEY" ]; then
     NEW_KEY=$KEY
 fi
 if [ "$DRY" = 1 ]; then
-    say "[dry-run] 写 $ENV_FILE（权限 0600：CCST_DIR、CLAUDE_SUBSCRIPTION_HOST/PORT/LAN_KEY；你手加的其他行原样保留）"
+    say "[dry-run] 写 ${ENV_FILE}（权限 0600：CCST_DIR、CLAUDE_SUBSCRIPTION_HOST/PORT/LAN_KEY；你手加的其他行原样保留）"
 else
     umask 077
     mkdir -p "$CONF_DIR"
@@ -243,7 +243,7 @@ if [ "$NO_SERVICE" = 1 ]; then
 elif have_systemd_user; then
     MODE="systemd"
     if [ "$DRY" = 1 ]; then
-        say "[dry-run] 写 $UNIT_FILE（ExecStart=$NODE_BIN server.js，EnvironmentFile=$ENV_FILE）"
+        say "[dry-run] 写 ${UNIT_FILE}（ExecStart=$NODE_BIN server.js，EnvironmentFile=${ENV_FILE}）"
         say "[dry-run] systemctl --user daemon-reload && systemctl --user enable $UNIT_NAME && systemctl --user restart $UNIT_NAME"
     else
         mkdir -p "$UNIT_DIR"
@@ -272,7 +272,7 @@ else
     MODE="nohup"
     warn "没有可用的 systemd --user，改用 nohup 后台运行（服务器重启后需要重新运行本脚本）。"
     if [ "$DRY" = 1 ]; then
-        say "[dry-run] nohup 启动 $NODE_BIN server.js，pid 写入 $PID_FILE，日志 $LOG_FILE"
+        say "[dry-run] nohup 启动 $NODE_BIN server.js，pid 写入 ${PID_FILE}，日志 $LOG_FILE"
     else
         stop_nohup
         (
@@ -305,17 +305,17 @@ fi
 say ""
 say "──────── 接下来 ────────"
 if [ -n "$OAUTH_TOKEN" ]; then
-    say "1. Claude 订阅令牌已存进 $ENV_FILE（0600），不用再登录。令牌失效后，在有浏览器的电脑上重新 claude setup-token 再运行本脚本。"
+    say "1. Claude 订阅令牌已存进 ${ENV_FILE}（0600），不用再登录。令牌失效后，在有浏览器的电脑上重新 claude setup-token 再运行本脚本。"
 else
     say "1. 登录 Claude 订阅（服务器没有浏览器，二选一）："
     say "   A. 在有浏览器的电脑上运行 claude setup-token，得到令牌，然后在服务器上："
     say "        sh $DIR/deploy/install.sh --token-prompt      （粘贴令牌，不回显）"
     say "   B. cd $DIR && npm run login ：它打印网址，在你自己电脑的浏览器打开授权，把授权码粘贴回终端，存在 ~/.claude。"
 fi
-say "   不想用订阅、用 API 密钥 / Bedrock / Vertex / OpenRouter：把对应环境变量加到 $ENV_FILE，然后重启代理"
+say "   不想用订阅、用 API 密钥 / Bedrock / Vertex / OpenRouter：把对应环境变量加到 ${ENV_FILE}，然后重启代理"
 say "   （变量名和例子见 $DIR/docs/使用指南.md 的「服务器与 Docker」；也可以在面板「设置 → 代理后端」里填）。"
 if [ -n "$ST_DIR" ]; then
-    say "2. SillyTavern 就在这台服务器上（$ST_DIR）：也可以把 CCST 当酒馆插件装，不用另开代理："
+    say "2. SillyTavern 就在这台服务器上（${ST_DIR}）：也可以把 CCST 当酒馆插件装，不用另开代理："
     say "     在 config.yaml 设 enableServerPlugins: true，然后 cd $ST_DIR && node plugins.js install $REPO"
     say "   （插件方式由酒馆一起启动代理；它和本脚本装的独立代理二选一，别占同一个端口。）"
 else
@@ -336,7 +336,7 @@ fi
 say "卸载：sh $DIR/deploy/install.sh --uninstall"
 say ""
 if [ -n "$NEW_KEY" ]; then
-    say "访问密码（只显示这一次，已存到 $ENV_FILE，权限 0600）："
+    say "访问密码（只显示这一次，已存到 ${ENV_FILE}，权限 0600）："
     say "  $NEW_KEY"
 else
     say "访问密码沿用上次的，在 $ENV_FILE 里（不再显示）。"

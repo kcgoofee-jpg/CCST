@@ -21,10 +21,18 @@ export function launcherAvailable() {
     return existsSync(LAUNCHER_LIB) && process.platform === 'darwin';
 }
 
+/** Put a value on a zsh command line so nothing in it runs: single quotes are
+ *  literal in POSIX shells, and a ' inside the value is spelled '\''.
+ *  JSON.stringify's double quotes would keep `$HOME` and backticks live, and a
+ *  path holding them would expand (or execute) inside the sourced command. */
+export function shQuote(value) {
+    return `'${String(value).replace(/'/g, `'\\''`)}'`;
+}
+
 /** Run `script` in zsh after sourcing lib.zsh. Detached: fire and forget ('' at once);
  *  otherwise resolves with stdout ('' on error, 15 s timeout). */
 export function zsh(script, { detached = false } = {}) {
-    const args = ['-c', `source ${JSON.stringify(LAUNCHER_LIB)}; ${script}`];
+    const args = ['-c', `source ${shQuote(LAUNCHER_LIB)}; ${script}`];
     if (detached) {
         const child = spawn('/bin/zsh', args, { detached: true, stdio: 'ignore' });
         child.unref();
@@ -37,7 +45,7 @@ export function zsh(script, { detached = false } = {}) {
 
 /** Launcher log line + Mac notification. */
 export function logEvent(text) {
-    return zsh(`log_event ${JSON.stringify(`[遥控] ${text}`)}; osascript -e ${JSON.stringify(`display notification "${text.replace(/"/g, '')}" with title "CCST · 手机遥控"`)} >/dev/null 2>&1`);
+    return zsh(`log_event ${shQuote(`[遥控] ${text}`)}; osascript -e ${shQuote(`display notification "${text.replace(/"/g, '')}" with title "CCST · 手机遥控"`)} >/dev/null 2>&1`);
 }
 
 /** Last `lines` non-empty lines of a text file (reads at most its last 64 KB). */

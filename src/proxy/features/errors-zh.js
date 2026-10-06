@@ -15,7 +15,8 @@ const RULES = [
     },
     {
         code: 'not_logged_in',
-        test: /not logged in|please run \/login|oauth token has expired|token_expired|invalid_token|authentication_failed|authentication expired/i,
+        // "oauth.{0,20}token has expired": the CLI says 「OAuth access token has expired」.
+        test: /not logged in|please run \/login|oauth.{0,20}token has expired|token_expired|invalid_token|authentication_failed|authentication expired/i,
         message: 'Claude 订阅没登录，或登录已过期',
         hint: '这次没法生成。重新登录一次就好，不用重启代理：在 SillyTavern/plugins/CCST 文件夹里运行 npm run login（用一键安装包的：打开「酒馆工具」，按 4 进「更多」，选「登录 Claude」）。',
     },
@@ -39,7 +40,10 @@ const RULES = [
     },
     {
         code: 'usage_limit',
-        test: /usage limit|limit reached|quota|rate.?limit|too many requests|\b429\b/i,
+        // The newer CLI phrases limits as 「You've hit your weekly limit · resets
+        // 5pm (Asia/Shanghai)」 instead of 「Claude AI usage limit reached」, so the
+        // window names, 「hit your … limit」 and 「resets」 count as a limit too.
+        test: /usage limit|limit reached|weekly limit|5[-\s]?hour limit|hourly limit|hit your.{0,40}limit|resets|quota|rate.?limit|too many requests|\b429\b/i,
         message: '订阅额度到上限了（请求太频繁，或 5 小时 / 7 天额度用完）',
         hint: '这次没生成。等几分钟再试；CCST 面板「状态」页能看到额度什么时候重置。',
     },

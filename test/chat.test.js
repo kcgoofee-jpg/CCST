@@ -179,8 +179,18 @@ test('POST /v1/replies/:slot/cancel stops the kept-going reply and nothing is ke
     __resetKeptReplies();
     queries = [];
     await startAndLeave({ reply_slot: SLOT });
-    const r = await fetch(`${base}/v1/replies/${SLOT}/cancel`, { method: 'POST', headers: { Origin: 'http://127.0.0.1:8000' } });
-    assert.deepEqual(await r.json(), { ok: true, cancelled: true });
+    // A local web page must bring the access key for writes (guardPostOrigin);
+    // the panel does, and its origin still gets the CORS echo.
+    const savedKey = process.env.CLAUDE_SUBSCRIPTION_LAN_KEY;
+    process.env.CLAUDE_SUBSCRIPTION_LAN_KEY = 'cancel-key';
+    let r, body;
+    try {
+        r = await fetch(`${base}/v1/replies/${SLOT}/cancel`, { method: 'POST', headers: { Origin: 'http://127.0.0.1:8000', 'X-Claude-Max-Key': 'cancel-key' } });
+        body = await r.json();
+    } finally {
+        if (savedKey === undefined) delete process.env.CLAUDE_SUBSCRIPTION_LAN_KEY; else process.env.CLAUDE_SUBSCRIPTION_LAN_KEY = savedKey;
+    }
+    assert.deepEqual(body, { ok: true, cancelled: true });
     assert.equal(r.headers.get('access-control-allow-origin'), 'http://127.0.0.1:8000');
     await until(() => busyCount() === 0);
     assert.equal(queries[0].aborted, true);

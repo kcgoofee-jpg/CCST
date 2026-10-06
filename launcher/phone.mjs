@@ -20,7 +20,7 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { GUARD_MOD, HERE, OS, TT_PKG, adbRun, ago, clock, getJson, loadConfig, osStatus, phoneProbe, portOpen, reporter, syncHub } from './core.mjs';
+import { GUARD_MOD, HERE, OS, TT_PKG, adbRun, ago, clock, getJson, loadConfig, osStatus, phoneProbe, portOpen, reporter, shQuote, syncHub } from './core.mjs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export const UPDATE_JSON = 'https://raw.githubusercontent.com/kcgoofee-jpg/tt-root-module/main/update.json';
@@ -219,7 +219,7 @@ export function resultLines(plan, res, after) {
 
 function macShell(fn, args = [], { capture = false } = {}) {
     const lib = join(HERE, 'mac', 'lib.zsh');
-    return spawnSync('/bin/zsh', ['-c', `source ${JSON.stringify(lib)} >/dev/null 2>&1; ${fn} "$@"`, 'ccst', ...args],
+    return spawnSync('/bin/zsh', ['-c', `source ${shQuote(lib)} >/dev/null 2>&1; ${fn} "$@"`, 'ccst', ...args],
         { encoding: 'utf8', stdio: capture ? ['ignore', 'pipe', 'pipe'] : 'inherit', env: { ...process.env, CM_MENU: '1' } });
 }
 

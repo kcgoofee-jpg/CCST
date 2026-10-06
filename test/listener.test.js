@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { isAllowedOrigin, isAllowedHost } from '../src/proxy/api/guards.js';
+import { isAllowedOrigin, isAllowedHost, isTrustedPostOrigin, guardPostOrigin } from '../src/proxy/api/guards.js';
 
 test('loopback origins are allowed (SillyTavern in a local browser)', () => {
     for (const o of ['http://127.0.0.1:8000', 'http://localhost:8000', 'https://localhost', 'http://[::1]:8000']) {
@@ -91,4 +91,58 @@ test('a phone browser opening the scanned 连接码 gets a readable page, never 
     delete process.env.CLAUDE_SUBSCRIPTION_LAN_KEY;
     assert.equal(status, 200); assert.equal(type, 'html');
     assert.match(sent, /复制连接码/); assert.ok(!sent.includes('secretKey123'));
+});
+
+// ── Trust given to a browser page (spending the subscription costs real money) ──
+
+const postRes = () => {
+    const out = { status: 0, json: null, headers: {} };
+    return {
+        out,
+        setHeader(k, v) { out.headers[k] = v; },
+        status(n) { out.status = n; return this; },
+        json(b) { out.json = b; return this; },
+    };
+};
+
+test('POST: only the TauriTavern WebView and listed origins are trusted, loopback is not', () => {
+    for (const o of ['tauri://localhost', 'https://tauri.localhost', 'http://tauri.localhost', 'https://st.example.com']) {
+        assert.equal(isTrustedPostOrigin(o, 'https://st.example.com'), true, o);
+    }
+    for (const o of ['http://localhost:5173', 'http://127.0.0.1:8000', 'https://localhost', 'http://[::1]:3000', 'https://evil.com', '']) {
+        assert.equal(isTrustedPostOrigin(o, ''), false, o);
+    }
+    assert.equal(isTrustedPostOrigin(undefined), false, 'no Origin header at all is not an origin');
+});
+
+test('guardPostOrigin: a local web page must bring the access key, Tauri and SillyTavern need none', () => {
+    process.env.CLAUDE_SUBSCRIPTION_LAN_KEY = 'secretKey123';
+    try {
+        const verdict = (headers) => {
+            const res = postRes();
+            let nexted = false;
+            guardPostOrigin({ headers }, res, () => { nexted = true; });
+            return nexted ? 'next' : res.out.status;
+        };
+        assert.equal(verdict({}), 'next', 'SillyTavern forwards chat server-side: no Origin');
+        assert.equal(verdict({ origin: 'tauri://localhost' }), 'next', 'TauriTavern WebView');
+        assert.equal(verdict({ origin: 'http://localhost:5173', 'x-claude-max-key': 'secretKey123' }), 'next', 'the key makes a local page a known caller');
+        assert.equal(verdict({ origin: 'http://localhost:5173' }), 401, 'a loopback page without the key is asked for it');
+        assert.equal(verdict({ origin: 'http://localhost:5173', 'x-claude-max-key': 'wrong' }), 401);
+        assert.equal(verdict({ origin: 'https://evil.com' }), 403, 'any other site is refused outright');
+    } finally {
+        delete process.env.CLAUDE_SUBSCRIPTION_LAN_KEY;
+    }
+});
+
+test('the chat-text dump reflects CORS only for trusted origins', async () => {
+    const { allowCorsGet, allowCorsGetTrusted } = await import('../src/proxy/api/guards.js');
+    const run = (mw, origin) => {
+        const res = postRes();
+        mw({ headers: origin ? { origin } : {} }, res, () => {});
+        return res.out.headers['Access-Control-Allow-Origin'] ?? null;
+    };
+    assert.equal(run(allowCorsGet, 'http://127.0.0.1:8000'), 'http://127.0.0.1:8000', 'quota and stats stay readable from the local panel');
+    assert.equal(run(allowCorsGetTrusted, 'http://127.0.0.1:8000'), null, 'whole chats are not');
+    assert.equal(run(allowCorsGetTrusted, 'tauri://localhost'), 'tauri://localhost');
 });

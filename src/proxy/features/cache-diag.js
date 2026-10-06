@@ -16,7 +16,7 @@
 // usage.jsonl, the log and the panel): it is only named as a kind.
 
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 import { extractVolatileBlocks } from './lore-tail.js';
@@ -91,7 +91,12 @@ function remember(key, changes, splitAt) {
     if (!f || f === 'off') return;
     try {
         mkdirSync(dirname(f), { recursive: true });
-        writeFileSync(f, JSON.stringify(Object.fromEntries(mem)));
+        // Whole-file write then rename: a proxy killed mid-write would leave
+        // half a JSON here, and loadMemory reads it at startup as "unreadable,
+        // start fresh" — every chat loses its learned split point.
+        const tmp = `${f}.${process.pid}.tmp`;
+        writeFileSync(tmp, JSON.stringify(Object.fromEntries(mem)));
+        renameSync(tmp, f);
     } catch { /* best effort */ }
 }
 

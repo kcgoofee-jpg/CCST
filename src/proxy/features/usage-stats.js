@@ -150,7 +150,12 @@ export function recordRequest(r) {
         entry.errorCode = failure.code;
         entry.errorRaw = failure.raw.slice(0, 500);
     }
-    load().push(entry);
+    const all = load();
+    all.push(entry);
+    // The window is otherwise only trimmed when the panel is opened, so a
+    // proxy that runs for weeks without one holds every entry in memory.
+    const cutoff = now - WINDOW_MS;
+    while (all.length && all[0].at < cutoff) all.shift();
     persist(entry);
     console.log(formatLogLine(entry));
     return entry;

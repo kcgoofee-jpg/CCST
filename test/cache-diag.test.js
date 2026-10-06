@@ -190,6 +190,30 @@ test('what was learned about a chat survives a restart (tags and split only)', a
     }
 });
 
+test('what was learned is written whole, not in place', async () => {
+    const { mkdtempSync, readdirSync, readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const { tmpdir } = await import('node:os');
+    const dir = mkdtempSync(join(tmpdir(), 'cm-mem-'));
+    const file = join(dir, 'mem.json');
+    process.env.CLAUDE_SUBSCRIPTION_CACHE_MEMORY_FILE = file;
+    try {
+        __resetCacheDiag();
+        diagnoseCache('<world_info>雪山</world_info>', [A('hi'), U('u1')]);
+        assert.ok(JSON.parse(readFileSync(file, 'utf8')), 'valid JSON after one turn');
+        assert.deepEqual(readdirSync(dir).filter((f) => f !== 'mem.json'), [], 'the temp file was renamed away');
+        // A truncated file here would land in loadMemory's catch and the chat
+        // would relearn its split point after every restart.
+        const src = readFileSync(new URL('../src/proxy/features/cache-diag.js', import.meta.url), 'utf8');
+        for (const [, target] of src.matchAll(/writeFileSync\(\s*([^,]+),/g)) {
+            assert.match(target, /tmp/, `${target.trim()} would be written in place`);
+        }
+    } finally {
+        delete process.env.CLAUDE_SUBSCRIPTION_CACHE_MEMORY_FILE;
+        __resetCacheDiag();
+    }
+});
+
 test('with the lore moved out, a change inside it sets no split and later changes do not move it', () => {
     __resetCacheDiag();
     const head = '规则'.repeat(1000) + '\n';

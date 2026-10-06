@@ -66,6 +66,16 @@ test('buildSubprocessEnv: a stray shell provider switch or key never survives, t
         const api = buildSubprocessEnv({ envPins: {}, apiKey: null, backend: cfg('apikey', { apikey: { apiKey: 'sk-ant-file' } }) });
         assert.equal(api.ANTHROPIC_API_KEY, 'sk-ant-file');
         assert.equal(api.ANTHROPIC_BASE_URL, undefined);
+        assert.equal(api.CLAUDE_CODE_OAUTH_TOKEN, undefined, 'the apikey backend bills the key, never the login');
+        // An explicit Bearer sk-ant key on the subscription backend is the same opt-in.
+        const byo = buildSubprocessEnv({ envPins: {}, apiKey: 'sk-ant-header', backend: cfg('subscription') });
+        assert.equal(byo.ANTHROPIC_API_KEY, 'sk-ant-header');
+        assert.equal(byo.CLAUDE_CODE_OAUTH_TOKEN, undefined, 'a setup-token env would outrank the header key');
+        // No 「最大回复长度」 in the request: an inherited shell cap would limit
+        // the reply without anything in the request asking for it.
+        process.env.CLAUDE_CODE_MAX_OUTPUT_TOKENS = '4096';
+        assert.equal(buildSubprocessEnv({ envPins: {}, apiKey: null, backend: cfg('subscription') }).CLAUDE_CODE_MAX_OUTPUT_TOKENS, undefined);
+        assert.equal(buildSubprocessEnv({ envPins: {}, maxTokens: 8192, apiKey: null, backend: cfg('subscription') }).CLAUDE_CODE_MAX_OUTPUT_TOKENS, '8192', 'the request wins');
     } finally {
         for (const k of Object.keys(process.env)) if (!(k in saved)) delete process.env[k];
         Object.assign(process.env, saved);
