@@ -110,7 +110,7 @@ async function captureAsync(fn) {
     return lines.join('\n');
 }
 
-test('a transcript dir that cannot be cleaned is reported (#30)', () => {
+test('a transcript dir that cannot be cleaned is reported (#30)', { skip: process.platform === 'win32' ? 'chmod 000 does not block deletion on Windows' : false }, () => {
     if (process.getuid && process.getuid() === 0) return; // root ignores the chmod below
     const base = mkdtempSync(join(tmpdir(), 'cm-sweep-'));
     const scratch = join(base, 'scratch');

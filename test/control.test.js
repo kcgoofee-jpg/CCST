@@ -87,10 +87,11 @@ test('phone sync also waits while a reply is being written', async () => {
 
 // The action script the phone runs uses the launcher's own wait; it must exist and
 // mean what the action assumes: 0 = idle now, 1 = still writing when the wait runs out.
-test('wait_proxy_idle waits for the proxy to finish writing', { skip: process.platform === 'win32' }, () => {
+const ZSH = ['/bin/zsh', '/usr/bin/zsh', '/usr/local/bin/zsh', '/opt/homebrew/bin/zsh'].find(existsSync) ?? null;
+test('wait_proxy_idle waits for the proxy to finish writing', { skip: process.platform === 'win32' || !ZSH }, () => {
     const lib = new URL('../launcher/mac/lib.zsh', import.meta.url);
     assert.ok(existsSync(lib), 'launcher/mac/lib.zsh is part of this checkout');
-    const run = (stub, limit) => spawnSync('/bin/zsh',
+    const run = (stub, limit) => spawnSync(ZSH,
         ['-c', `source ${shQuote(fileURLToPath(lib))} >/dev/null 2>&1; proxy_busy() { ${stub} }; wait_proxy_idle ${limit} >/dev/null 2>&1; print $?`],
         { encoding: 'utf8', timeout: 30000 }).stdout.trim();
     assert.equal(run('return 1', 4), '0', 'idle: do it right away');
