@@ -1,8 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
-import { ACTIONS, handleControlAction, countInFlight, busyCount, markStandalone, __setInFlight, LID_PAUSE_FILE } from '../src/proxy/platform/control.js';
+import { shQuote } from '../launcher/core.mjs';
+import { ACTIONS, actionAnswer, handleControlAction, countInFlight, busyCount, markStandalone, __setInFlight, LID_PAUSE_FILE } from '../src/proxy/platform/control.js';
 
 function fakeRes() {
     const res = { statusCode: 200, body: null };
@@ -23,17 +26,18 @@ test('an unknown action is refused', async () => {
     assert.equal(res.body.ok, false);
 });
 
-test('restart waits while a reply is being written', async () => {
-    if (process.platform !== 'darwin') return;
-    __setInFlight(1);
-    try {
-        const res = fakeRes();
-        await handleControlAction({ body: { action: 'restart-proxy' } }, res);
-        assert.equal(res.statusCode, 409);
-        assert.match(res.body.message, /写完再重启/);
-    } finally {
-        __setInFlight(0);
-    }
+// The idle check moved into the action's own script: the phone presses once and the
+// restart runs when the reply in progress is finished, instead of being refused and
+// pressed again. (Asserted on the action, because running it would restart the proxy.)
+test('a restart pressed while a reply is being written queues itself instead of bouncing the phone', () => {
+    const a = ACTIONS['restart-proxy'];
+    assert.equal(a.whenIdle, undefined, 'no up-front refusal');
+    assert.equal(a.idleQueue, 120);
+    assert.match(a.script, /^wait_proxy_idle 120 \|\| \{ log_event .*已取消"; exit 1; \}/, 'the script waits, and gives up');
+    assert.match(a.script, /stop_one \$PROXY_PORT/, 'then stops and starts as before');
+    assert.match(actionAnswer(a).message, /已排队/);
+    assert.match(actionAnswer(a).message, /120/);
+    assert.match(actionAnswer(ACTIONS['lid-resume']).message, /已执行$/);
 });
 
 test('a reply counts as in flight until its handler is done, even after the client left', async () => {
@@ -79,6 +83,18 @@ test('phone sync also waits while a reply is being written', async () => {
     } finally {
         __setInFlight(0);
     }
+});
+
+// The action script the phone runs uses the launcher's own wait; it must exist and
+// mean what the action assumes: 0 = idle now, 1 = still writing when the wait runs out.
+test('wait_proxy_idle waits for the proxy to finish writing', { skip: process.platform === 'win32' }, () => {
+    const lib = new URL('../launcher/mac/lib.zsh', import.meta.url);
+    assert.ok(existsSync(lib), 'launcher/mac/lib.zsh is part of this checkout');
+    const run = (stub, limit) => spawnSync('/bin/zsh',
+        ['-c', `source ${shQuote(fileURLToPath(lib))} >/dev/null 2>&1; proxy_busy() { ${stub} }; wait_proxy_idle ${limit} >/dev/null 2>&1; print $?`],
+        { encoding: 'utf8', timeout: 30000 }).stdout.trim();
+    assert.equal(run('return 1', 4), '0', 'idle: do it right away');
+    assert.equal(run('return 0', 2), '1', 'still writing at the limit: cancel');
 });
 
 test('inside SillyTavern (plugin mode) restart-proxy is refused: it would stop SillyTavern', async () => {

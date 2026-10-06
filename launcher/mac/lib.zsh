@@ -468,6 +468,18 @@ proxy_busy() {
     return 1
 }
 
+# 等代理写完手上的回复：空闲返回 0，最多等 <秒>（默认 120），等不到返回 1
+# 手机遥控的动作用它把「等空闲」放进动作自己做，而不是按下去就先被拒一次
+wait_proxy_idle() {
+    local limit=${1:-120} waited=0
+    while (( waited < limit )); do
+        proxy_busy || return 0
+        sleep 2
+        waited=$(( waited + 2 ))
+    done
+    return 1
+}
+
 # 代理实际监听的范围：lan（*:端口，手机能连）/ local（只有本机）；没在运行就什么都不打印
 proxy_listen_scope() {
     local pid name

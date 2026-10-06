@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { join } from 'node:path';
 
 import {
-    classify, diagnoseText, loadConfig, parseConfig, parseLsofCwd, parseNetstat, parseTsv, readState, recentLog,
+    classify, confirmStarted, diagnoseText, loadConfig, parseConfig, parseLsofCwd, parseNetstat, parseTsv, proxyIdentities, readState, recentLog,
     restartRefusal, services, stopService,
 } from '../launcher/core.mjs';
 import { nodeAction } from '../launcher/menu.mjs';
@@ -101,6 +101,49 @@ test('stopService: TERM first, SIGKILL only if it will not exit', async () => {
     assert.equal(await stopService(svc, r, stubborn, { wait: async () => {} }), true);
     assert.deepEqual(stubborn.killed, [[11, 'SIGTERM'], [11, 'SIGKILL']]);
     assert.equal(r.warn, 1);
+});
+
+// An open port is not a started service: on macOS a proxy bound to 0.0.0.0 shares
+// the port with one still running on 127.0.0.1, and the browser talks to the old one.
+test('confirmStarted: the process we just spawned has to be the one answering', async () => {
+    const proc = fakeProc({ listeners: [7] });
+    assert.equal(await confirmStarted(svc, 7, proc, { status: async () => null }), true);
+    const other = fakeProc({ listeners: [7, 8] });
+    assert.match(await confirmStarted(svc, 7, other, { status: async () => ({ pid: 8 }) }), /应答的是另一个进程（8/);
+    assert.match(await confirmStarted(svc, 7, proc, { exited: () => true }), /又退出了/);
+    assert.match(await confirmStarted(svc, 7, fakeProc({ listeners: [8] }), { status: async () => null }), /别的程序在听（8）/);
+    // Termux without lsof: the port and the proxy's own PID are all there is
+    assert.equal(await confirmStarted(svc, 7, fakeProc({ listeners: null }), { status: async () => ({ pid: 7 }) }), true);
+    assert.match(await confirmStarted(svc, 7, fakeProc({ listeners: null }), { status: async () => ({ pid: 9 }) }), /应答的是另一个进程（9/);
+});
+
+test('only the standalone proxy PID is ours; the one inside SillyTavern belongs to the tavern', () => {
+    const self = { plugin: 'claude-subscription', pid: 300 };
+    assert.deepEqual(
+        proxyIdentities({ standalone: { ...self, runtime: 'standalone' }, tavern: { ...self, runtime: 'plugin' } }),
+        { standalonePid: 300, inTavernPid: 300 });
+    // another program answering /status, or an old proxy without these fields: trusted as nothing
+    assert.deepEqual(proxyIdentities({ standalone: { pid: 1 }, tavern: { plugin: 'other', runtime: 'plugin', pid: 2 } }),
+        { standalonePid: null, inTavernPid: null });
+    assert.deepEqual(proxyIdentities({}), { standalonePid: null, inTavernPid: null });
+});
+
+// In plugin mode the "foreign" process on the port IS SillyTavern: never stop it
+// without asking, and never silently in an automated flow.
+test('stopService stops the proxy inside SillyTavern only after the user agrees', async () => {
+    const ask = async () => true;
+    const silent = fakeProc({ listeners: [50], cwds: { 50: '/st' }, names: { 50: 'node' } });
+    assert.equal(await stopService(svc, quiet(), silent, { inTavernPid: 50, wait: async () => {} }), true);
+    assert.deepEqual(silent.killed, [], 'no ask callback: nothing is killed');
+    const proc = fakeProc({ listeners: [50], cwds: { 50: '/st' }, names: { 50: 'node' } });
+    const asked = [];
+    const r = quiet();
+    assert.equal(await stopService(svc, r, proc, { inTavernPid: 50, ask: async (q) => { asked.push(q); return false; }, wait: async () => {} }), true);
+    assert.deepEqual(proc.killed, [], 'the user said no');
+    assert.match(asked[0], /酒馆一起关/);
+    assert.equal(r.warn, 1);
+    assert.equal(await stopService(svc, quiet(), proc, { inTavernPid: 50, ask, wait: async () => {} }), true);
+    assert.deepEqual(proc.killed, [[50, 'SIGTERM']]);
 });
 
 test('restart is refused while the proxy is writing a reply', () => {

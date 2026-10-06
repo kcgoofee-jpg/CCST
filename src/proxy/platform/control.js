@@ -62,14 +62,21 @@ export function markStandalone(on = true) {
 
 // name → { label, script (zsh, after sourcing lib.zsh) | run (in-process),
 //          whenIdle: refused while replies are being written (idleNote says why),
+//          idleQueue: the script itself waits for the reply to finish (up to these
+//          seconds) instead of the phone being refused and pressing again,
 //          standaloneOnly: refused when the proxy runs inside SillyTavern }
+const IDLE_WAIT_S = 120;
+
 export const ACTIONS = {
     'restart-proxy': {
         label: '重启代理',
         // Detached: the old proxy is stopped from outside, then started again.
-        script: 'sleep 1; stop_one $PROXY_PORT "Claude 代理" >/dev/null 2>&1; start_proxy >/dev/null 2>&1',
-        whenIdle: true,
-        idleNote: '写完再重启',
+        // The idle check belongs to this script, not to the request: the phone
+        // presses once and the restart happens when the reply currently being
+        // written is finished (a check done here at the gate would be seconds
+        // out of date by the time the detached script stops the proxy).
+        script: `wait_proxy_idle ${IDLE_WAIT_S} || { log_event "重启代理：等了 ${IDLE_WAIT_S} 秒还在写回复，已取消"; exit 1; }; sleep 1; stop_one $PROXY_PORT "Claude 代理" >/dev/null 2>&1; start_proxy >/dev/null 2>&1`,
+        idleQueue: IDLE_WAIT_S,
         standaloneOnly: true,
     },
     'lid-pause': {
@@ -125,6 +132,14 @@ export async function handleControlStatus(_req, res) {
     res.json(await macStatus());
 }
 
+/** What the phone is told: an idleQueue action is not done yet, it is waiting
+ *  for the reply in progress inside its own script. */
+export function actionAnswer(action) {
+    return { ok: true, message: action.idleQueue
+        ? `${action.label}：已排队，等手上的回复写完就做（最多 ${action.idleQueue} 秒，等不到就取消）`
+        : `${action.label}：已执行` };
+}
+
 export async function handleControlAction(req, res) {
     const name = String(req.body?.action ?? '');
     // Own keys only: 'constructor' / '__proto__' must not resolve to Object.prototype members.
@@ -139,9 +154,9 @@ export async function handleControlAction(req, res) {
     if (action.standaloneOnly && !standalone) {
         return res.status(409).json({ ok: false, message: '代理现在运行在酒馆（SillyTavern）里面，从这里重启会把酒馆一起关掉。请在 Mac 上用「酒馆工具」重启（会连酒馆一起重启）。' });
     }
-    await logEvent(action.label);
+    await logEvent(action.idleQueue && inFlight > 0 ? `${action.label}（排队：手上还有 ${inFlight} 条在写）` : action.label);
     if (action.run) action.run();
-    res.json({ ok: true, message: `${action.label}：已执行` });
+    res.json(actionAnswer(action));
     if (action.script) zsh(action.script, { detached: true });
 }
 

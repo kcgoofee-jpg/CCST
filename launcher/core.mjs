@@ -535,9 +535,14 @@ function selfCheck(cfg, r, st, proc) {
     }
     for (const svc of services(cfg)) {
         if (svc.key === 'sillytavern' && !managed) continue;
-        const c = classify(svc, proc, { reportedPid: svc.key === 'proxy' ? st.proxyPid : null });
+        const c = classify(svc, proc, { reportedPid: svc.key === 'proxy' ? st.standalonePid : null });
         if (c.ours.length) r.ok(`${svc.label} 已经在运行（端口 ${svc.port}）`);
         else if (c.foreign.length) {
+            // 代理跑在酒馆里面（插件模式）：端口上那个程序就是酒馆，不是「被别的程序占了」
+            if (svc.key === 'proxy' && st.inTavernPid && c.foreign.includes(st.inTavernPid)) {
+                r.ok(`${svc.label} 已经在运行（酒馆里的插件，端口 ${svc.port}）`);
+                continue;
+            }
             const owner = proc.name(c.foreign[0]) || '未知程序';
             r.failLine(`端口 ${svc.port} 被其他程序占用：${owner}`);
             r.fix(`关闭「${owner}」后再试，或重启电脑。`);
@@ -574,7 +579,8 @@ export async function actionCheck(io = {}) {
     r.banner('检查状态（体检）');
     r.explain('只做检查，不启动也不关闭任何程序：看环境是否完整、程序有没有在运行、日志里有没有报错。');
     const st = await readState({ cfg });
-    st.proxyPid = (await getJson(`http://127.0.0.1:${cfg.proxyPort}/status`))?.pid ?? null;
+    // 代理可能是独立跑的，也可能就在酒馆进程里（插件模式）：两种入口各问一次
+    Object.assign(st, await proxyIdentity(cfg));
     selfCheck(cfg, r, st, proc);
     await healthCheck(cfg, r);
     if (st.busy) r.explain(`· 代理正在写 ${st.busy} 条回复`);
@@ -656,18 +662,47 @@ export function restartRefusal(control) {
     return n > 0 ? `代理正在写 ${n} 条回复，现在重启会把它掐断。等写完再来。` : null;
 }
 
+/** 端口上应答的两种身份（看 /status 自己报的 runtime）：
+ *  单独运行的代理，PID 才是本工具启动的那个；
+ *  跑在酒馆里面的代理（插件模式），PID 就是酒馆的 —— 拿它当「我们的」去关，等于关酒馆，
+ *  所以只能问过用户才动。别的程序（或旧版没有这两个字段的代理）一律不认。 */
+export function proxyIdentities({ standalone = null, tavern = null } = {}) {
+    const pidAs = (st, runtime) => (st?.plugin === 'claude-subscription' && st?.runtime === runtime ? st.pid ?? null : null);
+    return { standalonePid: pidAs(standalone, 'standalone'), inTavernPid: pidAs(tavern, 'plugin') };
+}
+
+/** 问一遍端口：单独运行的代理和酒馆插件里的代理各是什么 PID。 */
+export async function proxyIdentity(cfg, status = getJson) {
+    const base = `http://127.0.0.1:${cfg.proxyPort}`;
+    const [standalone, tavern] = await Promise.all([
+        status(`${base}/status`),
+        status(`${base}/api/plugins/claude-subscription/status`),
+    ]);
+    return proxyIdentities({ standalone, tavern });
+}
+
 /** 关一个程序：只关端口上确认是我们的 PID；先 TERM，最多等 10 秒，没退出再强制。 */
-export async function stopService(svc, r, proc, { reportedPid = null, wait = sleep, mark = () => {} } = {}) {
+export async function stopService(svc, r, proc, { reportedPid = null, inTavernPid = null, ask = null, wait = sleep, mark = () => {} } = {}) {
     const c = classify(svc, proc, { reportedPid });
-    if (!c.ours.length) {
-        if (c.foreign.length) r.explain(`· 端口 ${svc.port} 上是别的程序（${proc.name(c.foreign[0]) || '未知'}），不是本工具启动的，不动它`);
-        else r.ok(`${svc.label} 本来就没有运行`);
-        return true;
+    let targets = c.ours;
+    if (!targets.length) {
+        // 插件模式：端口上那个「别人的程序」就是酒馆。不问一声绝不关它，问了也要说清代价。
+        const tavernOnPort = svc.key === 'proxy' && inTavernPid && (c.foreign.includes(inTavernPid) || !c.known);
+        if (!tavernOnPort) {
+            if (c.foreign.length) r.explain(`· 端口 ${svc.port} 上是别的程序（${proc.name(c.foreign[0]) || '未知'}），不是本工具启动的，不动它`);
+            else r.ok(`${svc.label} 本来就没有运行`);
+            return true;
+        }
+        if (!ask || !(await ask(`端口 ${svc.port} 上的 Claude 代理跑在酒馆里面（和酒馆是同一个进程），停它会把酒馆一起关掉。仍然现在停吗？`))) {
+            r.warnLine('没有停：那个代理和酒馆在同一个进程里。要停它就在酒馆里停用插件，或者关掉酒馆。');
+            return true;
+        }
+        targets = c.foreign.length ? c.foreign : [inTavernPid];
     }
     mark();
-    for (const p of c.ours) proc.kill(p, 'SIGTERM');
-    for (let i = 0; i < 50 && c.ours.some((p) => proc.alive(p)); i++) await wait(200);
-    const left = c.ours.filter((p) => proc.alive(p));
+    for (const p of targets) proc.kill(p, 'SIGTERM');
+    for (let i = 0; i < 50 && targets.some((p) => proc.alive(p)); i++) await wait(200);
+    const left = targets.filter((p) => proc.alive(p));
     if (!left.length) { r.ok(`已关闭${svc.label}`); cleanPid(svc); return true; }
     for (const p of left) proc.kill(p, 'SIGKILL');
     await wait(1000);
@@ -680,9 +715,29 @@ export async function stopService(svc, r, proc, { reportedPid = null, wait = sle
 function cleanPid(svc) { try { unlinkSync(svc.pidFile); } catch { /* 没有 */ } }
 
 /** 在后台启动一个程序（自己一个进程组，关掉菜单窗口不影响），等端口出现。 */
-export async function startService(svc, r, proc, cfg, { reportedPid = null } = {}) {
+/** 端口通了还不算启动成功：在听的那个可能不是刚起来的这个进程（macOS 上 0.0.0.0 能和还在跑的
+ *  旧代理共用一个端口，浏览器连的是旧的那个），也可能是起来就退了。所以要核对监听 PID，
+ *  代理再核对 /status 报的 PID 就是本次启动的。列不出监听 PID（没有 lsof）时只凭 /status 和端口判断。
+ *  @returns {Promise<true|string>} true，或者没成功的原因 */
+export async function confirmStarted(svc, childPid, proc, { exited = () => false, status = getJson } = {}) {
+    if (exited()) return '进程启动后又退出了（看上面的日志）';
+    if (svc.key === 'proxy' && childPid) {
+        const st = await status(`http://127.0.0.1:${svc.port}/status`);
+        if (st?.pid && st.pid !== childPid) return `在端口上应答的是另一个进程（${st.pid}，不是本次启动的 ${childPid}）`;
+    }
+    const pids = proc.listeners(svc.port);
+    if (pids && childPid && !pids.includes(childPid)) return `端口 ${svc.port} 上是别的程序在听（${pids.join(' ')}）`;
+    return true;
+}
+
+export async function startService(svc, r, proc, cfg, { reportedPid = null, inTavernPid = null } = {}) {
     const c = classify(svc, proc, { reportedPid });
     if (c.ours.length) { r.ok(`${svc.label} 已经在运行，跳过`); return true; }
+    // 代理跑在酒馆里面：端口上确实是「别人的程序」（酒馆），但它就是本工具要的那个代理，不用再启动
+    if (svc.key === 'proxy' && inTavernPid && (c.foreign.includes(inTavernPid) || !c.known)) {
+        r.ok(`${svc.label} 已经在运行（酒馆里的插件），跳过`);
+        return true;
+    }
     if (c.foreign.length) {
         const owner = proc.name(c.foreign[0]) || '未知程序';
         r.failLine(`端口 ${svc.port} 被其他程序占着：${owner}，${svc.label}启动不了`);
@@ -714,7 +769,14 @@ export async function startService(svc, r, proc, cfg, { reportedPid = null } = {
     const start = Date.now();
     let next = 10;
     while (Date.now() - start < svc.secs * 1000) {
-        if (await portOpen(svc.port)) { r.ok(`${svc.label} 已启动：http://127.0.0.1:${svc.port}${svc.key === 'proxy' ? '/v1' : ''}`); return true; }
+        if (await portOpen(svc.port)) {
+            const why = await confirmStarted(svc, child.pid ?? null, proc, { exited: () => exited });
+            if (why === true) { r.ok(`${svc.label} 已启动：http://127.0.0.1:${svc.port}${svc.key === 'proxy' ? '/v1' : ''}`); return true; }
+            r.failLine(`${svc.label} 没启动成功：${why}`);
+            if (exited) diagnoseLog(r, [svc.log], svc.label);
+            else r.fix(`端口 ${svc.port} 上已经有一个在跑的：先停掉它（首页按 2，或到它的窗口按 Ctrl+C）再启动。`);
+            return false;
+        }
         if (exited) break;
         await sleep(300);
         if ((Date.now() - start) / 1000 >= next) { r.explain(`已等待 ${next} 秒…`); next += 10; }
@@ -724,17 +786,14 @@ export async function startService(svc, r, proc, cfg, { reportedPid = null } = {
     return false;
 }
 
-async function reportedProxyPid(cfg) {
-    return (await getJson(`http://127.0.0.1:${cfg.proxyPort}/status`))?.pid ?? null;
-}
-
-async function stopAll(cfg, r, proc) {
+async function stopAll(cfg, r, proc, io = {}) {
     r.step(cfg.stDir ? '关闭酒馆和 Claude 代理' : '关闭 Claude 代理');
-    const pid = await reportedProxyPid(cfg);
+    const { standalonePid, inTavernPid } = await proxyIdentity(cfg);
     let ok = true;
     for (const svc of services(cfg)) {
         const mark = svc.key === 'proxy' ? () => { try { writeFileSync(cfg.restartMark, ''); } catch { /* 标记写不了不要紧 */ } } : undefined;
-        ok = (await stopService(svc, r, proc, { reportedPid: svc.key === 'proxy' ? pid : null, mark })) && ok;
+        const ids = svc.key === 'proxy' ? { reportedPid: standalonePid, inTavernPid, ask: io.ask } : {};
+        ok = (await stopService(svc, r, proc, { mark, ...ids })) && ok;
     }
     return ok;
 }
@@ -744,9 +803,10 @@ async function startAll(cfg, r, proc) {
     const list = services(cfg).filter((s) => s.key === 'proxy' || managed);
     r.step(managed ? `启动 Claude 代理（端口 ${cfg.proxyPort}）和酒馆（端口 ${cfg.stPort}）` : `启动 Claude 代理（端口 ${cfg.proxyPort}）`);
     if (managed) r.explain('酒馆首次启动或更新后需要编译前端，可能要 10–60 秒，请耐心等待。');
-    const pid = await reportedProxyPid(cfg);
+    const { standalonePid, inTavernPid } = await proxyIdentity(cfg);
     // 酒馆编译前端最慢：两个同时启动
-    const res = await Promise.all(list.map((svc) => startService(svc, r, proc, cfg, { reportedPid: svc.key === 'proxy' ? pid : null })));
+    const res = await Promise.all(list.map((svc) => startService(svc, r, proc, cfg,
+        svc.key === 'proxy' ? { reportedPid: standalonePid, inTavernPid } : {})));
     try { unlinkSync(cfg.restartMark); } catch { /* 没有 */ }
     return { proxyOk: res[list.findIndex((s) => s.key === 'proxy')], stOk: managed ? res[0] : false };
 }
@@ -788,7 +848,7 @@ export async function actionStop(io = {}) {
         r.warnLine(`代理正在写 ${busy} 条回复，现在关闭会把它掐断（那条回复要重新生成）`);
         if (!io.ask || !(await io.ask('仍然现在关闭吗？（选 N 就等写完再来）'))) { r.warnLine('没有关闭。等这条回复写完再来。'); r.summary(); return 0; }
     }
-    const ok = await stopAll(cfg, r, proc);
+    const ok = await stopAll(cfg, r, proc, io);
     r.summary();
     return ok ? 0 : 1;
 }
@@ -802,7 +862,7 @@ export async function actionRestart(io = {}) {
     if (why) { r.warnLine(`没有重启：${why}`); r.summary(); return 0; }
     preflight(cfg, r);
     if (r.fail && io.ask && !(await io.ask('发现问题，仍然要重启吗？（现在运行着的会先关掉）'))) { r.summary(); return 1; }
-    if (!(await stopAll(cfg, r, proc))) { r.summary(); return 1; }
+    if (!(await stopAll(cfg, r, proc, io))) { r.summary(); return 1; }
     const res = await startAll(cfg, r, proc);
     await afterStart(cfg, r, res, io);
     return res.proxyOk ? 0 : 1;

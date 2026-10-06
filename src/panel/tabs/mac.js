@@ -73,7 +73,7 @@ export async function refreshMac() {
         });
         row.append(b);
     };
-    act('重启代理', 'restart-proxy', '重启 Mac 上的代理？几秒后自动恢复。');
+    act('重启代理', 'restart-proxy', '重启 Mac 上的代理？几秒后自动恢复。正在写回复时会先等写完（最多 2 分钟）。');
     // Syncs the phone's TauriTavern: only makes sense from inside it.
     if (canSyncPhone(s)) act(PHONE_SYNC_LABEL, 'phone-sync', [PHONE_SYNC_WARNING, '仍要从 Mac 同步这台手机？TauriTavern 会先关闭，同步完自动重新打开。']);
     const copyBtn = el('button', 'menu_button cm-btn', '复制');
