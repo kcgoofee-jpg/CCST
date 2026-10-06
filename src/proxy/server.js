@@ -13,9 +13,11 @@
 // this listener on the port and reuses it instead of failing.
 
 import { startStandaloneListener, stopStandaloneListener, portInUseMessage, probeExistingProxy } from './api/listener.js';
+import { makeShutdownHandler } from './api/shutdown.js';
 import { networkInterfaces } from 'node:os';
 
 import { credentialSummary } from './features/oauth.js';
+import { noteSdkVersionRun } from './features/sdk-version.js';
 import { markStandalone } from './platform/control.js';
 import { flushSweeps, sweepLeftovers } from './features/session-store.js';
 
@@ -31,6 +33,7 @@ process.on('unhandledRejection', (reason) => {
 
 // This process owns the port: the phone's「重启代理」may stop and restart it.
 markStandalone();
+noteSdkVersionRun();
 
 try {
     // Probe before binding, exactly like the plugin side does: on macOS a proxy
@@ -71,17 +74,13 @@ try {
     if (swept.transcripts || swept.tempDirs) console.log(`${TAG} 清理了上次遗留的 ${swept.transcripts} 份会话记录、${swept.tempDirs} 个临时目录`);
 } catch { /* best effort */ }
 
-let stopping = false;
-async function shutdown(signal) {
-    if (stopping) return;
-    stopping = true;
-    console.log(`${TAG} ${signal} — shutting down`);
+async function closeEverything() {
     // Delete this run's last transcripts before exiting (their timers would never fire).
     const flush = () => Promise.race([flushSweeps(), new Promise((r) => setTimeout(r, 5000).unref())]);
     await flush();
     await stopStandaloneListener();
     await flush(); // replies that were still running when the signal came
-    process.exit(0);
 }
+const shutdown = makeShutdownHandler({ close: closeEverything });
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));

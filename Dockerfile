@@ -15,8 +15,9 @@ ENV NODE_ENV=production \
 WORKDIR /app
 
 # 依赖单独一层，改代码不用重装。不要加 --omit=optional：Claude CLI 在可选依赖里。
-COPY package.json ./
-RUN npm install --omit=dev --no-audit --no-fund && npm cache clean --force
+# 用 package-lock.json 装：SDK 版本锁在 lockfile 里，镜像之间不会漂。
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
 
 COPY server.js manifest.json ./
 COPY bin ./bin

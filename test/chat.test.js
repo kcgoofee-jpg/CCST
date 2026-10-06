@@ -10,6 +10,7 @@ const TMP = mkdtempSync(join(tmpdir(), 'cm-chat-'));
 process.env.CLAUDE_SUBSCRIPTION_STATS_FILE = join(TMP, 'usage.jsonl');
 process.env.CLAUDE_SUBSCRIPTION_DEBUG_DIR = join(TMP, 'debug');
 process.env.CLAUDE_SUBSCRIPTION_SCRATCH_CWD = join(TMP, 'scratch');
+process.env.CLAUDE_SUBSCRIPTION_CONTEXT_PIN_FILE = 'off';
 
 const { watchClient, maxTurnsFrom, statusForError, handleChatCompletions } = await import('../src/proxy/core/chat.js');
 const { cancelReply, keptReply, __resetKeptReplies } = await import('../src/proxy/features/reply-keeper.js');

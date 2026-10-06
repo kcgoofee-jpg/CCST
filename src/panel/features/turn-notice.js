@@ -39,5 +39,8 @@ export async function noticeLastTurn() {
         if (notices.includes('no-1m')) {
             notify('info', '这一轮没用上 1M 上下文', `订阅的 1M 额度现在用不了，这轮用了普通上下文的 ${shortModel(last.model).replace(/\s*1M$/, '')}；约一小时后再试 1M。`, { ms: 12000 });
         }
+        if (notices.includes('replay-reset')) {
+            notify('warn', '已重置逐轮还原状态', '代理连着几轮没能还原上几轮的写法（多半是 Claude 命令行升级了），已重新开始；本轮缓存会全量重写一次，下一轮起恢复正常。', { ms: 15000 });
+        }
     } catch { /* proxy unreachable: the status block already says so */ }
 }

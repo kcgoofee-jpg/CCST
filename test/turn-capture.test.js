@@ -2,12 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { randomUUID } from 'node:crypto';
-import { mkdtempSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { createTurnCollector, replayTurn, hasPinnedContext, pinnedContext, historyReplay, replyBefore, repliesBefore, sentTextFor, __resetTurnCaptures } from '../src/proxy/features/turn-capture.js';
+import { createTurnCollector, replayTurn, hasPinnedContext, pinnedContext, historyReplay, replyBefore, repliesBefore, sentTextFor, pinContext, noteReplayHealth, __resetTurnCaptures, __reloadPinsForTesting } from '../src/proxy/features/turn-capture.js';
 import { assembleEntries } from '../src/proxy/features/jsonl-entries.js';
+import { SDK_VERSION } from '../src/proxy/features/sdk-version.js';
 
 const meta = { sessionId: 's2', cwd: '/tmp/x', version: 'v', gitBranch: '', permissionMode: 'bypassPermissions' };
 const cliEntries = [
@@ -102,7 +103,9 @@ test('the pin file lands whole, with no temp left behind', async () => {
     try {
         const mod = await import(`../src/proxy/features/turn-capture.js?atomic=${Date.now()}`);
         mod.pinContext('m-atomic', [{ type: 'attachment', uuid: 'z1', attachment: { type: 'model', id: 'm-atomic' } }]);
-        assert.deepEqual(JSON.parse(readFileSync(file, 'utf8'))['m-atomic'].map((e) => e.uuid), ['z1']);
+        const saved = JSON.parse(readFileSync(file, 'utf8'));
+        assert.equal(typeof saved.version, 'string', 'stamped with the SDK version (#26)');
+        assert.deepEqual(saved.pins['m-atomic'].map((e) => e.uuid), ['z1']);
         assert.deepEqual(readdirSync(dir).filter((f) => f !== 'cli-context.json'), [], 'the temp file was renamed away');
         const reread = await import(`../src/proxy/features/turn-capture.js?reread=${Date.now()}`);
         assert.equal(reread.hasPinnedContext('m-atomic'), true, 'a restart reads it back');
@@ -296,4 +299,72 @@ test('a prefill turn is filed under its own instruction, not under the player me
     assert.equal(players.length, 1, 'the player message is replayed once');
     assert.ok(!next.some((e) => text(e).includes('Continue the assistant')), 'no continuation instruction replaces it');
     __setSdkForTesting(null);
+});
+// ── #26: the pin file and the replay know which SDK wrote them ──
+
+/** Run `fn` with the pin file pointed at a fresh temp path (content: null = no file yet). */
+function withPinFile(content, fn) {
+    const saved = process.env.CLAUDE_SUBSCRIPTION_CONTEXT_PIN_FILE;
+    const file = join(mkdtempSync(join(tmpdir(), 'ccst-pin-')), 'cli-context.json');
+    if (content !== null) writeFileSync(file, JSON.stringify(content));
+    process.env.CLAUDE_SUBSCRIPTION_CONTEXT_PIN_FILE = file;
+    try {
+        return fn(file);
+    } finally {
+        if (saved === undefined) delete process.env.CLAUDE_SUBSCRIPTION_CONTEXT_PIN_FILE; else process.env.CLAUDE_SUBSCRIPTION_CONTEXT_PIN_FILE = saved;
+        __resetTurnCaptures();
+    }
+}
+
+const datePin = [{ type: 'attachment', uuid: 'p1', parentUuid: null, attachment: { type: 'date', date: '2026-09-26' } }];
+
+test('a pin file in the old format is dropped and rewritten with the version (#26)', () => {
+    withPinFile({ 'm-old': datePin }, (file) => {
+        __reloadPinsForTesting();
+        assert.equal(hasPinnedContext('m-old'), false, 'no version stamp: nothing can be trusted');
+        assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')), { version: SDK_VERSION, pins: {} });
+    });
+});
+
+test('a pin file from another SDK version is dropped, the same version is kept (#26)', () => {
+    withPinFile({ version: '0.1.0-other', pins: { 'm-shift': datePin } }, (file) => {
+        __reloadPinsForTesting();
+        assert.equal(hasPinnedContext('m-shift'), false);
+        assert.equal(JSON.parse(readFileSync(file, 'utf8')).version, SDK_VERSION);
+    });
+    withPinFile({ version: SDK_VERSION, pins: { 'm-same': datePin } }, (file) => {
+        const before = readFileSync(file, 'utf8');
+        __reloadPinsForTesting();
+        assert.equal(hasPinnedContext('m-same'), true);
+        assert.equal(readFileSync(file, 'utf8'), before, 'kept as written');
+    });
+});
+
+test('the collector says whether the CLI wrote this turn at all (#26)', () => {
+    __resetTurnCaptures();
+    const c = createTurnCollector('去溪边');
+    assert.equal(c.captured, false);
+    c.onAppend(cliEntries.slice(0, 3));
+    assert.equal(c.captured, false, 'still waiting for the reply');
+    c.onAppend(cliEntries.slice(3));
+    assert.equal(c.captured, true);
+});
+
+test('three resume turns with no capture reset the captures and the pin (#26)', () => {
+    withPinFile(null, (file) => {
+        __resetTurnCaptures();
+        const c = createTurnCollector('去溪边');
+        c.onAppend(cliEntries);
+        pinContext('m-health', datePin);
+        assert.equal(existsSync(file), true, 'the pin is on disk');
+        assert.equal(noteReplayHealth(false), false);
+        assert.equal(noteReplayHealth(false), false);
+        assert.equal(hasPinnedContext('m-health'), true, 'two misses are not a verdict yet');
+        assert.equal(noteReplayHealth(false), true, 'the third one resets');
+        assert.equal(replayTurn('去溪边', 'prev', meta), null, 'captures gone');
+        assert.equal(hasPinnedContext('m-health'), false, 'pin gone');
+        assert.equal(existsSync(file), false, 'pin file deleted');
+        assert.equal(noteReplayHealth(true), false);
+        assert.equal(noteReplayHealth(false), false, 'the streak starts over');
+    });
 });

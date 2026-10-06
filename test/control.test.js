@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
@@ -107,6 +107,25 @@ test('inside SillyTavern (plugin mode) restart-proxy is refused: it would stop S
     if (res.statusCode === 501) return; // no launcher checkout here
     assert.equal(res.statusCode, 409);
     assert.match(res.body.message, /酒馆/);
+});
+
+test('restart-proxy re-checks busy inside the detached script, right before it stops (closes the TOCTOU window)', () => {
+    const script = ACTIONS['restart-proxy'].script;
+    assert.ok(script.includes('wait_proxy_idle'), '脚本要在停之前等代理空闲（wait_proxy_idle）');
+    assert.ok(script.indexOf('wait_proxy_idle') < script.indexOf('stop_one'), '确认空闲在 stop_one 之前');
+    // wait_proxy_idle itself polls proxy_busy (launcher/mac/lib.zsh) — the busy re-check is real
+    const lib = readFileSync(new URL('../launcher/mac/lib.zsh', import.meta.url), 'utf8');
+    const body = lib.slice(lib.indexOf('wait_proxy_idle()'));
+    assert.ok(body.slice(0, body.indexOf('\n}')).includes('proxy_busy'), 'wait_proxy_idle 轮询的是 proxy_busy');
+});
+
+test('a detached action reports what actually happened: queued, waiting for idle, gives up after the wait', () => {
+    const a = ACTIONS['restart-proxy'];
+    assert.ok(a.idleQueue, 'restart is a queued action');
+    const answer = actionAnswer(a);
+    assert.match(answer.message, /已排队/, 'says queued rather than done');
+    assert.match(answer.message, /取消/, 'says it can give up');
+    assert.equal(actionAnswer({ label: '合盖暂停', run: () => {} }).message, '合盖暂停：已执行', 'instant actions still say done');
 });
 
 test('the lid pause file lives in launcher/ and is git-ignored (*.local)', () => {

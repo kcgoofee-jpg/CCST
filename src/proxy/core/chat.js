@@ -39,9 +39,10 @@ import { buildSubprocessEnv, pickApiKeyFromAuthHeader } from './env.js';
 import { resolveBackendConfig } from '../features/backend-config.js';
 import { BACKEND_LABELS, mapModelId } from '../../shared/backends.js';
 import { buildSystemPrompt, extractSystemText } from './system-prompt.js';
-import { assembleEntries, splitHistoryForResume, currentToSdkUserMessage, singleMessageStream, SDK_VERSION } from '../features/jsonl-entries.js';
+import { assembleEntries, splitHistoryForResume, currentToSdkUserMessage, singleMessageStream } from '../features/jsonl-entries.js';
+import { SDK_VERSION } from '../features/sdk-version.js';
 import { ResumeSessionStore, resumeScratchCwd, sweepSessionTranscript } from '../features/session-store.js';
-import { createTurnCollector, historyReplay, repliesBefore, replyBefore, sentTextFor } from '../features/turn-capture.js';
+import { createTurnCollector, historyReplay, repliesBefore, replyBefore, sentTextFor, noteReplayHealth } from '../features/turn-capture.js';
 import { StopScanner } from './stops.js';
 import { makeCompletionId, writeSse, chunkShell, roleChunk, contentChunk, reasoningChunk, finishChunk, errorEvent, toOpenAiUsage } from './sse.js';
 import { isExpiredTokenError, isRateLimitError, isExtraUsageRequiredError, isStaleSessionError, refreshOAuthToken } from '../features/oauth.js';
@@ -218,6 +219,25 @@ function plainPlayerText(rawMessages) {
     return i >= 0 && typeof hist[i]?.content === 'string' ? hist[i].content : null;
 }
 
+// How many requests in a row had to fall back to the transcript fold (#30): one is
+// normal (a chat's first turn), a long run means the resume path stopped working.
+let foldRounds = 0;
+export function foldStreak() {
+    return foldRounds;
+}
+
+/** Called once per finished request with the path it took. */
+export function noteFoldOutcome(path, settings) {
+    if (path === 'resume') foldRounds = 0;
+    else if (settings?.useResume && envFlag('CLAUDE_SUBSCRIPTION_USE_RESUME', true)) foldRounds += 1;
+    return foldRounds;
+}
+
+/** Test seam. */
+export function __resetFoldStreakForTesting() {
+    foldRounds = 0;
+}
+
 function buildQueryConfig({ messages: rawMessages, modelInfo, oneMActive, settings, abortController, stream, env, sdk }) {
     const messages = settings.systemPlacement === 'inline' ? inlineLateSystemMessages(rawMessages) : rawMessages;
     const systemText = extractSystemText(messages);
@@ -259,7 +279,7 @@ function buildQueryConfig({ messages: rawMessages, modelInfo, oneMActive, settin
                 const resume = { sessionId, store: new ResumeSessionStore(sessionId, entries, collector?.onAppend), cwd };
                 if (settings.debugDump) dumpEntries(entries, prompt);
                 const options = buildSdkOptions({ modelInfo, oneMActive, settings, systemText, abortController, stream, env, resume, boundary: sdk?.SYSTEM_PROMPT_DYNAMIC_BOUNDARY });
-                return { prompt, options, path: 'resume', sessionId, shape: split.shape, collector, currentText };
+                return { prompt, options, path: 'resume', sessionId, shape: split.shape, collector, currentText, hasHistory: split.history.length > 0 };
             }
             // No replayable history, but a string fold would drop image
             // blocks — use streaming-input mode without resume so images
@@ -644,6 +664,8 @@ async function completeChat(req, res, body, settings, conn) {
     // CLI → API until the response starts, then the first content delta.
     const timing = {};
     let lastPath = null;
+    // The collector of the resume turn we just ran, for the replay health check (#26).
+    let replayWatch = null;
     const completionId = makeCompletionId();
     const created = Math.floor(Date.now() / 1000);
     const shell = chunkShell(completionId, created, modelInfo.requested);
@@ -696,6 +718,7 @@ async function completeChat(req, res, body, settings, conn) {
             });
             if (cfg.sessionId) sweepIds.push(cfg.sessionId);
             lastPath = cfg.path;
+            replayWatch = cfg.path === 'resume' && cfg.hasHistory ? cfg.collector : null;
             if (settings.dryRun) {
                 // Cache simulation (scripts/cache_sim.py): what would go out is in data/debug/.
                 // Stand in for the CLI's own user entry so next turn replays this message as sent
@@ -856,6 +879,7 @@ async function completeChat(req, res, body, settings, conn) {
     } catch (err) {
         const raw = err instanceof Error ? err.message : String(err);
         const described = err?.sdkErrorText === 'served-model-guard' ? `served-model guard: ${raw}` : raw;
+        noteFoldOutcome(lastPath, settings);
         recordRequest({
             backend: billedAs, cacheTtl: env1hTtl(billedAs), model: modelInfo.requested, effort: settings.effort ?? null, placement: settings.systemPlacement, auxiliary: settings.auxiliary, purpose: settings.purpose, chatKey: settings.chatKey, timing, path: lastPath, stream: wantStream, startedAt, firstTokenAt, shape, cacheDiag,
             usage: usage ?? partialUsage, textChars: collectedText.length,
@@ -875,6 +899,7 @@ async function completeChat(req, res, body, settings, conn) {
     // Ended without a result message (stop sequence, client gone, Stop):
     // the tokens were still spent — count what the stream reported.
     usage ??= partialUsage;
+    noteFoldOutcome(lastPath, settings);
 
     // What the panel should tell the user about this turn (it shows a toast).
     const notices = [];
@@ -882,6 +907,7 @@ async function completeChat(req, res, body, settings, conn) {
     if (refusal) notices.push(refusal.fallback ? `fallback:${refusal.fallback}` : 'refusal');
     if (conn.cancelled) notices.push('cancelled');
     else if (conn.gone && conn.keep) notices.push('kept');
+    if (replayWatch && noteReplayHealth(replayWatch.captured)) notices.push('replay-reset');
     if (refusal) {
         finishReason = 'content_filter';
         console.warn(`${PLUGIN_TAG} ⚠ 回复被 Claude 的安全机制中途截断（stop_reason: refusal${refusal.category ? `，类别 ${refusal.category}` : ''}）${refusal.fallback ? `，CLI 已改用 ${refusal.fallback} 重试，这条回复来自该模型` : '，保留了截断前的文字'}`);

@@ -14,7 +14,9 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSy
 import { dirname, join } from 'node:path';
 
 import { explainError } from './errors-zh.js';
-import { explainCache } from './cache-diag.js';
+import { cacheAnomaly, explainCache } from './cache-diag.js';
+import { resetReplayState } from './turn-capture.js';
+import { SDK_VERSION } from './sdk-version.js';
 import { DATA_DIR } from '../paths.js';
 import { estimateCostUsd, BACKEND_LABELS, PRICES_AS_OF } from '../../shared/backends.js';
 
@@ -151,6 +153,7 @@ export function recordRequest(r) {
         entry.errorRaw = failure.raw.slice(0, 500);
     }
     const all = load();
+    if (!failure) noteCacheAnomaly(entry, all.length ? all[all.length - 1] : null);
     all.push(entry);
     // The window is otherwise only trimmed when the panel is opened, so a
     // proxy that runs for weeks without one holds every entry in memory.
@@ -159,6 +162,23 @@ export function recordRequest(r) {
     persist(entry);
     console.log(formatLogLine(entry));
     return entry;
+}
+
+const ANOMALY_RESET_AFTER = 2;
+let anomalyStreak = 0;
+
+/** Two turns in a row of 「nothing changed, yet the history was re-written」 is the replay
+ *  broken rather than the preset changing: reset it once and tell the panel (issue #26). */
+function noteCacheAnomaly(entry, prevEntry) {
+    if (!cacheAnomaly(entry, prevEntry)) {
+        anomalyStreak = 0;
+        return;
+    }
+    anomalyStreak += 1;
+    if (anomalyStreak < ANOMALY_RESET_AFTER) return;
+    anomalyStreak = 0;
+    resetReplayState(`SDK ${SDK_VERSION} 升级后缓存异常，已自动重置逐轮还原状态，本轮缓存会全量重写一次`);
+    entry.notices = [...(entry.notices ?? []), 'replay-reset'];
 }
 
 function aggregate(list) {
@@ -241,4 +261,5 @@ export function handleStats(req, res) {
 /** Test seam. */
 export function __resetStatsForTesting() {
     entries = null;
+    anomalyStreak = 0;
 }
