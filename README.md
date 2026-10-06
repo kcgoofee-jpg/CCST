@@ -103,6 +103,7 @@ zsh -c "$(curl -fsSL https://raw.githubusercontent.com/kcgoofee-jpg/CCST/main/in
 - **面板说「没登录 Claude」**：再双击一次一键安装，或在 `plugins/CCST` 里运行 `npm run login`。
 - **面板没出现**：强制刷新浏览器；还不行就在「扩展 → 管理扩展」里看 CCST 有没有被关掉。
 - **一键安装被安全软件拦了 / 网页里没有下载按钮**：直接从[本仓库的 installer 文件夹](installer)下载，或按上面的手动步骤做。
+- **状态页显示「缓存命中 0%」，换预设也没用**：5.1.0 之前的版本碰上 Claude 底层组件（SDK）升级会这样，重 roll 有命中、新发言没有。更新到 5.2 及以上会自动恢复；等不及的话，在 CCST 文件夹里运行 `npm install @anthropic-ai/claude-agent-sdk@0.3.285 --save-exact`，删掉 `data/cli-context.json`，重启代理——只回退 CCST 版本没有用，出问题的是 SDK。
 
 </details>
 
@@ -132,7 +133,7 @@ zsh -c "$(curl -fsSL https://raw.githubusercontent.com/kcgoofee-jpg/CCST/main/in
   zsh -c "$(curl -fsSL https://raw.githubusercontent.com/kcgoofee-jpg/CCST/main/install-mac.sh)"
   ```
   ② 在 TauriTavern 里装 CCST 扩展，面板点「一键连接」；③ 手机上用：菜单首页按 `1` 进「手机」页，按 `x` 开启手机模式，把那一页的「手机连接码」整串粘贴到手机面板的卡片里，点「连接」（也可以扫二维码后点复制）。更新：在终端再运行一次那一行（覆盖代码，保留登录和数据），然后在酒馆工具里选「重启代理」。[详细](docs/使用指南.md#用法二-tauritavern-与手机)。Windows / Linux 请用用法一或用法三。
-- 用法三 服务器 / 云酒馆：一条命令或 Docker，[详细](docs/使用指南.md#用法三-服务器与-docker)（CI 已在 Linux 上实测安装和 Docker；Docker 镜像还没发布，需自己构建，发布流程已就绪，随下一个版本发布）。
+- 用法三 服务器 / 云酒馆：一条命令或 Docker，[详细](docs/使用指南.md#用法三-服务器与-docker)（CI 已在 Linux 上实测安装和 Docker；镜像 `ghcr.io/kcgoofee-jpg/ccst` 从 v5.1.0 起随版本发布，还没在 GitHub Packages 里设为公开前 `docker pull` 会 403，可以先自己构建）。
 
 更多细节（缓存原理、环境变量、所有设置项）在 **[使用指南](docs/使用指南.md)**，计划在 **[路线图](docs/路线图.md)**。
 

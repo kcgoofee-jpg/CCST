@@ -131,7 +131,7 @@ The panel has four tabs; you mostly need the first. The first time, click **一�
   zsh -c "$(curl -fsSL https://raw.githubusercontent.com/kcgoofee-jpg/CCST/main/install-mac.sh)"
   ```
   On the phone: press `1` on the menu home page to open the 「手机」 (phone) page, press `x` to turn phone mode on, paste the 「手机连接码」 shown there into the panel card on the phone and tap 「连接」 (or scan the QR code and tap copy). To update: run the same line in Terminal again (it overwrites the code and keeps your login and data), then choose 「重启代理」 (restart proxy) in the menu. Windows / Linux: use usage 1 or 3. ([details](docs/使用指南.md#用法二-tauritavern-与手机))
-- Usage 3, server / cloud: one command or Docker ([details](docs/使用指南.md#用法三-服务器与-docker); CI-tested on Linux; the Docker image is not published yet, so build it yourself; the release workflow is ready and ships with 5.0).
+- Usage 3, server / cloud: one command or Docker ([details](docs/使用指南.md#用法三-服务器与-docker); CI-tested on Linux; the image `ghcr.io/kcgoofee-jpg/ccst` has shipped with every release since v5.1.0 — until the package is made public in GitHub Packages, `docker pull` returns 403, so build it yourself for now).
 
 More in the [guide](docs/使用指南.md) and [roadmap](docs/路线图.md) (Chinese).
 
