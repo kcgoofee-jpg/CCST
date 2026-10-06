@@ -5,17 +5,46 @@
 
 import { store } from '../core/store.js';
 import { libs } from '../core/libs.js';
-import { IS_TAURI } from '../core/capabilities.js';
+import { IS_TAURI, normalizeEndpoint } from '../core/capabilities.js';
 import { connectionInfo, shortModel } from '../core/connection.js';
 import { proxyErrorText } from '../core/proxy.js';
 import { el, note, iconButton, group, collapsible, stateLine, button } from '../core/dom.js';
 import { notify } from '../core/notify.js';
 import { copyText } from '../core/external.js';
 import { refreshAll, refreshQuota, refreshStats } from '../core/live.js';
+import { getSettings } from '../core/settings.js';
+
+/** What /status's self-checks say needs telling (#30, #36). Pure: the status
+ *  block from the store plus the endpoint the panel is set to. */
+export function statusAdvisories(status, endpoint) {
+    const out = [];
+    if (!status || status.phase !== 'online') return out;
+    if (status.compat && status.compat.ok === false) {
+        out.push({ tone: 'error', text: `当前 SDK 版本与代理不兼容（没有 ${status.compat.missing?.join('、') || '要用的功能'}），对话能连通但缓存和逐轮还原多半不对。请在 CCST 文件夹里运行 npm install @anthropic-ai/claude-agent-sdk@文档指定的版本 --save-exact，然后重启代理。` });
+    }
+    if (typeof status.foldStreak === 'number' && status.foldStreak > 3) {
+        out.push({ tone: 'warn', text: `连续 ${status.foldStreak} 轮没能逐轮还原，整段折叠发送：每轮都在重写缓存，慢和耗额度都偏高。通常跟着上面一条 SDK 问题一起出现。` });
+    }
+    // 走酒馆同源路由时，答复的可能是端口上另一个代理实例（#36）。
+    const actual = status.via === 'plugin' ? status.endpoint : null;
+    if (actual && endpoint && normalizeEndpoint(actual) !== normalizeEndpoint(endpoint)) {
+        out.push({ tone: 'warn', text: `代理实际地址与面板设置不一致：设置里是 ${endpoint}，应答的这个代理在 ${actual}。请把面板端点改成实际地址，或确认 8901 上没有另一个代理。` });
+    }
+    return out;
+}
+
+function renderAdvice(status) {
+    const box = document.getElementById('claude_max_advice');
+    if (!box) return;
+    const lines = statusAdvisories(status, getSettings().endpoint);
+    box.replaceChildren(...lines.map((l) => note(l.tone, l.text)));
+    box.hidden = !lines.length;
+}
 
 export function init() {
     store.subscribe('quota', ({ quota }) => renderQuota(quota));
     store.subscribe('stats', ({ stats }) => renderStats(stats));
+    store.subscribe('status', ({ status }) => renderAdvice(status));
     store.subscribe('statsAt', ({ statsAt }) => {
         const stamp = document.getElementById('claude_max_stats_time');
         if (stamp) stamp.textContent = `更新于 ${new Date(statsAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })}`;
@@ -24,7 +53,6 @@ export function init() {
 }
 
 // ── Quota meter ──
-
 /** 「点刷新查看额度」 with its button: what the quota shows until it has been asked for. */
 function idleQuotaLine() {
     const line = stateLine('empty', '点刷新查看额度');
@@ -254,6 +282,12 @@ function renderStats(stats) {
 
 /** Tab 状态: last turn first, then quota, usage, cache advice, world-info cache tool. */
 export function buildStatusTab(pane) {
+    // 代理自检结果（SDK 兼容性、逐轮还原、实际地址）；没有问题时不显示。
+    const adviceBox = el('div', 'cm-stats');
+    adviceBox.id = 'claude_max_advice';
+    adviceBox.hidden = true;
+    pane.append(adviceBox);
+
     const stamp = el('small', 'cm-hint');
     stamp.id = 'claude_max_stats_time';
     const tools = el('div', 'cm-section-tools');

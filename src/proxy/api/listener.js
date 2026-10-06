@@ -24,6 +24,18 @@ import { registerRoutes } from './routes.js';
 
 let serverInstance = null;
 
+const LOOPBACK = new Set(['127.0.0.1', '::1', 'localhost']);
+
+/** Where this process can be reached from the machine it runs on: the port the
+ *  listener actually got, on a loopback address. Null when it is bound to one
+ *  specific non-loopback interface (nothing to promise) or is not listening. */
+export function localEndpoint() {
+    const addr = serverInstance?.address?.();
+    if (!addr || typeof addr !== 'object') return null;
+    if (addr.address === '0.0.0.0' || addr.address === '::') return `http://127.0.0.1:${addr.port}/v1`;
+    return LOOPBACK.has(addr.address) ? `http://${addr.address}:${addr.port}/v1` : null;
+}
+
 export function startStandaloneListener({ port, host }) {
     if (serverInstance) return Promise.resolve(serverInstance);
 
@@ -81,10 +93,12 @@ export async function probeExistingProxy({ port, host }) {
 
 export function stopStandaloneListener() {
     if (!serverInstance) return Promise.resolve();
+    const server = serverInstance;
+    serverInstance = null;
     return new Promise((resolve) => {
-        serverInstance.close(() => {
-            serverInstance = null;
-            resolve();
-        });
+        server.close(() => resolve());
+        // Keep-alive sockets from the panel or TauriTavern would otherwise hold
+        // close() until they time out (#33).
+        server.closeIdleConnections?.();
     });
 }

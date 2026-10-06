@@ -25,9 +25,13 @@
 // differs between chats.
 
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+
 import { DATA_DIR } from '../paths.js';
+import { SDK_VERSION } from './sdk-version.js';
+
+const PLUGIN_TAG = '[claude-subscription]';
 
 const MAX_TURNS = 400;
 const captures = new Map(); // key → { entries: user entry + its attachments, contextPinned }
@@ -92,6 +96,11 @@ export function createTurnCollector(currentText, keyText = currentText, model = 
     let collecting = null;
     let done = false;
     return {
+        /** False when the CLI never wrote this turn's user entry — the shape we
+         *  replay is gone (see noteReplayHealth). */
+        get captured() {
+            return done;
+        },
         onAppend(entries) {
             if (done) return;
             for (const e of entries ?? []) {
@@ -199,11 +208,30 @@ function loadPins() {
     pinsLoaded = true;
     const f = pinFile();
     if (!f) return;
+    let saved;
     try {
-        for (const [model, entries] of Object.entries(JSON.parse(readFileSync(f, 'utf8')))) {
+        saved = JSON.parse(readFileSync(f, 'utf8'));
+    } catch { /* none yet */ }
+    if (saved?.version === SDK_VERSION && saved.pins && typeof saved.pins === 'object') {
+        for (const [model, entries] of Object.entries(saved.pins)) {
             if (Array.isArray(entries) && entries.length) pins.set(model, entries);
         }
-    } catch { /* none yet */ }
+        return;
+    }
+    // The CLI renders this context itself, so a saved one from another SDK version is
+    // wrong bytes: keeping it re-writes the whole history every turn (#26). Drop it —
+    // this turn re-pins and rewrites the cache once.
+    const from = typeof saved?.version === 'string' ? saved.version : '旧格式';
+    pins.clear();
+    writePinFile(f);
+    console.log(`${PLUGIN_TAG} SDK 版本 ${from}→${SDK_VERSION}，已重置 CLI 上下文 pin，本轮缓存会全量重写一次`);
+}
+
+function writePinFile(f) {
+    try {
+        mkdirSync(dirname(f), { recursive: true });
+        writeFileSync(f, JSON.stringify({ version: SDK_VERSION, pins: Object.fromEntries(pins) }), { mode: 0o600 }); // account details
+    } catch { /* memory only */ }
 }
 
 export function pinContext(model, entries) {
@@ -211,11 +239,7 @@ export function pinContext(model, entries) {
     if (pins.has(model)) return; // keep the first one: changing it would change every request (later changes ride on their turn, see replayTurn)
     pins.set(model, entries.map((e) => JSON.parse(JSON.stringify(e))));
     const f = pinFile();
-    if (!f) return;
-    try {
-        mkdirSync(dirname(f), { recursive: true });
-        writeFileSync(f, JSON.stringify(Object.fromEntries(pins)), { mode: 0o600 }); // account details
-    } catch { /* memory only */ }
+    if (f) writePinFile(f);
 }
 
 export function hasPinnedContext(model) {
@@ -236,9 +260,47 @@ export function pinnedContext(model, parentUuid, meta) {
     });
 }
 
+/** The CLI changed what it sends (update, or a replay that stopped matching): nothing
+ *  captured or pinned still fits, so start over — the next turn rewrites the cache once. */
+export function resetReplayState(reason) {
+    captures.clear();
+    pins.clear();
+    pinsLoaded = true;
+    replayMissStreak = 0;
+    const f = pinFile();
+    if (f) { try { unlinkSync(f); } catch { /* 本来就没有 */ } }
+    console.warn(`${PLUGIN_TAG} ${reason}`);
+}
+
+const REPLAY_RESET_AFTER_MISSES = 3;
+let replayMissStreak = 0;
+
+/** One resume turn, checked after the request ended: `captured` false means the CLI did not
+ *  write the transcript entry we replay, so every turn from now on would re-write the whole
+ *  history. After a few turns of that the capture is clearly broken — reset it (#26).
+ * @returns {boolean} true when this call reset the replay state */
+export function noteReplayHealth(captured) {
+    if (captured) {
+        replayMissStreak = 0;
+        return false;
+    }
+    replayMissStreak += 1;
+    console.warn(`${PLUGIN_TAG} 这一轮没有捕获到逐轮还原的上下文（连续 ${replayMissStreak} 轮），Claude 命令行可能改了写入方式`);
+    if (replayMissStreak < REPLAY_RESET_AFTER_MISSES) return false;
+    resetReplayState('已重置逐轮还原状态，本轮缓存会全量重写一次');
+    return true;
+}
+
 /** Test seam. */
 export function __resetTurnCaptures() {
     captures.clear();
     pins.clear();
     pinsLoaded = true;
+    replayMissStreak = 0;
+}
+
+/** Test seam — read the pin file again on next use. */
+export function __reloadPinsForTesting() {
+    pins.clear();
+    pinsLoaded = false;
 }

@@ -16,9 +16,6 @@
 // file-history-snapshot, ai-title) — not required for resume.
 
 import { randomUUID } from 'node:crypto';
-import { createRequire } from 'node:module';
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
 
 import { repliesBefore } from './turn-capture.js';
 
@@ -282,21 +279,3 @@ export function currentToSdkUserMessage(message) {
 export async function* singleMessageStream(sdkUserMessage) {
     yield sdkUserMessage;
 }
-
-// ──────────────────────────────────────────────
-// SDK version stamp (telemetry only — resume accepts arbitrary versions)
-// ──────────────────────────────────────────────
-
-function detectSdkVersion() {
-    try {
-        const req = createRequire(import.meta.url);
-        const mainPath = req.resolve('@anthropic-ai/claude-agent-sdk');
-        const pkg = JSON.parse(readFileSync(join(dirname(mainPath), 'package.json'), 'utf8'));
-        if (typeof pkg.version === 'string' && pkg.version.length > 0) return pkg.version;
-    } catch {
-        // fall through
-    }
-    return 'unknown';
-}
-
-export const SDK_VERSION = detectSdkVersion();

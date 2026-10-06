@@ -82,7 +82,10 @@ export function sweepSessionTranscript(loadSdk, sessionId) {
             pendingSweeps.delete(sessionId);
             try {
                 const sdk = await loadSdk();
-                if (typeof sdk.deleteSession === 'function') {
+                if (typeof sdk.deleteSession !== 'function') {
+                    // A SDK that renamed it would leave every transcript on disk silently (#30).
+                    console.warn(`${PLUGIN_TAG} SDK 没有 deleteSession，这份会话记录没清（${sessionId}）—— SDK 版本和代理不匹配，请按文档锁定版本`);
+                } else {
                     await sdk.deleteSession(sessionId);
                 }
             } catch (err) {
@@ -129,8 +132,15 @@ export function projectKeyFor(dir) {
  */
 export function sweepLeftovers({ now = Date.now(), tmp = tmpdir(), configDir = process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude'), scratch = null } = {}) {
     const removed = { transcripts: 0, tempDirs: 0 };
+    const warn = (what, where, err) => console.warn(`${PLUGIN_TAG} 清理${what}没做成（${where}）：${err instanceof Error ? err.message : err}`);
     let key;
-    try { key = projectKeyFor(scratch ?? resumeScratchCwd()); } catch { return removed; }
+    try {
+        key = projectKeyFor(scratch ?? resumeScratchCwd());
+    } catch (err) {
+        // #30: a CLAUDE_CONFIG_DIR layout change would otherwise hide itself here.
+        warn('会话记录目录（找不到本代理的工作目录）', 'scratch', err);
+        return removed;
+    }
     const old = (p) => { try { return now - statSync(p).mtimeMs > LEFTOVER_AGE_MS; } catch { return false; } };
     const project = join(configDir, 'projects', key);
     try {
@@ -142,7 +152,9 @@ export function sweepLeftovers({ now = Date.now(), tmp = tmpdir(), configDir = p
             rmSync(p, { recursive: true, force: true });
             removed.transcripts++;
         }
-    } catch { /* no scratch project yet */ }
+    } catch (err) {
+        if (existsSync(project)) warn('上次遗留的会话记录', project, err);
+    }
     try {
         for (const name of readdirSync(tmp)) {
             if (!RESUME_DIR_RE.test(name)) continue;
@@ -154,6 +166,8 @@ export function sweepLeftovers({ now = Date.now(), tmp = tmpdir(), configDir = p
             rmSync(dir, { recursive: true, force: true });
             removed.tempDirs++;
         }
-    } catch { /* tmp unreadable */ }
+    } catch (err) {
+        warn('SDK 临时目录', tmp, err);
+    }
     return removed;
 }

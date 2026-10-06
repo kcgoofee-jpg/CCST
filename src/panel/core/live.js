@@ -76,7 +76,13 @@ export async function refreshStatus() {
         store.set({
             // A mismatch keeps the status card on screen until the versions match.
             proxyState: mismatch ? 'warning' : 'online', proxyOnline: true,
-            status: { phase: 'online', version: data.version, cred, mismatch, mismatchSide: mismatchSide(data.version), panelVersion, runtime: data.runtime ?? null },
+            status: {
+                phase: 'online', version: data.version, cred, mismatch, mismatchSide: mismatchSide(data.version), panelVersion, runtime: data.runtime ?? null,
+                // 代理自己的健康提示（#30、#36）：SDK 兼容性、连续降级轮数、实际监听地址；
+                // via 是这次答复从哪来的——走酒馆同源路由时它可能不是面板设置的那个代理。
+                compat: data.compat ?? null, foldStreak: data.foldStreak ?? null, endpoint: data.endpoint ?? null,
+                via: String(res.url ?? '').includes('/api/plugins/claude-subscription') ? 'plugin' : 'direct',
+            },
         });
     } catch {
         const where = normalizeEndpoint(getSettings().endpoint);

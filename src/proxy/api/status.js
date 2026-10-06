@@ -11,11 +11,14 @@ import { rateLimitSnapshot } from '../features/rate-limit.js';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { SDK_VERSION } from '../features/jsonl-entries.js';
+import { SDK_VERSION } from '../features/sdk-version.js';
 import { credentialSummary } from '../features/oauth.js';
 import { ROOT } from '../paths.js';
 import { resolveBackendConfig } from '../features/backend-config.js';
 import { BACKEND_LABELS } from '../../shared/backends.js';
+import { checkSdkCompat, loadSdk } from '../core/sdk-loader.js';
+import { foldStreak } from '../core/chat.js';
+import { localEndpoint } from './listener.js';
 
 let cachedPluginVersion = null;
 function getPluginVersion() {
@@ -38,7 +41,7 @@ export async function handleStatus(req, res) {
     const start = Date.now();
     const version = getPluginVersion();
     try {
-        await import('@anthropic-ai/claude-agent-sdk');
+        const sdk = await loadSdk();
         return res.json({
             ok: true,
             plugin: 'claude-subscription',
@@ -49,6 +52,12 @@ export async function handleStatus(req, res) {
             pid: process.pid,
             sdk: 'loaded',
             sdkVersion: SDK_VERSION,
+            // 代理要用的 SDK 导出还在不在（SDK 换了版本改名时这里是 false）
+            compat: checkSdkCompat(sdk),
+            // 连续多少轮没能用上逐轮还原（超过 3 轮面板会提示）
+            foldStreak: foldStreak(),
+            // 这个进程实际在听的本机地址（面板用它核对设置里的端点，#36）
+            endpoint: localEndpoint(),
             credential: credentialSummary(),
             // 最近一次回复里 CLI 报的各额度窗口状态（还没回复过则为空）
             rateLimit: rateLimitSnapshot(),

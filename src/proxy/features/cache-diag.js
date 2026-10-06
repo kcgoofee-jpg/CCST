@@ -306,6 +306,23 @@ export function equivalentTokens(e) {
 }
 
 /**
+ * The turn replay (turn-capture.js) stopped matching what the CLI sends: same chat,
+ * same model, nothing changed in the prompt — yet the cache read did not grow past
+ * what the previous turn wrote, so the whole history was re-written again.
+ * `entry` / `prevEntry` are usage-stats records; the first turn of a chat (or after a
+ * proxy restart) never counts.
+ */
+export function cacheAnomaly(entry, prevEntry) {
+    if (!entry?.ok || !prevEntry?.ok) return false;
+    const d = entry.cacheDiag;
+    if (!d || d.firstTurn || !prevEntry.cacheDiag?.chat || prevEntry.cacheDiag.chat !== d.chat) return false;
+    if (d.systemChanged) return false;
+    if (d.historyDiffAt !== null && d.historyDiffAt !== undefined) return false;
+    if (entry.model !== prevEntry.model) return false;
+    return (entry.cacheReadTokens ?? 0) < (prevEntry.cacheReadTokens ?? 0) + 0.5 * (prevEntry.cacheCreationTokens ?? 0);
+}
+
+/**
  * Plain-Chinese explanation of one recorded request's cache outcome, for the
  * panel. `entry` / `prevEntry` are usage-stats records (prevEntry: the
  * request before it, if any).
@@ -346,11 +363,8 @@ export function explainCache(entry, prevEntry = null) {
         // changed, yet the read did not grow past last turn's prompt — the
         // history is being re-written again. Most likely a CLI update changed
         // how it attaches its per-turn reminders.
-        const sameChat = prevEntry?.ok && prevEntry.cacheDiag?.chat && prevEntry.cacheDiag.chat === d.chat;
-        if (sameChat && !d.systemChanged && (d.historyDiffAt === null || d.historyDiffAt === undefined)
-            && entry.model === prevEntry.model
-            && read < (prevEntry.cacheReadTokens ?? 0) + 0.5 * (prevEntry.cacheCreationTokens ?? 0)) {
-            reasons.push('异常：系统提示词和聊天记录都没变，聊天记录却没读到缓存。可能是 Claude Code CLI 升级后改了附加提醒的方式，代理的「逐轮还原」失效了——请把这条告诉维护者（或回退 SDK 版本）。刚重启过代理的第一轮除外。');
+        if (cacheAnomaly(entry, prevEntry)) {
+            reasons.push('异常：系统提示词和聊天记录都没变，聊天记录却没读到缓存。可能是 Claude Code CLI 升级后改了附加提醒的方式，代理的「逐轮还原」失效了（连着两轮会自动重置一次）。自己恢复：在 CCST 文件夹里运行 npm install @anthropic-ai/claude-agent-sdk@出问题之前的版本 --save-exact，删掉 data/cli-context.json，重启代理——只回退 CCST 本身没用，出问题的是 SDK。刚重启过代理的第一轮除外。');
         }
         if (d.reroll) {
             reasons.unshift('这是重roll：聊天记录和上一次请求一样，几乎全部读缓存。它不代表正常新一轮的开销，统计里的命中率不算它。');

@@ -16,6 +16,17 @@
 
 let cachedSdk = null;
 
+/** What the proxy actually calls on the SDK. A version that renamed one of
+ *  these is not compatible, and the failure would be silent (option ignored,
+ *  no resume) — so it is checked at startup instead. */
+export const REQUIRED_EXPORTS = ['query', 'SYSTEM_PROMPT_DYNAMIC_BOUNDARY', 'deleteSession'];
+
+/** @returns {{ ok: boolean, missing: string[] }} */
+export function checkSdkCompat(sdk) {
+    const missing = REQUIRED_EXPORTS.filter((name) => sdk?.[name] === undefined);
+    return { ok: missing.length === 0, missing };
+}
+
 export function loadSdk() {
     if (!cachedSdk) {
         cachedSdk = import('@anthropic-ai/claude-agent-sdk').catch((err) => {
