@@ -20,8 +20,10 @@
 
 </div>
 
-> [!IMPORTANT]
-> **本分支（main）是维护版**：5.2.x 起只修关键 bug，不再加功能，现有用户放心继续用。下一代（Rust 写的直连代理，不再依赖 Claude Code CLI，彻底没有"SDK 一升级就出问题"这类事）在 [`dev`](https://github.com/kcgoofee-jpg/CCST/tree/dev) 分支开发。
+> [!WARNING]
+> **这里是 `dev` 分支：下一代 CCST 正在开发，还不能给普通用户用。** 要安装请用 [`main`](https://github.com/kcgoofee-jpg/CCST/tree/main)（下面的安装说明都指向 main）。
+>
+> 下一代把 Claude Code CLI 子进程换成 Rust 写的直连代理（[`backend/`](backend/README.md)）：自己盖订阅计费头、自己放缓存断点（一律 1 小时），不再受 SDK 升级和账号级缓存开关影响。进度：登录、OpenAI 兼容接口、缓存断点已在真实订阅上跑通（第 2 轮起命中 99%+）；酒馆兼容层、面板对接、安装器切换在做。
 
 ## 这是什么
 

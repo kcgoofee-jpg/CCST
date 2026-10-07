@@ -20,8 +20,10 @@
 
 </div>
 
-> [!IMPORTANT]
-> **This branch (main) is in maintenance**: from 5.2.x on it only gets critical bug fixes; existing users can keep using it. The next generation (a direct proxy written in Rust that no longer depends on the Claude Code CLI) is being built on the [`dev`](https://github.com/kcgoofee-jpg/CCST/tree/dev) branch.
+> [!WARNING]
+> **This is the `dev` branch: the next CCST is under construction and not ready for users.** To install, use [`main`](https://github.com/kcgoofee-jpg/CCST/tree/main) (the instructions below point there).
+>
+> The next generation replaces the Claude Code CLI subprocess with a direct proxy written in Rust ([`backend/`](backend/README.md)): it stamps the subscription billing header and places its own cache breakpoints (always 1 hour), so SDK updates and per-account cache flags no longer matter. Done and tested on a real subscription: sign-in, the OpenAI-compatible API, cache breakpoints (99%+ hits from turn 2). In progress: SillyTavern compatibility layer, panel integration, installer switch-over.
 
 > The panel's interface is in Chinese for now.
 
