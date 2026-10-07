@@ -28,25 +28,32 @@
 /**
  * @param {string|undefined} clientSystemPrompt joined system-message text from the request
  * @param {boolean} identityMode
- * @returns {string | { type: 'preset', preset: 'claude_code', append?: string }}
+ * @returns {{ type: 'custom', prompt: string | string[], snapshot: false } | { type: 'preset', preset: 'claude_code', append?: string, snapshot: false }}
  */
 export function buildSystemPrompt(clientSystemPrompt, identityMode, splitAt = null, boundary = null) {
+    // snapshot: false everywhere. By default (and for a bare string / string[])
+    // the CLI records the system prompt in the session transcript on the first
+    // request and REUSES that record on every resume — rolled out per account
+    // (SDK 0.3.x docs). Our transcripts replay attachments captured in earlier
+    // turns and the pinned context, so the CLI sent an earlier turn's — or
+    // another chat's — system prompt instead of the one SillyTavern just sent:
+    // wrong preset, and a prefix that changed every turn (cache 0%, 2026-10).
     if (identityMode) {
         return clientSystemPrompt
-            ? { type: 'preset', preset: 'claude_code', append: clientSystemPrompt }
-            : { type: 'preset', preset: 'claude_code' };
+            ? { type: 'preset', preset: 'claude_code', append: clientSystemPrompt, snapshot: false }
+            : { type: 'preset', preset: 'claude_code', snapshot: false };
     }
     const text = clientSystemPrompt ?? '';
     // Static prefix + boundary + per-turn suffix: the static part gets its own
     // cache breakpoint, so a change further down (world info) no longer
-    // throws away the whole system prompt. snapshot:false — each request is a
-    // fresh session; always render the prompt we were given.
+    // throws away the whole system prompt. The boundary is its own element of
+    // the prompt array.
     if (boundary && splitAt && splitAt > 0 && splitAt < text.length) {
         return { type: 'custom', prompt: [text.slice(0, splitAt), boundary, text.slice(splitAt)], snapshot: false };
     }
-    // Plain string replaces the coding preamble; empty string keeps it
+    // A custom prompt replaces the coding preamble; empty string keeps it
     // explicitly empty rather than falling back to the CLI default.
-    return text;
+    return { type: 'custom', prompt: text, snapshot: false };
 }
 
 /** Extract and join system-role messages from an OpenAI messages array. */

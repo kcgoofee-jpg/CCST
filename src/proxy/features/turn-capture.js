@@ -36,6 +36,14 @@ const PLUGIN_TAG = '[claude-subscription]';
 const MAX_TURNS = 400;
 const captures = new Map(); // key → { entries: user entry + its attachments, contextPinned }
 
+/** The CLI's record of the system prompt (CLI 2.1.28x, rolled out per account): on a
+ *  resume the CLI sends the recorded prompt instead of the one it was given. A record
+ *  from an earlier turn — or, through the pin, from another chat — must never be
+ *  replayed (see system-prompt.js). */
+export function isRecordedPrompt(e) {
+    return e?.type === 'attachment' && e?.attachment?.type === 'prompt_snapshot';
+}
+
 /** Memory key of a player message: its text plus the reply it answers (see above). */
 export function turnKey(text, context = '') {
     return createHash('sha1').update(`${context ?? ''}\u0000${text}`).digest('hex');
@@ -110,7 +118,7 @@ export function createTurnCollector(currentText, keyText = currentText, model = 
                     continue;
                 }
                 if (e?.type === 'attachment') {
-                    collecting.push(e);
+                    if (!isRecordedPrompt(e)) collecting.push(e);
                 } else if (e?.type === 'assistant' || e?.type === 'user') {
                     const attachments = collecting.filter((x) => x?.type === 'attachment');
                     // The first context the CLI adds becomes the pin. Anything it
@@ -238,7 +246,9 @@ function loadPins() {
     } catch { /* none yet */ }
     if (saved?.version === SDK_VERSION && saved.pins && typeof saved.pins === 'object') {
         for (const [model, entries] of Object.entries(saved.pins)) {
-            if (Array.isArray(entries) && entries.length) pins.set(model, entries);
+            // Pins saved before 5.2.1 can carry a recorded system prompt: drop it.
+            const kept = Array.isArray(entries) ? entries.filter((e) => !isRecordedPrompt(e)) : [];
+            if (kept.length) pins.set(model, kept);
         }
         return;
     }
@@ -266,7 +276,7 @@ function writePinFile(f) {
 export function pinContext(model, entries) {
     loadPins();
     if (pins.has(model)) return; // keep the first one: changing it would change every request (later changes ride on their turn, see replayTurn)
-    pins.set(model, entries.map((e) => JSON.parse(JSON.stringify(e))));
+    pins.set(model, entries.filter((e) => !isRecordedPrompt(e)).map((e) => JSON.parse(JSON.stringify(e))));
     const f = pinFile();
     if (f) writePinFile(f);
 }

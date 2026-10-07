@@ -77,11 +77,24 @@ test('system_placement setting defaults to inline', () => {
     assert.equal(extractSettings({ claude_subscription: { system_placement: 'hoist' } }).systemPlacement, 'hoist');
 });
 
-test('buildSystemPrompt splits at the boundary only when asked', async () => {
+test('buildSystemPrompt splits at the boundary only when asked, and never lets the CLI record the prompt', async () => {
     const { buildSystemPrompt } = await import('../src/proxy/core/system-prompt.js');
-    assert.equal(buildSystemPrompt('abcdef', false), 'abcdef');
-    assert.equal(buildSystemPrompt('abcdef', false, 3, null), 'abcdef');
-    assert.deepEqual(buildSystemPrompt('abcdef', false, 3, 'B'), { type: 'custom', prompt: ['abc', 'B', 'def'], snapshot: false });
-    assert.equal(buildSystemPrompt('abcdef', false, 6, 'B'), 'abcdef');
+    const plain = (prompt) => ({ type: 'custom', prompt, snapshot: false });
+    assert.deepEqual(buildSystemPrompt('abcdef', false), plain('abcdef'));
+    assert.deepEqual(buildSystemPrompt('abcdef', false, 3, null), plain('abcdef'));
+    assert.deepEqual(buildSystemPrompt('abcdef', false, 3, 'B'), plain(['abc', 'B', 'def']));
+    assert.deepEqual(buildSystemPrompt('abcdef', false, 6, 'B'), plain('abcdef'));
+    assert.deepEqual(buildSystemPrompt('', false), plain(''));
+    assert.equal(buildSystemPrompt('x', true).snapshot, false, 'identity mode too');
+});
+
+test('a recorded system prompt is never captured, pinned or replayed', async () => {
+    const { createTurnCollector, isRecordedPrompt } = await import('../src/proxy/features/turn-capture.js');
+    const snap = { type: 'attachment', uuid: 's', attachment: { type: 'prompt_snapshot', prompt: '别的聊天的预设' } };
+    assert.equal(isRecordedPrompt(snap), true);
+    assert.equal(isRecordedPrompt({ type: 'attachment', attachment: { type: 'date' } }), false);
+    const c = createTurnCollector('你好', '你好', null, '');
+    c.onAppend([{ type: 'user', uuid: 'u', message: { role: 'user', content: '你好' } }, snap, { type: 'attachment', uuid: 'd', attachment: { type: 'date' } }, { type: 'assistant', uuid: 'a' }]);
+    assert.equal(c.captured, true);
 });
 
