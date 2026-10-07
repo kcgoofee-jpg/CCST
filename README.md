@@ -93,7 +93,7 @@ zsh -c "$(curl -fsSL https://raw.githubusercontent.com/kcgoofee-jpg/CCST/main/in
 4. 重启酒馆，在 **CCST** 面板点 **一键连接**。
 
 常见问题：
-- **状态页显示「缓存命中 0%」，换预设也没用**：5.1.0 之前的版本碰上 Claude 底层组件（SDK）升级会这样，重 roll 有命中、新发言无。
+- **状态页显示「缓存命中 0%」，换预设也没用**：5.1.0 之前的版本碰上 Claude 底层组件（SDK）升级会这样，重 roll 有命中、新发言无。5.2.0 起会自动恢复；排查步骤见[缓存命中排查](docs/缓存命中排查.md)，还定位不到就在 CCST 文件夹运行 `node scripts/wire-diagnosis.mjs`，把输出发给维护者。
 
 </details>
 
