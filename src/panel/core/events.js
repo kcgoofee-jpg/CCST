@@ -12,8 +12,7 @@ import { refreshStats, refreshQuota } from './live.js';
 import { makeStatsAfterReply } from './stats-after-reply.js';
 import { store } from './store.js';
 import { renderConnect, renderGlance } from '../shell.js';
-import { clearOneShotEffort, syncAlwaysThinks } from '../tabs/reason.js';
-import { renderCacheCard } from '../tabs/status.js';
+import { clearOneShotEffort, syncAlwaysThinks } from '../tabs/chat.js';
 
 export function wireEvents({ eventSource, eventTypes }) {
     // Which world info entries fired for this request (the diagnostic report lists them).
@@ -40,7 +39,7 @@ export function wireEvents({ eventSource, eventTypes }) {
     eventSource.on(eventTypes.CHAT_CHANGED, () => setTimeout(() => F.lore.refreshLoreBox(), 200));
     // Model / API switches: keep the header summary and connect button current.
     for (const ev of [eventTypes.CHATCOMPLETION_MODEL_CHANGED, eventTypes.CHATCOMPLETION_SOURCE_CHANGED, eventTypes.MAIN_API_CHANGED, eventTypes.SETTINGS_UPDATED]) {
-        if (ev) eventSource.on(ev, () => setTimeout(() => { renderConnect(); renderGlance(); renderCacheCard(); F.models.modelRowFollowsSource(); syncAlwaysThinks(); }, 100));
+        if (ev) eventSource.on(ev, () => setTimeout(() => { renderConnect(); renderGlance(); F.models.modelRowFollowsSource(); syncAlwaysThinks(); }, 100));
     }
     eventSource.on(eventTypes.MESSAGE_RECEIVED, refreshIfOpen);
     eventSource.on(eventTypes.MESSAGE_RECEIVED, onOwnReply(() => refreshAfterReply()));

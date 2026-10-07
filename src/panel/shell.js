@@ -6,8 +6,8 @@
 
 import { store } from './core/store.js';
 import { getSettings, saveSettingsDebounced, EFFORT_LABEL } from './core/settings.js';
-import { connectHelp, mismatchHelp, hostKind } from './core/connect-help.js';
-import { openExternal, copyText } from './core/external.js';
+import { connectHelp, mismatchHelp, hostKind, loginHelp } from './core/connect-help.js';
+import { stepItem, downloadItem } from './core/help-items.js';
 import { IS_TAURI, APP_NAME, COARSE, cloudHosted, isOurEndpoint, stSideEndpoint } from './core/capabilities.js';
 import { libs } from './core/libs.js';
 import { F } from './core/registry.js';
@@ -17,10 +17,9 @@ import { effectiveEffort } from './core/inject.js';
 import { el, note } from './core/dom.js';
 import { notify } from './core/notify.js';
 import { refreshAll, refreshStatus, refreshStats } from './core/live.js';
-import { buildReasonTab } from './tabs/reason.js';
+import { buildChatTab } from './tabs/chat.js';
 import { buildStatusTab } from './tabs/status.js';
 import { buildSettingsTab } from './tabs/settings.js';
-import { buildOtherTab } from './tabs/other.js';
 import { TABS, resolveTab } from './core/tabs.js';
 import { buildGuideCard, renderGuide } from './guide.js';
 import { glanceLinked } from './core/guide.js';
@@ -153,10 +152,7 @@ function setDot(state) {
     }
 }
 
-export const SUBSCRIPTION_LABELS = { max: 'Max', pro: 'Pro', team: 'Team', enterprise: 'Enterprise' };
 export const SOURCE_LABELS = { keychain: '钥匙串', file: '凭据文件', env: '环境变量' };
-
-const planOf = (cred) => SUBSCRIPTION_LABELS[cred?.subscriptionType] ?? cred?.subscriptionType ?? '订阅';
 
 /** The header summary of the collapsed drawer and the status bar say the same thing:
  *  dot · model · where/billing · 5h quota. Clicking the bar opens 状态. */
@@ -204,15 +200,8 @@ export function renderGlance() {
 // problem (proxy down, not logged in, wrong password) and is gone when everything is fine.
 
 const STEPS = {
-    login: [
-        { text: '在 SillyTavern/plugins/CCST 文件夹里运行下面的命令，在弹出的浏览器里登录 Claude：', cmd: 'npm run login' },
-        '用一键安装包装的：打开「酒馆工具」，进「更多」，选「登录 Claude」。',
-    ],
-    // TauriTavern / a phone / a remote page: the proxy is the standalone one on a computer, never in a SillyTavern plugins folder.
-    loginStandalone: [
-        '在运行代理的那台电脑上，打开「酒馆工具」，进「更多」，选「登录 Claude」（只需一次）。',
-        { text: '没有「酒馆工具」：在 CCST 文件夹里运行下面的命令，在弹出的浏览器里登录 Claude：', cmd: 'npm run login' },
-    ],
+    // The proxy is the plugin in this SillyTavern, or the standalone one on a computer: one command either way.
+    login: (host) => { const h = loginHelp({ host }); return [{ text: h.where, cmd: h.cmd }]; },
 };
 
 /** Where this panel runs, from facts only: TauriTavern, a touch device / a page opened from beyond the home network, or a desktop browser. */
@@ -225,66 +214,6 @@ let stepsOpen = false;   // the steps under the card's button
 let stepsFor = '';       // which situation they belong to (a new situation closes them)
 let prevSetup = false;   // was the panel in the first-run state at the last render
 let flashUntil = 0;      // the success card shows until then
-
-// The connect card is redrawn whenever the store changes, which would wipe a button's "已复制" before it is seen:
-// the feedback is kept per text and re-applied to the fresh button, and a toast says it too.
-const copyFeedback = new Map(); // text -> { label, until }
-const COPY_FEEDBACK_MS = 2000;
-
-function copyButton(idle, text) {
-    const btn = el('button', 'cm-link-btn', idle);
-    btn.type = 'button';
-    const apply = () => {
-        const fb = copyFeedback.get(text);
-        btn.textContent = fb && fb.until > Date.now() ? fb.label : idle;
-    };
-    apply();
-    btn.addEventListener('click', async () => {
-        const ok = await copyText(text);
-        copyFeedback.set(text, { label: ok ? '已复制' : '请手动选中复制', until: Date.now() + COPY_FEEDBACK_MS });
-        notify(ok ? 'ok' : 'warn', ok ? '已复制' : '没能自动复制', ok ? '' : '请手动选中文字复制。', { ms: 2500, replace: 'copy' });
-        apply();
-        setTimeout(() => { if (btn.isConnected) apply(); }, COPY_FEEDBACK_MS + 50);
-    });
-    return btn;
-}
-
-/** One step: text, and a command (if any) in a box with a copy button. */
-function stepItem(step) {
-    const { text, cmd } = typeof step === 'string' ? { text: step } : step;
-    const li = el('li', null, text);
-    if (cmd) {
-        const row = el('div', 'cm-cmd');
-        const code = el('code', null, cmd);
-        const copy = copyButton('复制', cmd);
-        row.append(code, copy);
-        li.append(row);
-    }
-    return li;
-}
-
-/**
- * One download / link: a button that works where the panel runs (a real download for the extension's own file in a
- * browser; the system browser for GitHub links, through TauriTavern's opener), plus the URL as text and a copy button,
- * so there is always something to do when the button does nothing.
- */
-function downloadItem(d) {
-    const box = el('div', 'cm-dl');
-    const a = el('a', 'menu_button cm-btn', d.label);
-    a.href = d.href;
-    if (d.download) a.setAttribute('download', d.file);
-    else {
-        a.target = '_blank';
-        a.rel = 'noopener noreferrer';
-        a.addEventListener('click', (e) => { e.preventDefault(); void openExternal(d.href); });
-    }
-    const row = el('div', 'cm-cmd');
-    const code = el('code', null, d.copy ?? d.href);
-    const copy = copyButton(d.copyLabel ?? '复制链接', d.copy ?? d.href);
-    row.append(code, copy);
-    box.append(a, row);
-    return box;
-}
 
 /** 版本不一致：情况 → 影响 → 编号步骤（内容见 connect-help.js 的 mismatchHelp）。 */
 function mismatchCard(base, status) {
@@ -315,7 +244,7 @@ function describeCard() {
     }
     if (status.phase === 'nologin') {
         return { ...base, tone: 'warn', dot: 'warning', key: 'login', title: setup ? '代理在线，还差登录 Claude' : '代理在线，但没登录 Claude',
-            sub: '登录一次后，聊天走你的订阅额度。', steps: hostNow() === 'desktop' ? STEPS.login : STEPS.loginStandalone,
+            sub: '登录一次后，聊天走你的订阅额度。', steps: STEPS.login(hostNow()),
             action: { label: '登录说明', again: '我登录好了，重新检测', run: refreshAll } };
     }
     if (status.phase === 'pending' || status.phase === 'idle') {
@@ -325,12 +254,12 @@ function describeCard() {
         const mismatch = status.mismatch;
         if (connected) {
             if (Date.now() < flashUntil) {
-                return { ...base, tone: 'ok', dot: 'online', key: 'ok', title: model ? `已连接 · ${shortModel(model)}` : '已连接 · 请选 Claude 模型', sub: '模型和思考深度在「推理」页。' };
+                return { ...base, tone: 'ok', dot: 'online', key: 'ok', title: model ? `已连接 · ${shortModel(model)}` : '已连接 · 请选 Claude 模型', sub: '' };
             }
             return mismatch ? mismatchCard(base, status) : null;
         }
         // Proxy is fine, SillyTavern isn't on it (yet).
-        const sub = `${planOf(status.cred)} 订阅 · 代理 v${status.version}。点「一键连接」让${APP_NAME}改用它：会选好模型，并保存成「CCST」连接配置。`;
+        const sub = '会选好模型，并存成「CCST」连接配置。';
         return { ...base, tone: 'info', dot: mismatch ? 'warning' : 'online', key: 'connect', title: `代理已就绪，${APP_NAME}还没接上`,
             sub: mismatch ? `${sub}\n${mismatch}` : sub, action: { label: '一键连接', icon: 'fa-plug', primary: true, run: () => connect(getSettings()) } };
     }
@@ -356,8 +285,7 @@ export function renderConnect() {
         body.dataset.stage = view?.setup ? 'setup' : 'ready';
         if (!view?.setup) delete body.dataset.explore;
     }
-    // The first-run guide speaks first; while it has something to say the connect card steps aside
-    // (except for the proxy's step 2, where the connect card IS the step).
+    // The first-run guide speaks first; while it shows, the connect card steps aside.
     const guide = renderGuide();
     card.hidden = !view || guide.hideConnectCard;
     if (view) {
@@ -486,10 +414,9 @@ export function addExtensionSettings(settings) {
     }, 50));
 
     const panes = Object.fromEntries(TABS.map(([k]) => [k, el('div', 'cm-pane')]));
-    buildReasonTab(panes.reason, settings, save);
+    buildChatTab(panes.chat, settings, save);
     buildStatusTab(panes.status);
     buildSettingsTab(panes.settings, settings, save);
-    buildOtherTab(panes.other, settings, save);
 
     const bar = el('div', 'cm-tabs');
     bar.setAttribute('role', 'tablist');

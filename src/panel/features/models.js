@@ -13,10 +13,11 @@ import { renderGlance, rebuildPanel } from '../shell.js';
 // Quick model switch for the two models people actually alternate between. It writes
 // SillyTavern's own custom model field (the same path as its model dropdown), so it lasts
 // until the next preset switch — presets store their own model.
+// `tag`: at most a few characters next to the name; `hint`: the tooltip.
 export const MODEL_PICKS = [
-    { value: 'claude-opus-5-5', label: 'Opus 5.5', hint: '最细腻，长篇最稳；总会思考，偏慢。' },
-    { value: 'claude-opus-4-6', label: 'Opus 4.6', hint: '思考可关，过程完整可见；老牌稳定。' },
-    { value: 'claude-sonnet-5-5', label: 'Sonnet 5.5', hint: '通常更快更省，原生 1M 上下文；总会思考。' },
+    { value: 'claude-opus-5-5', label: 'Opus 5.5', tag: '最稳', hint: '最细腻，长篇最稳；总会思考，偏慢' },
+    { value: 'claude-opus-4-6', label: 'Opus 4.6', tag: '可关思考', hint: '思考可关，过程完整可见' },
+    { value: 'claude-sonnet-5-5', label: 'Sonnet 5.5', tag: '快', hint: '通常更快更省，原生 1M 上下文；总会思考' },
 ];
 
 /** Switch SillyTavern's model on the proxy connection (its custom model field). `id` is canonical
@@ -45,7 +46,7 @@ export function modelRow() {
     if (!connected) return null;
     const extra = currentExtra(model);
     const options = [...MODEL_PICKS];
-    if (extra) options.push({ value: extra, label: shortModel(extra), hint: '当前模型，在「API 连接」里选的。' });
+    if (extra) options.push({ value: extra, label: shortModel(extra), hint: '当前模型，在「API 连接」里选的' });
     const current = extra || (MODEL_PICKS.some((o) => o.value === modelKey(model)) ? modelKey(model) : null);
     const row = cards({
         label: '',
@@ -81,7 +82,7 @@ export function applyPresetModel(model) {
     const id = modelBase(model) + (/\[1m\]$/i.test(cur ?? '') ? '[1m]' : '');
     if (!setModel(id)) return;
     renderGlance();
-    notify('info', `这个预设用 ${shortModel(id)}`, '预设自带模型设置，已自动选上。想换的话在「推理」页点另一个模型。', { ms: 5000 });
+    notify('info', `这个预设用 ${shortModel(id)}`, '预设自带模型设置，已自动选上。想换的话在「聊天」页点另一个模型。', { ms: 5000 });
 }
 
 /** The model row exists only while ST is on the proxy: rebuild when that flips. */

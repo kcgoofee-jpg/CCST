@@ -4,7 +4,7 @@
 
 import { libs } from '../core/libs.js';
 import { store } from '../core/store.js';
-import { el, popupText, stateLine, button } from '../core/dom.js';
+import { el, popupText, button } from '../core/dom.js';
 import { currentCharKey } from '../core/st.js';
 import { notify } from '../core/notify.js';
 
@@ -13,17 +13,21 @@ export function init() {
 }
 
 // ── 缓存优化：当前角色卡的世界书设为常驻 ──
+// 状态 → 世界书缓存 only shows when there is something to do: a book with keyword entries (设为常驻),
+// or a backup to restore. Otherwise the whole section stays hidden.
+
+/** Show / hide the section around the box. */
+function showSection(on) {
+    const sec = document.getElementById('claude_max_lore_sec');
+    if (sec) sec.hidden = !on;
+}
 
 export async function refreshLoreBox() {
     let box = document.getElementById('claude_max_lore');
     if (!box) return;
-    if (!libs.loreConst) {
-        box.replaceChildren(stateLine('error', '没加载（扩展文件不完整），重装扩展即可。'));
-        return;
-    }
     const ctx = SillyTavern.getContext();
     const ch = ctx.groupId ? null : ctx.characters?.[ctx.characterId];
-    if (!ch) { box.replaceChildren(stateLine('empty', '打开角色卡聊天后可用。')); return; }
+    if (!libs.loreConst || !ch) { box.replaceChildren(); showSection(false); return; }
     // Every book that feeds this chat, not just the card's own: global
     // (selected) books and the chat's bound book cost cache the same way.
     const names = [ch.data?.extensions?.world, ctx.chatMetadata?.world_info];
@@ -32,43 +36,41 @@ export async function refreshLoreBox() {
         names.push(...(wi.selected_world_info ?? []));
     } catch { /* global lorebooks unknown in this frontend */ }
     const books = [...new Set(names.filter(Boolean))];
-    if (!books.length) { box.replaceChildren(stateLine('empty', '这个聊天没用世界书。')); return; }
     const charKey = currentCharKey();
     const parts = [];
     for (const name of books) {
         let book;
         try { book = await ctx.loadWorldInfo(name); } catch { book = null; }
-        parts.push(loreRow(ctx, name, book));
+        const row = book ? loreRow(ctx, name, book) : null;
+        if (row) parts.push(row);
     }
     // The panel may have been rebuilt or the character switched meanwhile.
     box = document.getElementById('claude_max_lore');
     if (!box || currentCharKey() !== charKey) return;
     box.replaceChildren(...parts);
+    showSection(parts.length > 0);
 }
 
+/** One book: a short line and its button, or null when there is nothing to do for it. */
 function loreRow(ctx, name, book) {
-    const box = el('div', 'cm-field');
-    if (!book) { box.append(el('small', 'cm-hint', `读不到世界书「${name}」。`)); return box; }
     const sum = libs.loreConst.summarizeLore(book);
     const backup = libs.loreConst.backupName(name);
     const hasBackup = (ctx.getWorldInfoNames?.() ?? []).includes(backup);
+    if (!sum.keyword && !hasBackup) return null;
+    const box = el('div', 'cm-field');
     box.append(el('small', 'cm-hint', sum.keyword
-        ? `「${name}」有 ${sum.keyword} 条关键词条目（约 ${sum.keywordChars.toLocaleString()} 字），聊天记录可能每轮重写缓存。`
-        : `「${name}」已全部常驻，不影响缓存。`));
-    if (sum.keyword) {
-        const why = el('details', 'cm-mini');
-        why.append(el('summary', null, '有什么影响'), el('small', 'cm-hint',
-            '常驻后每轮都发这些条目（多占上下文），但聊天记录预计能命中缓存（取决于预设和其他扩展；在一个实测的聊天里，每轮缓存写入从约 2.8 万降到 3 千 token，其他聊天不一定）。'));
-        box.append(why);
-    }
+        ? `「${name}」有 ${sum.keyword} 条关键词条目，可能让缓存每轮重写。`
+        : `「${name}」已设为常驻。`));
     const row = el('div', 'cm-btn-row');
     if (sum.keyword) {
-        row.append(button('设为常驻（自动备份）', () => convertLore(name, book, backup)));
+        const b = button('设为常驻', () => convertLore(name, book, backup));
+        b.title = '常驻后每轮都发这些条目（多占上下文），聊天记录通常能读缓存；会先自动备份';
+        row.append(b);
     }
     if (hasBackup) {
         row.append(button('恢复原样', () => restoreLore(name, backup)));
     }
-    if (row.childElementCount) box.append(row);
+    box.append(row);
     return box;
 }
 

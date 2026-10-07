@@ -9,7 +9,7 @@ import { connectionInfo, shortModel, modelKey } from '../core/connection.js';
 import { notify } from '../core/notify.js';
 import { F } from '../core/registry.js';
 import { rebuildPanel } from '../shell.js';
-import { syncThinkingControls } from '../tabs/reason.js';
+import { syncThinkingControls } from '../tabs/chat.js';
 
 // Recommendations applied by v2.5.0 left no record, so switching away
 // couldn't undo them. If the active preset's recommendation is in effect

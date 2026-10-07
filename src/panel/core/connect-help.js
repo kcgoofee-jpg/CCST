@@ -61,6 +61,32 @@ export function connectHelp({ host = 'desktop' } = {}) {
     };
 }
 
+/**
+ * 首次引导第 1 步「装代理」的内容（和「连不上」卡片同一份安装方式）。
+ * desktop：Mac 一行终端命令 + Windows 安装程序；tauri / elsewhere：装不了酒馆插件，给安装说明链接。
+ * @returns {{ sub: string, mac: string|null, win: object|null, docs: string|null }}
+ */
+export function installHelp({ host = 'desktop' } = {}) {
+    if (host === 'tauri' || host === 'elsewhere') {
+        return { sub: '到要运行代理的那台电脑上装好并启动 CCST 代理，这里连上后会自动进入下一步。', mac: null, win: null, docs: DOCS_URL };
+    }
+    const [win] = desktopDownloads().filter((d) => d.key === 'win');
+    return {
+        sub: '装好后重启酒馆，这里会自动进入下一步。',
+        mac: MAC_PLUGIN_CMD,
+        win: { ...win, label: '下载安装程序' },
+        docs: null,
+    };
+}
+
+/** 首次引导第 2 步「登录」：要运行的那一条命令和它在哪儿运行。 */
+export function loginHelp({ host = 'desktop' } = {}) {
+    return {
+        where: host === 'desktop' ? '在酒馆文件夹的 plugins/CCST 里运行：' : '在运行代理那台电脑的 CCST 文件夹里运行：',
+        cmd: 'npm run login',
+    };
+}
+
 const REFRESH = '回到浏览器，按 Cmd+Shift+R（Windows 按 Ctrl+F5）刷新酒馆页面。';
 const DESKTOP_HINT = 'Mac 在终端粘贴上面那行，Windows 双击下载的文件，按提示做完后重启酒馆';
 

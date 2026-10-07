@@ -1,122 +1,98 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
-    SOURCES, chosenSource, sourceLinked, shouldAutoOnboard, guideStep, SUMMARY,
-    startGuide, pickSource, finishGuide, backToChoose, gateConnection, proxyUnknown, glanceLinked,
+    GUIDE_STEPS, STEP_TITLES, DONE_STEP, guideFacts, shouldAutoOnboard, guideStep, pollsProxy,
+    startGuide, finishGuide, gateConnection, proxyUnknown, glanceLinked,
 } from '../src/panel/core/guide.js';
 
 const none = { kind: 'other', connected: false };
 const ours = { kind: 'ours', connected: true };
+const facts = (conn, phase) => guideFacts(conn, phase);
+const boot = (over = {}) => ({ onboarded: false, guideSource: '', settingsExisted: false, everConnected: false, ...over });
 
-test('one way in: the local proxy, with a one-line audience', () => {
-    assert.deepEqual(SOURCES.map((s) => s.id), ['proxy']);
-    for (const s of SOURCES) assert.ok(s.who.length > 8 && !s.who.includes('\n'));
-    for (const s of SOURCES) assert.ok(SUMMARY[s.id].works.length && SUMMARY[s.id].gaps.length);
+test('three steps, named 装代理 / 登录 / 连接, then 完成', () => {
+    assert.deepEqual(GUIDE_STEPS.map((s) => s.key), ['install', 'login', 'connect']);
+    assert.deepEqual(STEP_TITLES, { 1: '装代理', 2: '登录', 3: '连接' });
+    assert.equal(DONE_STEP, 4);
 });
 
-test('a fresh install (not connected, never started) starts at step 1', () => {
-    assert.equal(guideStep({ onboarded: false, guideSource: '' }, none), 1);
-    assert.equal(shouldAutoOnboard({ onboarded: false, guideSource: '' }, none), false);
+test('facts: reachable / logged in / connected come only from the status phase and ST\'s connection', () => {
+    assert.deepEqual(facts(none, 'offline'), { checking: false, reachable: false, loggedIn: false, connected: false });
+    assert.deepEqual(facts(none, 'nologin'), { checking: false, reachable: true, loggedIn: false, connected: false });
+    assert.deepEqual(facts(ours, 'online'), { checking: false, reachable: true, loggedIn: true, connected: true });
+    assert.equal(facts(ours, 'offline').connected, false, 'ST pointing at a proxy that does not answer is not connected');
+    assert.equal(facts(ours, 'pending').checking, true);
+});
+
+test('a brand-new install walks the steps as the facts change', () => {
+    assert.equal(guideStep(boot(), facts(none, 'offline')), 1);
+    assert.equal(guideStep(boot(), facts(none, 'nologin')), 2);
+    assert.equal(guideStep(boot(), facts(none, 'online')), 3);
+    assert.equal(guideStep(boot({ guideSource: 'on' }), facts(ours, 'online')), DONE_STEP);
+});
+
+test('only steps 1 and 2 poll the proxy', () => {
+    assert.deepEqual([0, 1, 2, 3, 4].map(pollsProxy), [false, true, true, false, false]);
 });
 
 test('already connected and never started: no guide, marked done automatically', () => {
-    for (const conn of [ours]) {
-        assert.equal(guideStep({ onboarded: false, guideSource: '' }, conn), 0);
-        assert.equal(shouldAutoOnboard({ onboarded: false, guideSource: '' }, conn), true);
+    assert.equal(guideStep(boot(), facts(ours, 'online')), 0);
+    assert.equal(shouldAutoOnboard(boot(), facts(ours, 'online')), true);
+    assert.equal(shouldAutoOnboard({ onboarded: true, guideSource: '' }, facts(ours, 'online')), false);
+});
+
+test('someone who started the guide and connects is NOT auto-marked: they see 完成', () => {
+    assert.equal(shouldAutoOnboard(boot({ guideSource: 'on' }), facts(ours, 'online')), false);
+    // older versions saved 'choose' / 'proxy': still a started guide
+    for (const g of ['choose', 'proxy']) assert.equal(guideStep(boot({ guideSource: g }), facts(ours, 'online')), DONE_STEP);
+});
+
+test('onboarded: the guide never shows, whatever the facts', () => {
+    for (const [c, p] of [[none, 'offline'], [none, 'nologin'], [ours, 'online']]) assert.equal(guideStep(boot({ onboarded: true }), facts(c, p)), 0);
+});
+
+test('returning users (settings existed, or connected once) never get it on their own', () => {
+    for (const f of [facts(none, 'offline'), facts(none, 'nologin'), facts(ours, 'online')]) {
+        assert.equal(guideStep(boot({ settingsExisted: true }), f), 0);
+        assert.equal(guideStep(boot({ everConnected: true }), f), 0);
     }
-    assert.equal(shouldAutoOnboard({ onboarded: true, guideSource: '' }, ours), false);
 });
 
-test('onboarded: the guide never shows, whatever the connection', () => {
-    for (const conn of [none, ours]) assert.equal(guideStep({ onboarded: true, guideSource: '' }, conn), 0);
-});
-
-test('starting moves to 连接, and connecting to the proxy moves to 完成', () => {
-    const at = (id, conn) => guideStep({ onboarded: false, guideSource: id }, conn);
-    assert.equal(at('proxy', none), 2);
-    assert.equal(at('proxy', ours), 3);
-});
-
-test('someone who started the guide and connects is NOT auto-marked: they see 第 3 步', () => {
-    assert.equal(shouldAutoOnboard({ onboarded: false, guideSource: 'proxy' }, ours), false);
-    assert.equal(guideStep({ onboarded: false, guideSource: 'proxy' }, ours), 3);
-});
-
-test('only the proxy connection counts as linked', () => {
-    assert.equal(sourceLinked('proxy', ours), true);
-    assert.equal(sourceLinked('proxy', none), false);
-    assert.equal(sourceLinked(null, ours), false);
-});
-
-test('re-running the guide while connected starts at step 1, then 3 once a source is picked', () => {
-    assert.equal(guideStep(startGuide(), ours), 1);
-    assert.equal(guideStep(pickSource('proxy'), ours), 3);
-    assert.equal(guideStep(backToChoose(), ours), 1);
-});
-
-test('choose / unknown / empty mean no source picked', () => {
-    for (const v of ['', 'choose', 'nope', null, undefined]) assert.equal(chosenSource(v), null);
-    assert.equal(chosenSource('proxy'), 'proxy');
-    assert.equal(chosenSource('claude'), null, 'the direct sources are gone');
-    assert.deepEqual(pickSource('bogus'), startGuide());
-});
-
-test('finishing marks onboarded and clears the picked source', () => {
-    assert.deepEqual(finishGuide(), { onboarded: true, guideSource: '' });
-    assert.equal(guideStep(finishGuide(), none), 0);
-});
-
-// ── 4.1.1: only a brand-new install sees the guide ──
-const boot = (over = {}) => ({ onboarded: false, guideSource: '', settingsExisted: false, everConnected: false, ...over });
-
-test('brand-new install (no settings when the panel booted), not connected: step 1', () => {
-    assert.equal(guideStep(boot(), none), 1);
-});
-
-test('settings existed at boot (installed before): never the guide, proxy down or not', () => {
-    for (const conn of [none, ours]) assert.equal(guideStep(boot({ settingsExisted: true }), conn), 0);
-});
-
-test('once connected, a later disconnect shows no guide', () => {
-    assert.equal(guideStep(boot({ everConnected: true }), none), 0);
-    assert.equal(guideStep(boot({ everConnected: false }), none), 1);
-});
-
-test('restarting the guide (其他 → 重新引导) shows it for anyone, even after connecting before', () => {
-    const s = boot({ settingsExisted: true, everConnected: true, guideSource: 'choose' });
-    assert.equal(guideStep(s, none), 1);
-    assert.equal(guideStep({ ...s, guideSource: 'proxy' }, none), 2);
-    assert.equal(guideStep({ ...s, guideSource: 'proxy' }, ours), 3);
+test('重新引导 shows it for anyone, at the step the facts say', () => {
+    const s = boot({ settingsExisted: true, everConnected: true, ...startGuide() });
+    assert.equal(guideStep(s, facts(none, 'offline')), 1);
+    assert.equal(guideStep(s, facts(none, 'nologin')), 2);
+    assert.equal(guideStep(s, facts(ours, 'online')), DONE_STEP);
 });
 
 test('skipping or finishing ends it for good', () => {
-    assert.equal(guideStep(boot({ ...finishGuide() }), none), 0);
-    assert.equal(guideStep({ ...boot(), ...finishGuide() }, none), 0);
-});
-
-test('gateConnection: ST pointing at the proxy counts only once the proxy answered', () => {
-    for (const phase of ['offline', 'denied', 'pending', 'idle']) assert.equal(gateConnection(ours, phase).connected, false);
-    for (const phase of ['online', 'nologin']) assert.equal(gateConnection(ours, phase).connected, true);
-    assert.equal(gateConnection(none, 'offline'), none); // not on the proxy: nothing to gate
+    assert.deepEqual(finishGuide(), { onboarded: true, guideSource: '' });
+    assert.equal(guideStep({ ...boot(), ...finishGuide() }, facts(none, 'offline')), 0);
 });
 
 test('fresh install whose ST already points at an offline proxy still gets the guide', () => {
-    const fresh = boot();
-    assert.equal(guideStep(fresh, gateConnection(ours, 'offline')), 1);
-    assert.equal(shouldAutoOnboard(fresh, gateConnection(ours, 'offline')), false);
-    assert.equal(guideStep(fresh, gateConnection(ours, 'online')), 0); // answered: already a working user
+    assert.equal(guideStep(boot(), facts(ours, 'offline')), 1);
+    assert.equal(shouldAutoOnboard(boot(), facts(ours, 'offline')), false);
 });
 
-test('proxyUnknown: no status check has finished yet', () => {
+test('gateConnection / proxyUnknown / glanceLinked', () => {
+    for (const phase of ['offline', 'denied', 'pending', 'idle']) assert.equal(gateConnection(ours, phase).connected, false);
+    for (const phase of ['online', 'nologin']) assert.equal(gateConnection(ours, phase).connected, true);
+    assert.equal(gateConnection(none, 'offline'), none);
     assert.equal(proxyUnknown('pending'), true);
     assert.equal(proxyUnknown('idle'), true);
     assert.equal(proxyUnknown('online'), false);
-    assert.equal(proxyUnknown('offline'), false);
-});
-
-test('glanceLinked: the status bar says 未连接 for a proxy connection whose proxy is offline', () => {
     assert.equal(glanceLinked(ours, 'offline'), false);
     assert.equal(glanceLinked(ours, 'online'), true);
-    assert.equal(glanceLinked(ours, 'pending'), true);
     assert.equal(glanceLinked(none, 'online'), false);
+});
+
+test('the guide card replaces the connect card while it shows, and polls on steps 1-2', () => {
+    const g = readFileSync(new URL('../src/panel/guide.js', import.meta.url), 'utf8');
+    assert.match(g, /hideConnectCard: true/);
+    assert.match(g, /setPolling\(pollsProxy\(step\)\)/);
+    assert.match(g, /installHelp\(/);
+    assert.match(g, /loginHelp\(/);
+    assert.match(g, /connect\(getSettings\(\)\)/);
 });

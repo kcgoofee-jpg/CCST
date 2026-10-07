@@ -54,7 +54,7 @@ test('every feature the bootstrap lists exists in features/', () => {
     const index = readFileSync(join(root, 'src/panel/index.js'), 'utf8');
     const block = index.match(/const FEATURES = \[([\s\S]*?)\n\];/)[1];
     const files = [...block.matchAll(/\['[^']+',\s*'([^']+)'\]/g)].map((m) => m[1]);
-    assert.ok(files.length >= 9);
+    assert.ok(files.length >= 8);
     for (const f of files) assert.ok(existsSync(join(root, `src/panel/features/${f}.js`)), `features/${f}.js`);
     const onDisk = readdirSync(join(root, 'src/panel/features')).map((f) => f.replace(/\.js$/, ''));
     assert.deepEqual(onDisk.filter((f) => !files.includes(f)), [], 'a feature file the bootstrap never loads');

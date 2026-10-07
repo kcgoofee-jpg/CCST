@@ -1,6 +1,6 @@
 // ──────────────────────────────────────────────
 // A small state store. The panel's live data (proxy status, quota, stats,
-// backend, the at-a-glance numbers) lives here; core/live.js is the one place
+// the at-a-glance numbers) lives here; core/live.js is the one place
 // that fetches it, and tabs subscribe to the keys they draw. Subscribers
 // always look their DOM up by id when they run, so a rebuilt panel needs no
 // re-subscribing.
@@ -50,7 +50,7 @@ export function createStore(initial = {}) {
     };
 }
 
-/** The panel's store. `proxyState` / `proxyOnline` describe the proxy; `status`, `quota`, `stats`, `backend`
+/** The panel's store. `proxyState` / `proxyOnline` describe the proxy; `status`, `quota`, `stats`
  *  carry {phase: 'pending' | 'loading' | 'ok' | 'error' …} plus the data; `pulse` bumps on a full refresh. */
 export const store = createStore({
     proxyState: null,      // null | 'online' | 'warning' | 'offline'
@@ -59,7 +59,6 @@ export const store = createStore({
     quota: { phase: 'idle' },
     stats: { phase: 'idle' },
     statsAt: 0,
-    backend: { phase: 'idle' },
     glance: { quota: null, cache: null },
     gen: { kind: 'idle' }, // the reply being written: idle | thinking | writing | done (features/gen-progress.js)
     nextEffort: null,      // one-shot effort for the next reply (memory only)

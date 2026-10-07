@@ -58,18 +58,12 @@ test('connect toast is one line, long-lived; advice is separate', () => {
     assert.doesNotMatch(shell, /presetNote: \(libs/);
 });
 
-test('使用说明: plain, current wording', () => {
-    const other = src('panel/tabs/other.js');
-    assert.doesNotMatch(other, /Agent SDK|一小时|里选 Claude 模型/);
-    assert.match(other, /一键连接」，会自动选好 Claude 模型/);
-});
-
 test('TauriTavern named in the connect texts', () => {
     assert.equal(appName(true), 'TauriTavern');
     assert.equal(appName(false), '酒馆');
     const shell = src('panel/shell.js');
     assert.match(shell, /\$\{APP_NAME\}还没接上/);
-    assert.match(shell, /让\$\{APP_NAME\}改用它/);
+    assert.match(src('panel/tabs/settings.js'), /让\$\{APP_NAME\}改用它/);
     assert.match(shell, /会把\$\{APP_NAME\}现在的连接/);
 });
 
@@ -77,7 +71,7 @@ test('always-thinking models: disabled 不思考, and the list matches the proxy
     for (const id of ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-fable-5-1', 'claude-opus-5-1']) assert.equal(isAdaptiveOnly(id), true, id);
     for (const id of ['claude-opus-4-7', 'claude-opus-4-8', 'anthropic/claude-opus-4.7', 'claude-opus-5', 'claude-opus-4-6', 'claude-opus-4-6[1m]', 'claude-sonnet-5', 'claude-sonnet-4-6', 'claude-haiku-4-5', 'gemini-2.5-pro', '']) assert.equal(isAdaptiveOnly(id), false, id);
     for (const id of ['claude-fable-5-1', 'claude-fable-5', 'claude-opus-5-5', 'claude-opus-5', 'claude-opus-4-8', 'claude-opus-4-7', 'claude-opus-4-6', 'claude-sonnet-5-5', 'claude-sonnet-5', 'claude-sonnet-4-6', 'claude-opus-4-5', 'claude-sonnet-4-5', 'claude-haiku-4-5']) assert.equal(isAdaptiveOnly(id), isAdaptiveOnlyModel(id), id);
-    assert.match(src('panel/tabs/reason.js'), /这个模型总会思考/);
+    assert.match(src('panel/tabs/chat.js'), /这个模型总会思考/);
 });
 
 test('不思考: no effort is sent', async () => {

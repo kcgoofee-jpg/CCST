@@ -1,5 +1,5 @@
 // ──────────────────────────────────────────────
-// Live data: the one place that asks the proxy for its status, quota, usage stats and backend, on the
+// Live data: the one place that asks the proxy for its status, quota and usage stats, on the
 // schedule the panel always had (drawer opened, tab entered, after a reply, the 20 s heartbeat), and
 // puts the answers into the store. Tabs subscribe to the store and draw; nothing here touches the DOM
 // except to check that the panel is built (a fetch for a panel that isn't there is skipped).
@@ -145,7 +145,7 @@ let quotaTimer = null;
 
 /** Ask for the quota — at most once per 60 s per panel, however often the tab / drawer / heartbeat
  *  path calls this (Anthropic rate-limits the endpoint). `force` skips the gap for the one case where
- *  the answer really changed (backend switched); it still respects an upstream rate limit. */
+ *  the user asked (刷新); it still respects an upstream rate limit. */
 export async function refreshQuota({ force = false } = {}) {
     if (!document.getElementById('claude_max_quota')) return;
     const now = Date.now();
@@ -162,13 +162,8 @@ export async function refreshQuota({ force = false } = {}) {
         const res = await fetchProxy('/quota', '/v1/usage/quota');
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        // API-type backends bill per token: no 5h / 7d windows to show.
-        if (data.notSubscription) {
-            glancePatch({ quota: null });
-        } else {
-            const five = data.windows?.find((w) => w.type === 'five_hour');
-            glancePatch({ quota: five?.utilization != null ? Math.round(five.utilization * 100) : null });
-        }
+        const five = data.windows?.find((w) => w.type === 'five_hour');
+        glancePatch({ quota: five?.utilization != null ? Math.round(five.utilization * 100) : null });
         clearTimeout(quotaTimer);
         quotaNotBefore = 0;
         if (data.retryAt) {
@@ -208,21 +203,6 @@ export async function refreshStats() {
 export async function refreshStatsPage() {
     await refreshStats();
     store.set({ statsAt: Date.now() });
-}
-
-// ── 代理后端 ──
-
-export async function refreshBackend() {
-    if (!document.getElementById('claude_max_backend')) return;
-    // Keep the form on screen while re-reading it after a save; only a first read shows 「正在读取」.
-    if (store.get().backend.phase !== 'ok') store.set({ backend: { phase: 'loading' } });
-    try {
-        const res = await fetchProxy('/backend', '/v1/backend');
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        store.set({ backend: { phase: 'ok', view: await res.json() } });
-    } catch (err) {
-        store.set({ backend: { phase: 'error', error: err } });
-    }
 }
 
 // ── Full refresh (drawer opened, 重新检测) ──

@@ -89,7 +89,7 @@ export function dumpRequest({ model, settings, raw, placed, cacheDiag }) {
  *  only, and only while the debug switch is on (404 otherwise). */
 export function handleDebugLast(_req, res) {
     if (!enabled) {
-        return res.status(404).json({ ok: false, error: '调试保存没有打开：先在面板「其他 → 查看发给模型的请求」里打开「保存最近一次完整请求」，再聊一轮。' });
+        return res.status(404).json({ ok: false, error: '调试保存没有打开：先在面板「设置 → 高级」里打开「保存最近一次完整请求」，再聊一轮。' });
     }
     try {
         const dir = debugDir();
@@ -97,6 +97,6 @@ export function handleDebugLast(_req, res) {
         const systemMarked = readFileSync(join(dir, 'last-system.txt'), 'utf8');
         res.json({ ok: true, at: req.at, model: req.model, settings: req.settings, cacheDiag: req.cacheDiag, systemMarked, messages: req.messages });
     } catch {
-        res.status(404).json({ ok: false, error: '还没有保存的请求：先在面板「其他 → 查看发给模型的请求」里打开「保存最近一次完整请求」，再聊一轮。' });
+        res.status(404).json({ ok: false, error: '还没有保存的请求：先在面板「设置 → 高级」里打开「保存最近一次完整请求」，再聊一轮。' });
     }
 }

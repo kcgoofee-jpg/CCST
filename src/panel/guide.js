@@ -1,16 +1,24 @@
 // ──────────────────────────────────────────────
-// The first-run guide card (开始 → 连接 → 完成), drawn above the connect card. The state logic and
-// the wording are in core/guide.js (pure). Step 2 is the ordinary connect card below this one.
+// The first-run guide card (装代理 → 登录 → 连接 → 完成). The state logic is in core/guide.js (pure);
+// what to install and the login command are in core/connect-help.js. While the guide shows, the
+// connect card steps aside: the guide is the only thing a newcomer has to follow.
 // ──────────────────────────────────────────────
 
 import { store } from './core/store.js';
 import { getSettings, saveSettingsDebounced } from './core/settings.js';
 import { connectionInfo, shortModel } from './core/connection.js';
+import { APP_NAME, IS_TAURI, COARSE } from './core/capabilities.js';
+import { libs } from './core/libs.js';
+import { fetchProxy } from './core/proxy.js';
+import { refreshStatus } from './core/live.js';
 import { el, note, button } from './core/dom.js';
+import { cmdRow, linkButton } from './core/help-items.js';
+import { hostKind, installHelp, loginHelp } from './core/connect-help.js';
 import {
-    SOURCES, STEP_TITLES, SUMMARY, chosenSource, guideStep, shouldAutoOnboard, gateConnection, proxyUnknown,
-    startGuide, pickSource, finishGuide,
+    GUIDE_STEPS, DONE_STEP, GUIDE_POLL_MS, guideFacts, guideStep, shouldAutoOnboard, pollsProxy,
+    startGuide, finishGuide,
 } from './core/guide.js';
+import { connect } from './shell.js';
 
 /** Re-draw everything that follows the connection (the shell listens to `pulse`). */
 const redraw = () => store.set({ pulse: store.get().pulse + 1 });
@@ -21,9 +29,10 @@ function apply(patch) {
     redraw();
 }
 
-/** 其他 → 重新引导. */
+/** 设置 → 重新引导. */
 export function restartGuide() {
     apply(startGuide());
+    refreshStatus();
     document.getElementById('claude_max_guide')?.scrollIntoView?.({ block: 'nearest' });
 }
 
@@ -36,22 +45,22 @@ export function buildGuideCard() {
     return card;
 }
 
-function stepper(step) {
-    const row = el('ol', 'cm-guide-steps');
-    for (const n of [1, 2, 3]) {
-        const li = el('li', null, STEP_TITLES[n]);
-        if (n === step) li.className = 'active';
-        else if (n < step) li.className = 'done';
-        row.append(li);
-    }
-    return row;
+/** Where this panel runs, from facts only (the same as the connect card). */
+function hostNow() {
+    const remote = libs.hostCheck?.isLocalHost ? !libs.hostCheck.isLocalHost(location.hostname) : false;
+    return hostKind({ tauri: IS_TAURI, elsewhere: COARSE || remote });
 }
 
-const list = (cls, items) => {
-    const ul = el('ul', `cm-guide-list ${cls}`);
-    for (const t of items) ul.append(el('li', null, t));
-    return ul;
-};
+function stepper(step) {
+    const row = el('ol', 'cm-guide-steps');
+    GUIDE_STEPS.forEach((s, i) => {
+        const li = el('li', null, s.title);
+        if (i + 1 === step) li.className = 'active';
+        else if (i + 1 < step) li.className = 'done';
+        row.append(li);
+    });
+    return row;
+}
 
 function skipLink() {
     const b = el('button', 'cm-link-btn', '跳过引导');
@@ -60,78 +69,133 @@ function skipLink() {
     return b;
 }
 
-function drawStep1(card) {
-    const proxy = SOURCES[0];
+const waiting = (text) => el('small', 'cm-hint cm-guide-wait', text);
+
+// Step 1 — 装代理. The only step that knows HOW the proxy is installed: another backend swaps this one.
+function drawInstall(card) {
+    const help = installHelp({ host: hostNow() });
+    card.append(el('div', 'cm-note-title', '装 CCST 代理'));
+    if (help.mac) card.append(el('div', 'cm-guide-os', 'Mac：打开「终端」，粘贴这一行回车'), cmdRow(help.mac, '复制命令'));
+    if (help.win) {
+        const row = el('div', 'cm-btn-row');
+        row.append(linkButton(help.win));
+        card.append(el('div', 'cm-guide-os', 'Windows：下载后双击运行'), row);
+    }
+    if (help.docs) {
+        const row = el('div', 'cm-btn-row');
+        row.append(linkButton({ label: '安装说明', href: help.docs, download: false }));
+        card.append(row);
+    }
+    card.append(waiting(help.sub));
+}
+
+// Step 2 — 登录.
+function drawLogin(card) {
+    const help = loginHelp({ host: hostNow() });
     card.append(
-        el('div', 'cm-note-title', '欢迎用 CCST'),
-        el('small', 'cm-hint', `CCST 通过${proxy.label}连 Claude，适合：${proxy.who}之后随时能在「其他」里重新引导。`),
+        el('div', 'cm-note-title', '代理已装好，登录 Claude'),
+        el('small', 'cm-hint', help.where),
+        cmdRow(help.cmd),
+        waiting('登录后这里会自动进入下一步。'),
     );
+}
+
+// Step 3 — 连接.
+function drawConnect(card) {
+    const { status } = store.get();
+    card.append(
+        el('div', 'cm-note-title', `把${APP_NAME}连到 CCST`),
+        el('small', 'cm-hint', '会选好模型，并存成「CCST」连接配置。'),
+    );
+    if (status.mismatch) card.append(el('small', 'cm-hint cm-warn', status.mismatch));
     const row = el('div', 'cm-btn-row');
-    row.append(button('开始', () => apply(pickSource(proxy.id)), { icon: 'fa-play', primary: true }), skipLink());
+    row.append(button('一键连接', () => connect(getSettings()), { icon: 'fa-plug', primary: true }));
     card.append(row);
 }
 
-function drawStep2(card) {
+function drawDone(card) {
+    const { model } = connectionInfo();
     card.append(
-        el('div', 'cm-note-title', '连接本机代理'),
-        el('small', 'cm-hint', '按下面这张卡片一步步来（启动代理 → 登录 → 一键连接），连上后自动进入下一步。'),
+        el('div', 'cm-note-title', model ? `已连接 · ${shortModel(model)}` : '已连接'),
+        el('small', 'cm-hint', '可以聊天了。温度、Top-P 等采样参数不起作用。'),
     );
     const row = el('div', 'cm-btn-row');
-    row.append(skipLink());
+    row.append(button('完成', () => apply(finishGuide()), { icon: 'fa-check', primary: true }));
     card.append(row);
 }
 
-function drawStep3(card, choice) {
-    const { model, where } = connectionInfo();
-    const sum = SUMMARY[choice];
-    card.append(
-        el('div', 'cm-note-title', model ? `已连接 · ${where} · ${shortModel(model)}` : `已连接 · ${where}`),
-        el('small', 'cm-hint', 'CCST 能做的：'),
-        list('cm-guide-ok', sum.works),
-        el('small', 'cm-hint', '做不了或要注意的：'),
-        list('cm-guide-gap', sum.gaps),
-    );
-    const row = el('div', 'cm-btn-row');
-    row.append(button('完成', () => apply(finishGuide()), { icon: 'fa-check', primary: true }), skipLink());
-    card.append(row);
+const DRAW = { 1: drawInstall, 2: drawLogin, 3: drawConnect, [DONE_STEP]: drawDone };
+
+// ── Steps 1 and 2 wait for the proxy: ask it every few seconds, quietly (no 「正在检测」 flicker),
+// and run the full status check only when its answer moved on. ──
+let pollTimer = null;
+let polling = false;
+
+async function pollOnce() {
+    if (polling || document.hidden) return;
+    polling = true;
+    try {
+        let next = 'offline';
+        try {
+            const res = await fetchProxy('/status', '/status');
+            const data = await res.json().catch(() => ({}));
+            if (res.ok && data.ok) next = data.credential?.present ? 'online' : 'nologin';
+        } catch { /* still not there */ }
+        if (next !== store.get().status.phase) refreshStatus();
+    } finally {
+        polling = false;
+    }
+}
+
+function setPolling(on) {
+    if (on && !pollTimer) pollTimer = setInterval(() => {
+        if (!document.getElementById('claude_max_guide')?.isConnected) return setPolling(false);
+        void pollOnce();
+    }, GUIDE_POLL_MS);
+    else if (!on && pollTimer) { clearInterval(pollTimer); pollTimer = null; }
 }
 
 let drawn = '';
 
 /**
  * Draw (or hide) the guide card for the current settings and connection.
- * @returns {{ step: number, hideConnectCard: boolean }} the shell hides its own connect card while the
- *   guide speaks for itself (steps 1 and 3).
+ * @returns {{ step: number, hideConnectCard: boolean }} the shell hides its own connect card while the guide shows.
  */
 export function renderGuide() {
     const card = document.getElementById('claude_max_guide');
     const off = { step: 0, hideConnectCard: false };
     if (!card) return off;
     const settings = getSettings();
-    const raw = connectionInfo();
     const phase = store.get().status.phase;
-    // ST's settings pointing at the proxy URL is not a connection: wait for / require the proxy's answer.
-    if (raw.connected && proxyUnknown(phase)) return off;
-    const conn = gateConnection(raw, phase);
-    if (conn.connected && !settings.everConnected) {
+    const facts = guideFacts(connectionInfo(), phase);
+    // Not known yet (first check at start-up): keep whatever is drawn; draw nothing before the first answer.
+    if (facts.checking) return drawn ? { step: Number(drawn.split('|')[0]), hideConnectCard: true } : off;
+    if (facts.connected && !settings.everConnected) {
         settings.everConnected = true;
         saveSettingsDebounced();
     }
-    if (shouldAutoOnboard(settings, conn)) {
+    if (shouldAutoOnboard(settings, facts)) {
         Object.assign(settings, finishGuide());
         saveSettingsDebounced();
     }
-    const step = guideStep({ ...settings, settingsExisted: !settings.freshInstall }, conn);
+    // The proxy turned this device away (access key): that is the connect card's to explain.
+    const step = phase === 'denied' ? 0 : guideStep({ ...settings, settingsExisted: !settings.freshInstall }, facts);
     card.hidden = step === 0;
+    setPolling(pollsProxy(step));
     if (!step) { drawn = ''; return off; }
-    const choice = chosenSource(settings.guideSource);
-    const sig = `${step}|${choice}|${conn.kind}|${conn.model}`;
+    // A newcomer on the guide has started it: connecting at step 3 leads to 完成, not to an auto-close.
+    if (!settings.guideSource) {
+        settings.guideSource = 'on';
+        saveSettingsDebounced();
+    }
+    const sig = `${step}|${connectionInfo().model ?? ''}|${store.get().status.mismatch ?? ''}`;
     if (sig !== drawn) {
         drawn = sig;
         card.replaceChildren(stepper(step));
-        if (step === 1) drawStep1(card);
-        else if (step === 2) drawStep2(card);
-        else drawStep3(card, choice);
+        DRAW[step](card);
+        const row = el('div', 'cm-guide-foot');
+        if (step !== DONE_STEP) row.append(skipLink());
+        if (row.childElementCount) card.append(row);
     }
-    return { step, hideConnectCard: step !== 2 || choice !== 'proxy' };
+    return { step, hideConnectCard: true };
 }

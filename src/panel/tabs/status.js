@@ -1,12 +1,13 @@
 // ──────────────────────────────────────────────
-// Tab 状态: last-turn cache, the latest reply's reliable checks, quota, usage, world-info cache tool.
+// Tab 状态: last-turn cache, the latest reply's reliable checks, quota, usage, the world-info cache
+// tool (only when it has something to do), diagnostics.
 // Draws what core/live.js put in the store (quota, stats).
 // ──────────────────────────────────────────────
 
 import { store } from '../core/store.js';
 import { libs } from '../core/libs.js';
 import { normalizeEndpoint } from '../core/capabilities.js';
-import { connectionInfo, shortModel } from '../core/connection.js';
+import { shortModel } from '../core/connection.js';
 import { fetchProxy, proxyErrorText } from '../core/proxy.js';
 import { el, note, iconButton, group, collapsible, stateLine, button, toggleRow } from '../core/dom.js';
 import { notify } from '../core/notify.js';
@@ -49,7 +50,6 @@ export function init() {
         const stamp = document.getElementById('claude_max_stats_time');
         if (stamp) stamp.textContent = `更新于 ${new Date(statsAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })}`;
     });
-    store.subscribe('pulse', () => renderCacheCard());
 }
 
 // ── Quota meter ──
@@ -102,10 +102,6 @@ function renderQuota(quota) {
     if (quota.phase !== 'ok') return;
     const data = quota.data;
     box.replaceChildren();
-    // API-type backends bill per token: no 5h / 7d windows to show.
-    const quotaSec = document.getElementById('claude_max_quota_sec');
-    if (quotaSec) quotaSec.hidden = !!data.notSubscription;
-    if (data.notSubscription) return;
     if (data.unavailable === 'rate_limited') {
         // Nothing cached yet and Anthropic is limiting: count down to the automatic retry.
         const line = stateLine('empty', '');
@@ -183,16 +179,6 @@ function usageTable(today, week) {
     return table;
 }
 
-/** 近 7 天按后端：次数、token，API 类后端加估算花费。Only shown once
- *  something other than the subscription was used. */
-function backendUsageLine(backends, pricesAsOf) {
-    const list = Object.entries(backends ?? {});
-    if (!list.length || (list.length === 1 && list[0][0] === 'subscription')) return null;
-    const parts = list.map(([, b]) => `${b.label} ${b.requests} 次 · 输出 ${fmtK(b.outputTokens)}${b.costUsd != null ? ` · 约 $${b.costUsd.toFixed(2)}` : ''}`);
-    const hasCost = list.some(([, b]) => b.costUsd != null);
-    return el('small', 'cm-hint', `按后端（近 7 天）：${parts.join('；')}${hasCost ? `。花费为估算：token 数 × Anthropic 官方价（${pricesAsOf ?? ''}），以账单为准。` : ''}`);
-}
-
 /** The cache result in plain words (the proxy's headline has the numbers; this says what they mean). */
 function cacheVerdict(hitPct, firstTurn = false) {
     // 第一轮本来就读不到缓存：不是出错，用中性提示，别用黄色警告
@@ -202,15 +188,14 @@ function cacheVerdict(hitPct, firstTurn = false) {
     return { tone: 'warn', text: `缓存命中 ${hitPct}%，大部分重写了，通常偏慢、偏耗额度` };
 }
 
-/** The last turn: cache in plain words first, then model / time / output, then why. */
+/** The last turn: cache in plain words first, then time / output (the model is in the header), then why. */
 function lastTurnCard(data) {
     const c = data.lastCache;
     const last = data.lastRequest;
     const v = cacheVerdict(c.hitPct, c.firstTurn);
     const card = note(v.tone, v.text);
     if (last) {
-        card.append(el('small', 'cm-hint',
-            `${shortModel(last.model)} · 用时 ${fmtSec(last.durationMs)} · 输出 ${fmtK(last.outputTokens)} token`));
+        card.append(el('small', 'cm-hint', `用时 ${fmtSec(last.durationMs)} · 输出 ${fmtK(last.outputTokens)} token`));
     }
     // The first reason is the conclusion; everything else is detail.
     const [first, ...rest] = c.reasons;
@@ -260,8 +245,6 @@ function renderStats(stats) {
         box.append(usageTable(data.today, data.week));
         const rr = data.today.rerolls || data.week.rerolls;
         if (rr) box.append(el('small', 'cm-hint', `缓存命中不含重 roll 的请求（近 7 天 ${data.week.rerolls ?? 0} 次）。`));
-        const byBackend = backendUsageLine(data.week.backends, data.pricesAsOf);
-        if (byBackend) box.append(byBackend);
     }
     const bg = data.background;
     if (bg?.week?.requests) {
@@ -280,7 +263,7 @@ function renderStats(stats) {
     }
 }
 
-/** Tab 状态: last turn first, then quota, usage, cache advice, world-info cache tool. */
+/** Tab 状态: last turn first, then the latest reply's problems, quota, usage, world-info cache, diagnostics. */
 export function buildStatusTab(pane) {
     // 代理自检结果（SDK 兼容性、逐轮还原、实际地址）；没有问题时不显示。
     const adviceBox = el('div', 'cm-stats');
@@ -292,7 +275,7 @@ export function buildStatusTab(pane) {
     stamp.id = 'claude_max_stats_time';
     const tools = el('div', 'cm-section-tools');
     tools.append(stamp, iconButton('fa-rotate', '重新检测并刷新', refreshAll));
-    const last = group('上一轮', '刚才那条回复用了多久、缓存命中多少。', { tools });
+    const last = group('上一轮', { tools });
     const lastBox = el('div', 'cm-stats');
     lastBox.id = 'claude_max_lastturn';
     lastBox.append(stateLine('empty', '这个聊天还没有回复'));
@@ -300,14 +283,14 @@ export function buildStatusTab(pane) {
     pane.append(last.root);
 
     // 最新回复: only the reliable checks (refusal / cut off / empty), one line each; hidden when none.
-    const latest = group('最新回复', '模型拒绝、被截断、空回复；没有问题时这里不显示。', { id: 'claude_max_latest_sec' });
+    const latest = group('最新回复', { id: 'claude_max_latest_sec' });
     latest.root.hidden = true;
     const latestBox = el('div', 'cm-stats');
     latestBox.id = 'claude_max_latest';
     latest.body.append(latestBox);
     pane.append(latest.root);
 
-    const quota = group('订阅额度', '5 小时和 7 天的用量窗口，到点自动重置。每条回复写完后自动查一次。', {
+    const quota = group('额度', {
         id: 'claude_max_quota_sec',
         tools: iconButton('fa-rotate', '刷新额度', () => refreshQuota({ force: true })),
     });
@@ -318,7 +301,7 @@ export function buildStatusTab(pane) {
     pane.append(quota.root);
 
     // Folded by default: the table is long. The folded header carries the one number most people look for.
-    const usage = collapsible('用量', '今天和近 7 天，只记耗时和 token，不记内容。', { id: 'claude_max_usage' });
+    const usage = collapsible('用量', '近 7 天', { id: 'claude_max_usage' });
     usage.root.querySelector('.cm-fold-desc').id = 'claude_max_usage_sum';
     const statsBox = el('div', 'cm-stats');
     statsBox.id = 'claude_max_stats';
@@ -326,13 +309,9 @@ export function buildStatusTab(pane) {
     usage.body.append(statsBox);
     pane.append(usage.root);
 
-    const cache = group('缓存建议', '这个连接的缓存可以怎么设。');
-    const cacheBox = el('div', 'cm-field');
-    cacheBox.id = 'claude_max_cache';
-    cache.body.append(cacheBox);
-    pane.append(cache.root);
-
-    const lore = group('世界书缓存', '按关键词触发的条目可能让缓存每轮重写，设为常驻通常能缓解。');
+    // Hidden until features/lore-cache.js finds keyword entries (or a backup to restore).
+    const lore = group('世界书缓存', { id: 'claude_max_lore_sec' });
+    lore.root.hidden = true;
     const loreBox = el('div', 'cm-field');
     loreBox.id = 'claude_max_lore';
     lore.body.append(loreBox);
@@ -391,16 +370,8 @@ async function proxyText(path, direct) {
 }
 
 function buildDiagGroup() {
-    const g = group('诊断', '缓存命中不对、回复出错时，复制报告发给维护者。报告里没有聊天内容。');
+    const g = group('诊断');
     const settings = getSettings();
-    g.body.append(toggleRow({
-        id: 'claudeMaxDiagCapture',
-        title: '记录发给 Claude 的原始请求',
-        desc: '开着时，报告里会多出每一轮实际发出的请求结构、缓存读写和额度状态。只存在代理内存里，重启就没了。',
-        more: '原理：让 Claude Code 先经过代理内部的一个本机转发口再发出去，转发不改任何内容。用 SOCKS 代理上网的话，转发口可能连不出去，聊天报错就把它关掉。查完问题也建议关掉。',
-        checked: !!settings.diagCapture,
-        onChange: (on) => { getSettings().diagCapture = on; saveSettingsDebounced(); },
-    }));
     const copy = button('复制诊断报告', async () => {
         copy.disabled = true;
         try {
@@ -417,7 +388,8 @@ function buildDiagGroup() {
             copy.disabled = false;
         }
     }, { icon: 'fa-copy', primary: true });
-    const full = button('下载完整请求（含聊天内容）', async () => {
+    copy.title = '缓存或回复不对时发给维护者；不含聊天内容';
+    const full = button('下载完整请求', async () => {
         try {
             const data = await proxyText('/diag/full', '/v1/diag/full').then((r) => r.json());
             data.client = await clientSection();
@@ -430,11 +402,18 @@ function buildDiagGroup() {
         } catch (err) {
             notify('warn', '没拿到完整请求', proxyErrorText('完整请求', err) ?? String(err?.message ?? err));
         }
-    }, { icon: 'fa-download' });
+    }, { icon: 'fa-download', text: true });
+    full.title = '含角色卡、预设和聊天原文：只在维护者要时发，别公开贴';
     const row = el('div', 'cm-btn-row');
     row.append(copy, full);
     g.body.append(row);
-    g.body.append(el('small', 'cm-hint', '「完整请求」里有角色卡、预设和聊天原文，只在维护者需要时发，别公开贴。'));
+    g.body.append(toggleRow({
+        id: 'claudeMaxDiagCapture',
+        title: '记录原始请求',
+        tip: '报告里多出每轮实际发给 Claude 的请求结构和缓存读写；只存在代理内存里',
+        checked: !!settings.diagCapture,
+        onChange: (on) => { getSettings().diagCapture = on; saveSettingsDebounced(); },
+    }));
     const fallback = el('textarea', 'text_pole');
     fallback.id = 'claude_max_diag_fallback';
     fallback.rows = 8;
@@ -447,14 +426,4 @@ function buildDiagGroup() {
         notify('warn', '没能自动复制', '报告已放在下面的框里，全选复制即可。');
     }
     return g.root;
-}
-
-/** 状态 → 缓存建议: on the proxy the cache is laid out by the proxy. */
-export function renderCacheCard() {
-    const box = document.getElementById('claude_max_cache');
-    if (!box) return;
-    const { connected } = connectionInfo();
-    box.replaceChildren(stateLine('empty', connected
-        ? '走本机代理：缓存由代理排布，不用设置。命中情况看「上一轮」。'
-        : '酒馆现在没连 CCST 代理。'));
 }

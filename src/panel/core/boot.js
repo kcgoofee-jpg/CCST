@@ -9,7 +9,7 @@ import { F, loadedFeatures } from './registry.js';
 import { refreshAll, refreshStatus, startHeartbeat, heartbeat } from './live.js';
 import { wireEvents } from './events.js';
 import { initShell, renderConnect, rebuildPanel, addExtensionSettings } from '../shell.js';
-import { init as initReasonTab } from '../tabs/reason.js';
+import { init as initChatTab } from '../tabs/chat.js';
 import { init as initStatusTab } from '../tabs/status.js';
 import { init as initSettingsTab } from '../tabs/settings.js';
 
@@ -31,7 +31,7 @@ export function boot() {
 
     // Drawing follows the store; each feature (registered by the bootstrap) subscribes its own.
     initShell();
-    initReasonTab();
+    initChatTab();
     initStatusTab();
     initSettingsTab();
     for (const name of loadedFeatures()) F[name].init?.();

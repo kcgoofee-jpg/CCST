@@ -1,5 +1,5 @@
 // ──────────────────────────────────────────────
-// 查看发给模型的内容: the last full request the proxy saved (其他 → 查看请求 / 调试选项)
+// 查看发给模型的内容: the last full request the proxy saved (设置 → 高级 → 查看)
 // ──────────────────────────────────────────────
 
 import { fetchProxy } from '../core/proxy.js';

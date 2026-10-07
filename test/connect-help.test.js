@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { connectHelp, mismatchHelp, hostKind, MAC_PLUGIN_CMD, DOCS_URL } from '../src/panel/core/connect-help.js';
+import { connectHelp, mismatchHelp, hostKind, installHelp, loginHelp, MAC_PLUGIN_CMD, DOCS_URL } from '../src/panel/core/connect-help.js';
 import { openExternal, copyText } from '../src/panel/core/external.js';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -51,6 +51,22 @@ test('desktop browser ST: one sentence, a Mac line and a Windows installer, no f
     assert.match(h.sub, /Mac 在「终端」粘贴下面一行/);
     assert.doesNotMatch(cardText(h), /仍要打开|CCST-mac/, 'no zip to double-click on Mac any more');
     assert.deepEqual(h.downloads.map((d) => d.key), ['mac-plugin-cmd', 'win']);
+});
+
+test('first-run guide: step 1 reuses the same install data, step 2 is one command', () => {
+    const d = installHelp({ host: 'desktop' });
+    assert.equal(d.mac, MAC_PLUGIN_CMD);
+    assert.equal(d.win.download, true);
+    assert.ok(existsSync(fileURLToPath(d.win.href)));
+    assert.equal(d.docs, null);
+    for (const host of ['tauri', 'elsewhere']) {
+        const r = installHelp({ host });
+        assert.equal(r.mac, null);
+        assert.equal(r.win, null);
+        assert.equal(r.docs, DOCS_URL);
+    }
+    for (const host of ['desktop', 'tauri', 'elsewhere']) assert.equal(loginHelp({ host }).cmd, 'npm run login');
+    assert.match(loginHelp({ host: 'desktop' }).where, /plugins\/CCST/);
 });
 
 test('every link the cards offer has a URL to copy', () => {

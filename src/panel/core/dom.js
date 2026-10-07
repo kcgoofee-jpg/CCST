@@ -31,18 +31,18 @@ export function popupText(...lines) {
     return box;
 }
 
-/** Segmented control: one choice out of a few, hint text follows it. */
+/** Segmented control: one choice out of a few. An option's `hint` is its tooltip, never text on the page. */
 export function segmented({ label, options, current, onChange, hideLabel = false }) {
     const wrap = el('div', 'cm-field');
     wrap.append(el('div', hideLabel ? 'cm-field-label cm-sr' : 'cm-field-label', label));
     const group = el('div', 'cm-seg');
     group.setAttribute('role', 'radiogroup');
     group.setAttribute('aria-label', label);
-    const hint = el('small', 'cm-hint');
     const buttons = options.map((opt) => {
         const b = el('button', 'cm-seg-btn', opt.label);
         b.type = 'button';
         b.setAttribute('role', 'radio');
+        if (opt.hint) b.title = opt.hint;
         b.addEventListener('click', () => select(opt.value, true));
         group.append(b);
         return b;
@@ -54,37 +54,37 @@ export function segmented({ label, options, current, onChange, hideLabel = false
             buttons[i].setAttribute('aria-checked', String(on));
             // A card that stops being the selected one must not keep a focus ring (it reads as selected).
             if (!on && buttons[i].matches?.(':focus')) buttons[i].blur();
-            if (on) hint.textContent = opt.hint;
         });
         if (fire) onChange(value);
     }
     select(current, false);
     const why = el('small', 'cm-hint');
     why.hidden = true;
-    wrap.append(group, hint, why);
+    wrap.append(group, why);
     wrap.select = (value) => select(value, false);
-    // Grey an option out (it stays visible) and say why; `reason` falsy re-enables it.
+    // Grey an option out (it stays visible) and say why in one short line; `reason` falsy re-enables it.
     wrap.setDisabled = (value, reason) => {
         options.forEach((opt, i) => {
             if (opt.value !== value) return;
             buttons[i].disabled = !!reason;
-            buttons[i].title = reason || '';
+            buttons[i].title = reason || opt.hint || '';
+            buttons[i].dataset.why = reason || '';
         });
-        const reasons = options.map((opt, i) => buttons[i].disabled && buttons[i].title).filter(Boolean);
+        const reasons = [...new Set(buttons.map((b) => b.disabled && b.dataset.why).filter(Boolean))];
         why.textContent = reasons.join(' ');
         why.hidden = !reasons.length;
     };
     return wrap;
 }
 
-/** Toggle row: title + one-line description, switch on the right.
- *  `more` (optional) is the long explanation, behind a「说明」link. */
-export function toggleRow({ id, title, desc, more, checked, onChange }) {
+/** Toggle row: a short title, switch on the right. `tip` (optional) is a short tooltip for an option
+ *  whose name alone is unclear; there is no text under the title. */
+export function toggleRow({ id, title, tip, checked, onChange }) {
     const row = el('label', 'cm-toggle');
     row.htmlFor = id;
+    if (tip) row.title = tip;
     const text = el('div', 'cm-toggle-text');
-    const hint = el('small', 'cm-hint', desc);
-    text.append(el('div', 'cm-toggle-title', title), hint);
+    text.append(el('div', 'cm-toggle-title', title));
     const input = el('input');
     input.type = 'checkbox';
     input.id = id;
@@ -92,53 +92,25 @@ export function toggleRow({ id, title, desc, more, checked, onChange }) {
     input.addEventListener('change', () => onChange(input.checked));
     const sw = el('span', 'cm-switch');
     row.append(text, input, sw);
-    if (!more) return row;
-    const moreText = el('small', 'cm-hint cm-more-text', more);
-    moreText.hidden = true;
-    const link = el('a', 'cm-more', '说明');
-    link.href = '#';
-    link.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        moreText.hidden = !moreText.hidden;
-        link.textContent = moreText.hidden ? '说明' : '收起';
-    });
-    hint.append(' ', link);
-    const wrap = el('div', 'cm-toggle-wrap');
-    wrap.append(row, moreText);
-    return wrap;
+    return row;
 }
 
-/** Section head: title, one-line purpose under it, optional tools (icon buttons) on the right. */
-export function section(title, extra, desc) {
+/** Section head: title, optional tools (icon buttons) on the right. */
+export function section(title, extra) {
     const head = el('div', 'cm-section-head');
     const text = el('div', 'cm-section-text');
     text.append(el('div', 'cm-section-title', title));
-    if (desc) {
-        // The purpose line is folded behind a「说明」link: nothing is lost, less is always on screen.
-        const d = el('small', 'cm-hint cm-section-desc', desc);
-        d.hidden = true;
-        const link = el('button', 'cm-desc-toggle', '说明');
-        link.type = 'button';
-        link.setAttribute('aria-expanded', 'false');
-        link.addEventListener('click', () => {
-            d.hidden = !d.hidden;
-            link.textContent = d.hidden ? '说明' : '收起';
-            link.setAttribute('aria-expanded', String(!d.hidden));
-        });
-        text.append(link, d);
-    }
     head.append(text);
     if (extra) head.append(extra);
     return head;
 }
 
-/** A section with its content: `group('上一轮', '一句话用途', { tools })` → { root, body }. Append controls to `body`. */
-export function group(title, desc, { tools, id } = {}) {
+/** A section with its content: `group('上一轮', { tools })` → { root, body }. Append controls to `body`. */
+export function group(title, { tools, id } = {}) {
     const root = el('section', 'cm-group');
     if (id) root.id = id;
     const body = el('div', 'cm-group-body');
-    root.append(section(title, tools, desc), body);
+    root.append(section(title, tools), body);
     return { root, body };
 }
 
@@ -167,19 +139,20 @@ export function button(label, onClick, { icon, primary = false, text = false, id
     return b;
 }
 
-/** Radio cards: one choice out of a few, each with a one-line trade-off. Same `.select(value)` as segmented(). */
-export function cards({ label, options, current, onChange, wrap: wrapHints = false }) {
+/** Radio rows: one choice out of a few, each a name and at most a short tag (「最稳」). Same `.select(value)` as segmented(). */
+export function cards({ label, options, current, onChange }) {
     const wrap = el('div', 'cm-field');
     if (label) wrap.append(el('div', 'cm-field-label', label));
-    const list = el('div', wrapHints ? 'cm-cards cm-wrap' : 'cm-cards');
+    const list = el('div', 'cm-cards');
     list.setAttribute('role', 'radiogroup');
     list.setAttribute('aria-label', label);
     const buttons = options.map((opt) => {
         const b = el('button', 'cm-card');
         b.type = 'button';
         b.setAttribute('role', 'radio');
-        b.title = opt.hint;
-        b.append(el('span', 'cm-card-dot'), el('span', 'cm-card-title', opt.label), el('small', 'cm-hint cm-card-hint', opt.hint));
+        if (opt.hint) b.title = opt.hint;
+        b.append(el('span', 'cm-card-dot'), el('span', 'cm-card-title', opt.label));
+        if (opt.tag) b.append(el('small', 'cm-card-tag', opt.tag));
         b.addEventListener('click', () => select(opt.value, true));
         list.append(b);
         return b;
@@ -198,7 +171,7 @@ export function cards({ label, options, current, onChange, wrap: wrapHints = fal
     return wrap;
 }
 
-/** A collapsed group with a one-line description under its title (visible while folded).
+/** A collapsed group; `desc` (optional) is a short line under its title, visible while folded (用量 puts its summary there).
  *  Returns { root, body }: append the group's content to `body`. */
 export function collapsible(title, desc, { id, open = false } = {}) {
     const root = el('details', 'cm-details cm-fold');
