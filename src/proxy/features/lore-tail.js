@@ -182,7 +182,15 @@ export function cutExactLore(system, texts) {
         const piece = out.includes(`${t}\n`) ? `${t}\n` : out.includes(`\n${t}`) ? `\n${t}` : t;
         const i = out.indexOf(piece);
         if (i < 0) continue;
-        out = out.slice(0, i) + out.slice(i + piece.length);
+        let before = out.slice(0, i);
+        let after = out.slice(i + piece.length);
+        // The entry was a whole system message (joined to its neighbours by a blank line): drop that
+        // join too, so the prompt reads as on a turn where nothing fired (measured: one stray newline
+        // made every such turn miss the whole cache).
+        const lead = before.length - before.replace(/\n+$/, '').length;
+        const trail = after.length - after.replace(/^\n+/, '').length;
+        if (lead + trail > 2) after = after.slice(Math.min(trail, lead + trail - 2));
+        out = before + after;
         found.push(t);
     }
     if (!found.length) return { system: system ?? '', text: '' };

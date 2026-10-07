@@ -157,3 +157,13 @@ test('cutExactLore lifts triggered entries out of the system prompt by their tex
     assert.equal(one.text, `${a}\n\n${b}`);
     assert.deepEqual(cutExactLore('无关', [a]), { system: '无关', text: '' });
 });
+
+test('cutExactLore: a lore message that was the whole block leaves the prompt as if nothing fired', async () => {
+    const { cutExactLore } = await import('../src/proxy/features/lore-tail.js');
+    const lore = 'Eldoria is an ancient forest guarded by Seraphina, full of shadowfang beasts.';
+    const quiet = '【结论】直觉多数时候够用。\n\n[Seraphina\'s Personality= "caring"]';
+    const fired = '【结论】直觉多数时候够用。\n\n' + lore + '\n\n[Seraphina\'s Personality= "caring"]';
+    assert.equal(cutExactLore(fired, [lore]).system, quiet);
+    // inside a block joined by single newlines: just the entry and one join
+    assert.equal(cutExactLore(`A line here\n${lore}\nB line here`, [lore]).system, 'A line here\nB line here');
+});
