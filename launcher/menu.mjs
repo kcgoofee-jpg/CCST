@@ -1,25 +1,24 @@
 #!/usr/bin/env node
 // ──────────────────────────────────────────────
-// CCST 酒馆工具：菜单（Windows / Termux 共用一份）
+// CCST 酒馆工具：菜单（只在 Windows 上用）
 // ──────────────────────────────────────────────
 //
-// 各系统只留一个启动壳（windows/酒馆工具.bat），
+// 启动壳是 windows/酒馆工具.bat。Mac 不用这个菜单：Mac 用一行安装器装进酒馆，在酒馆的 CCST 面板里用。
 // 菜单的分组、说明、问题判断都在这里；状态和不分系统的动作在 core.mjs：
 // 首页只放每天要用的：打开酒馆、重启代理、检查状态；登录、修复、日志、开机启动这些收在「更多」里。
 //   检查状态                      都用 core.mjs
-//   启动 / 关闭 / 重启            Windows、Linux 用 core.mjs；Termux 用 termux/claude-max.sh（代理在 Debian 子系统里）
-//   其余（登录、修复、日志…）     Windows windows/claude-max.ps1 <动作>；Termux termux/claude-max.sh <动作>
+//   启动 / 关闭 / 重启            core.mjs
+//   其余（登录、修复、日志…）     windows/claude-max.ps1 <动作>
 // 不依赖任何 npm 包：依赖坏了的时候（菜单里正好有「修复依赖」）也要能打开。
 //
 // 按键：数字 / 字母直接执行；↑↓ 选、回车执行；0、Esc 返回；h 说明；q 退出。
 // 不是终端（管道、测试）时退回「输入编号回车」。CCST_MENU_PLAIN=1 也强制用这种方式。
 
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { emitKeypressEvents } from 'node:readline';
 
-import { ACTIONS, HERE, IS_TERMUX, OS, VERSION, readState } from './core.mjs';
+import { ACTIONS, HERE, OS, VERSION, readState } from './core.mjs';
 
 export { readState };
 
@@ -142,17 +141,13 @@ export function statusLines(s, probs = problems(s)) {
 
 // ── 执行动作 ──
 
-// 各系统还留在自己脚本里的动作
+// 还留在 claude-max.ps1 里的动作
 const WIN_ACTIONS = { login: 'login', repair: 'repair', logs: 'logs', 'autostart-toggle': 'autostart' };
-const TERMUX_ACTIONS = { start: 'start', stop: 'stop', restart: 'restart', login: 'login', logs: 'logs' };
 const UNSUPPORTED = '这个系统上没有';
 
-/** 这个动作在这个系统上由 Node（core.mjs）做（返回动作函数）还是交给系统脚本（返回 null）。 */
-export function nodeAction(id, os = OS, termux = IS_TERMUX) {
-    if (!ACTIONS[id]) return null;
-    if (id === 'check') return ACTIONS.check;
-    if (termux) return null;
-    return ACTIONS[id];
+/** 这个动作由 Node（core.mjs）做（返回动作函数）还是交给 claude-max.ps1（返回 null）。 */
+export function nodeAction(id) {
+    return ACTIONS[id] ?? null;
 }
 
 async function run(id, io) {
@@ -171,21 +166,14 @@ async function run(id, io) {
         return code === 0 ? null : `没有成功（退出码 ${code}）`;
     }
     const env = { ...process.env, CM_MENU: '1' };
-    let r;
-    if (OS === 'win') {
-        if (!WIN_ACTIONS[id]) return `「${id}」${UNSUPPORTED}`;
-        r = spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(HERE, 'windows', 'claude-max.ps1'), WIN_ACTIONS[id]], { stdio: 'inherit', env });
-    } else {
-        if (!TERMUX_ACTIONS[id] || !IS_TERMUX) return `「${id}」${UNSUPPORTED}`;
-        r = spawnSync('bash', [join(HERE, 'termux', 'claude-max.sh'), TERMUX_ACTIONS[id]], { stdio: 'inherit', env });
-    }
+    if (OS !== 'win' || !WIN_ACTIONS[id]) return `「${id}」${UNSUPPORTED}`;
+    const r = spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(HERE, 'windows', 'claude-max.ps1'), WIN_ACTIONS[id]], { stdio: 'inherit', env });
     return r.status === 0 ? null : `没有成功（退出码 ${r.status ?? r.signal}）`;
 }
 
 function openHelp() {
     const f = join(HERE, '使用说明.txt');
-    if (OS === 'win') spawnSync('cmd', ['/c', 'start', '', f]);
-    else console.log(readFileSync(f, 'utf8'));
+    spawnSync('cmd', ['/c', 'start', '', f]);
 }
 
 // ── 画面 ──
@@ -281,6 +269,11 @@ async function choose(q, options, def = 0) {
 }
 
 async function main() {
+    // Mac 不用这个菜单（也就不会看到「去 TauriTavern 里用」这类提示）
+    if (OS !== 'win') {
+        process.stdout.write('酒馆工具菜单只在 Windows 上用。Mac 请用一行安装器（install-plugin-mac.sh）装进酒馆，在酒馆的 CCST 面板里使用。\n');
+        return 1;
+    }
     const plain = !process.stdin.isTTY || process.env.CCST_MENU_PLAIN === '1';
     if (!plain) emitKeypressEvents(process.stdin);
     let screen = 'home';

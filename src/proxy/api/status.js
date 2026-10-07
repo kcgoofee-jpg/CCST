@@ -47,7 +47,7 @@ export async function handleStatus(req, res) {
             version,
             // 面板靠它给「版本不一致」写对更新步骤：plugin = 装成酒馆插件，standalone = 单独运行
             runtime: runtimeOf(req),
-            // 启动器按端口关代理时用来确认「这就是代理」（Termux 没有 lsof 时只能靠它）
+            // 启动器按端口关代理时用来确认「这就是代理」（列不出端口上的进程时只能靠它）
             pid: process.pid,
             sdk: 'loaded',
             sdkVersion: SDK_VERSION,

@@ -1,7 +1,7 @@
 ﻿# ──────────────────────────────────────────────
 # CCST 启动器 · Windows
 # 由菜单（launcher/menu.mjs，入口 酒馆工具.bat）调用：claude-max.ps1 <login|repair|autostart|autostart-run|logs>
-# 只剩 Windows 自己的事。检查状态、启动 / 关闭 / 重启在 launcher/core.mjs（和 Termux 同一份）；
+# 只剩 Windows 自己的事。检查状态、启动 / 关闭 / 重启在 launcher/core.mjs；
 # 这里的 start|stop|restart|status 只是转给它，留着给直接运行这个脚本的老用法。
 #
 # 路径自动识别：

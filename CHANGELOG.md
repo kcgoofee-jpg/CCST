@@ -10,8 +10,9 @@
 - 面板：手机连接（手机连接码）、Mac 遥控、省电显示、性能诊断、脚本按钮并排、`/图分` 生图评分；「体检（实验）」和角色卡检查（「状态 → 最新回复」的拒绝 / 截断 / 空回复检查保留）；实验开关「预设后置条目提前」。
 - 直连模式：面板只认本机代理，不再识别酒馆自带的 Claude 源 / OpenRouter / 中转，首次引导只剩本机代理一条路。
 - 代理后端只留订阅和 Anthropic API 密钥；Bedrock / Vertex / OpenRouter / 兼容网关去掉。`data/backend.json` 或 `CLAUDE_SUBSCRIPTION_BACKEND` 里还写着这几个的，按订阅运行。
-- Mac「酒馆工具」菜单和终端一行安装（`install-mac.sh`）、手机同步、TT 守护、合盖不睡等 Mac 专用部分；Windows / Termux 菜单保留。
+- Mac「酒馆工具」菜单和终端一行安装（`install-mac.sh`）、手机同步、TT 守护、合盖不睡等 Mac 专用部分；Windows 菜单保留。
 - 服务器 / Docker 部署：`deploy/`、`Dockerfile`、镜像发布流程。
+- 只支持 Windows 和 macOS：去掉安卓 Termux 脚本（`launcher/termux/`）和启动器里的 Termux / Linux 分支；酒馆工具菜单只在 Windows 上用（Mac 上运行会提示改用一行安装器和酒馆里的面板）。
 
 ## 5.2.1 - 2026-10-07
 

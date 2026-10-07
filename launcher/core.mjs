@@ -4,7 +4,8 @@
 // ──────────────────────────────────────────────
 //
 // 这里放「不分系统」的部分：读配置、问代理、看装了什么、端口有没有人听、检查状态、
-// 启动 / 关闭 / 重启代理和酒馆。真正分系统的留在各系统的小脚本里（windows/claude-max.ps1、termux/claude-max.sh）。
+// 启动 / 关闭 / 重启代理和酒馆。Windows 自己的事留在 windows/claude-max.ps1。
+// 只支持 Windows 和 macOS；菜单（menu.mjs）只在 Windows 上用，这里的 mac 分支给单独运行和测试。
 //
 // 只按 PID 关程序，绝不按名字：PID 来自「在这个端口上监听」的进程，
 // 再确认是我们的（工作目录在代理 / 酒馆目录里、或是我们记下的 PID、或代理自己报的 PID）。
@@ -14,7 +15,7 @@
 //   --auto：不问问题、不打开浏览器（Windows 开机自动启动用）
 
 import { spawn, spawnSync } from 'node:child_process';
-import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readlinkSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { connect } from 'node:net';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve, sep } from 'node:path';
@@ -22,9 +23,7 @@ import { fileURLToPath } from 'node:url';
 
 export const HERE = dirname(fileURLToPath(import.meta.url));
 export const ROOT = join(HERE, '..');
-export const OS = process.platform === 'darwin' ? 'mac' : process.platform === 'win32' ? 'win' : 'linux';
-
-export const IS_TERMUX = OS === 'linux' && /com\.termux/.test(process.env.PREFIX ?? '');
+export const OS = process.platform === 'win32' ? 'win' : 'mac';
 export const VERSION = (() => { try { return JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).version; } catch { return '?'; } })();
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -52,7 +51,7 @@ export function parseConfig(text, home = homedir()) {
 }
 
 /** 合成配置：默认值 ← config.local ← 环境变量 PROXY_PORT；酒馆目录的自动识别和 claude-max.ps1 一样。 */
-export function loadConfig({ root = ROOT, env = process.env, os = OS, termux = IS_TERMUX, exists = existsSync, read = (f) => readFileSync(f, 'utf8'), home = homedir() } = {}) {
+export function loadConfig({ root = ROOT, env = process.env, os = OS, exists = existsSync, read = (f) => readFileSync(f, 'utf8'), home = homedir() } = {}) {
     const files = os === 'win' ? ['config.local.ps1', 'config.local'] : ['config.local'];
     let local = {};
     for (const f of files) {
@@ -61,18 +60,16 @@ export function loadConfig({ root = ROOT, env = process.env, os = OS, termux = I
     const num = (v, d) => (/^\d+$/.test(String(v ?? '')) ? Number(v) : d);
     const parent = dirname(root);
     let stDir = local.ST_DIR || '';
-    if (!stDir && !termux) {
+    if (!stDir) {
         if (basename(parent) === 'plugins' && exists(join(dirname(parent), 'server.js'))) stDir = dirname(parent);
         else if (exists(join(parent, 'SillyTavern', 'server.js'))) stDir = join(parent, 'SillyTavern');
     }
     return {
         root,
         os,
-        termux,
         home,
         stDir,
-        // Termux：代理装在 Debian 子系统里，日志在 ~/.claude-max（见 termux/claude-max.sh）
-        logDir: local.LOG_DIR || (termux ? join(home, '.claude-max') : join(root, 'data', 'logs')),
+        logDir: local.LOG_DIR || join(root, 'data', 'logs'),
         stPort: num(local.ST_PORT, 8000),
         proxyPort: num(env.PROXY_PORT, num(local.PROXY_PORT, 8901)),
         stAutostart: local.ST_AUTOSTART !== '0',
@@ -198,11 +195,6 @@ export function systemProc(os = OS) {
         },
         cwds(pids) {
             if (!pids.length || os === 'win') return {};
-            if (os === 'linux') {
-                const out = {};
-                for (const p of pids) { try { out[p] = readlinkSync(`/proc/${p}/cwd`); } catch { /* 看不到 */ } }
-                return out;
-            }
             const r = run('lsof', ['-a', '-p', pids.join(','), '-d', 'cwd', '-Fpn']);
             return parseLsofCwd(r.stdout ?? '');
         },
@@ -229,8 +221,8 @@ const readPidFile = (f) => { try { const n = Number(readFileSync(f, 'utf8').trim
 
 /**
  * 端口上的进程分成「我们的」和「别人的」。
- * 我们的 = 工作目录在程序目录里（Mac / Linux），或是我们记下的 PID，或是代理 /status 自己报的 PID。
- * 列不出监听进程时（Termux 没 lsof）只信代理自己报的 PID。
+ * 我们的 = 工作目录在程序目录里（Mac），或是我们记下的 PID，或是代理 /status 自己报的 PID。
+ * 列不出监听进程时（netstat / lsof 跑不起来）只信代理自己报的 PID。
  */
 export function classify(svc, proc, { reportedPid = null, pidFile = readPidFile } = {}) {
     const pids = proc.listeners(svc.port);
@@ -284,7 +276,7 @@ export function reporter(cfg, write = (s) => process.stdout.write(s + '\n')) {
 const LOG_RULES = [
     [/EADDRINUSE|address already in use/i, '端口被占用，程序无法监听', '在酒馆工具里先选「关闭」，再选「启动」；如果还不行，重启电脑。'],
     [/ERR_MODULE_NOT_FOUND|Cannot find module|Cannot find package/i, '缺少依赖文件（node_modules 不完整）', '在酒馆工具里选「修复依赖」重新安装。'],
-    [/Native CLI binary|claude-agent-sdk-(darwin|win32|linux)/i, '找不到 Claude 命令行程序（SDK 安装不完整）', '在酒馆工具里选「修复依赖」重新安装。'],
+    [/Native CLI binary|claude-agent-sdk-(darwin|win32)/i, '找不到 Claude 命令行程序（SDK 安装不完整）', '在酒馆工具里选「修复依赖」重新安装。'],
     [/Not logged in|Please run \/login|authentication_failed|invalid_token|token has expired/i, 'Claude 订阅未登录或登录已失效', '在酒馆工具里选「登录 Claude」重新登录。'],
     [/rate.limit|(^|[^0-9.,k])429([^0-9.,k]|$)|Too many requests/im, '触发了订阅额度限流（请求太频繁或额度用完）', '稍等几分钟再试；在酒馆的 CCST 面板里可以看到额度重置时间。'],
     [/Extra Usage|out of extra usage/i, '1M 上下文需要额外用量，当前套餐不可用', '改用不带「(1M context)」的模型。'],
@@ -332,10 +324,6 @@ function selfCheck(cfg, r, st, proc) {
     const major = Number(process.versions.node.split('.')[0]);
     if (major < 18) { r.failLine(`Node.js 版本太旧：${process.version}（需要 18 或更高）`); r.fix('到 https://nodejs.org 安装新版 LTS。'); }
     else r.ok(`Node.js ${process.version}`);
-    if (cfg.termux) {
-        r.explain('· Termux：代理装在 Debian 子系统里，下面只通过网络检查它');
-        return;
-    }
     const managed = cfg.stDir && cfg.stAutostart;
     if (managed) {
         if (existsSync(join(cfg.stDir, 'server.js'))) r.ok(`酒馆程序：${cfg.stDir}`);
@@ -419,9 +407,8 @@ export async function actionCheck(io = {}) {
 }
 
 export function openPath(target, os = OS) {
-    if (os === 'mac') spawnSync('open', [target]);
-    else if (os === 'win') spawnSync('cmd', ['/c', 'start', '', target], { windowsHide: true });
-    else spawnSync('xdg-open', [target]);
+    if (os === 'win') spawnSync('cmd', ['/c', 'start', '', target], { windowsHide: true });
+    else spawnSync('open', [target]);
 }
 
 // ── 启动 / 关闭 / 重启 ──
@@ -599,7 +586,6 @@ async function startAll(cfg, r, proc, { fetchImpl = globalThis.fetch } = {}) {
 }
 
 function preflight(cfg, r) {
-    if (cfg.termux) return;
     if (!existsSync(join(cfg.root, 'node_modules'))) { r.failLine('Claude 代理缺少依赖（没有 node_modules 文件夹）'); r.fix('在酒馆工具「更多」里选「修复依赖」。'); }
     if (cfg.stDir && cfg.stAutostart && !existsSync(join(cfg.stDir, 'node_modules'))) { r.failLine('酒馆缺少依赖（没有 node_modules 文件夹）'); r.fix('在酒馆工具「更多」里选「修复依赖」。'); }
 }

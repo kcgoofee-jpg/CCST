@@ -7,7 +7,7 @@
 [![Version](https://img.shields.io/github/package-json/v/kcgoofee-jpg/CCST?label=version&color=c08a55)](https://github.com/kcgoofee-jpg/CCST/releases)
 [![Release](https://img.shields.io/github/v/release/kcgoofee-jpg/CCST?label=release&color=c08a55)](https://github.com/kcgoofee-jpg/CCST/releases/latest)
 [![Tests](https://github.com/kcgoofee-jpg/CCST/actions/workflows/test.yml/badge.svg)](https://github.com/kcgoofee-jpg/CCST/actions/workflows/test.yml)
-![Platform](https://img.shields.io/badge/platform-Mac%20%7C%20Windows%20%7C%20Linux-555)
+![Platform](https://img.shields.io/badge/platform-Mac%20%7C%20Windows-555)
 ![Node](https://img.shields.io/badge/node-%E2%89%A518-339933)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
 
@@ -44,7 +44,7 @@ The panel also shows your quota and per-turn usage.
 
 ## You need
 
-- A computer (Mac / Windows / Linux) with [SillyTavern](https://github.com/SillyTavern/SillyTavern) installed. [Node.js](https://nodejs.org) 18+ (the installer tells you if it's missing).
+- A computer (Mac / Windows) with [SillyTavern](https://github.com/SillyTavern/SillyTavern) installed. [Node.js](https://nodejs.org) 18+ (the installer tells you if it's missing).
 - A Claude Pro or Max subscription (or an API key).
 - Chrome or Edge.
 
@@ -157,7 +157,7 @@ The author is not responsible for limited or banned accounts or any other loss.
 
 ## Related
 
-- [tt-root-module](https://github.com/kcgoofee-jpg/tt-root-module): a KernelSU module for rooted Android phones that automatically backs up, verifies and syncs the data of TauriTavern (and SillyDroid / Termux SillyTavern) and restores it in one step. Worth installing if you run TauriTavern on a phone and don't want to lose your chats.
+- [tt-root-module](https://github.com/kcgoofee-jpg/tt-root-module): a KernelSU module for rooted Android phones that automatically backs up, verifies and syncs the data of TauriTavern and restores it in one step. Worth installing if you run TauriTavern on a phone and don't want to lose your chats.
 
 ## License
 

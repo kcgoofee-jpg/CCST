@@ -10,7 +10,7 @@ body:
     id: where
     attributes:
       label: 在哪用
-      options: [Mac + TauriTavern, Mac + 酒馆, 安卓 TauriTavern, 安卓 SillyDroid / Termux 酒馆, Windows, 云酒馆, 其他]
+      options: [Mac + 酒馆, Mac + TauriTavern, Windows + 酒馆, Windows + TauriTavern, 其他]
     validations: { required: true }
   - type: dropdown
     id: source

@@ -21,23 +21,19 @@ test('loadConfig: defaults, SillyTavern next to the repo, env port wins, ps1 on 
     const files = { [join(ROOT, 'launcher', 'config.local')]: 'ST_AUTOSTART=0\nPROXY_PORT=8950' };
     const exists = (p) => p === join('/', 'x', 'tavern', 'SillyTavern', 'server.js');
     const read = (f) => { if (f in files) return files[f]; throw new Error('ENOENT'); };
-    const c = loadConfig({ root: ROOT, env: {}, os: 'mac', termux: false, exists, read, home: '/h' });
+    const c = loadConfig({ root: ROOT, env: {}, os: 'mac', exists, read, home: '/h' });
     assert.equal(c.stDir, join('/', 'x', 'tavern', 'SillyTavern'));
     assert.equal(c.stAutostart, false);
     assert.equal(c.proxyPort, 8950);
     assert.equal(c.logDir, join(ROOT, 'data', 'logs'));
-    assert.equal(loadConfig({ root: ROOT, env: { PROXY_PORT: '7000' }, os: 'mac', termux: false, exists, read }).proxyPort, 7000);
+    assert.equal(loadConfig({ root: ROOT, env: { PROXY_PORT: '7000' }, os: 'mac', exists, read }).proxyPort, 7000);
     // Windows reads config.local.ps1 first
     files[join(ROOT, 'launcher', 'config.local.ps1')] = '$PROXY_PORT = 8960';
-    assert.equal(loadConfig({ root: ROOT, env: {}, os: 'win', termux: false, exists, read }).proxyPort, 8960);
+    assert.equal(loadConfig({ root: ROOT, env: {}, os: 'win', exists, read }).proxyPort, 8960);
     // installed as a server plugin: SillyTavern/plugins/<repo>
     const plug = join('/', 'st', 'plugins', 'CCST');
-    const c2 = loadConfig({ root: plug, env: {}, os: 'win', termux: false, exists: (p) => p === join('/', 'st', 'server.js'), read });
+    const c2 = loadConfig({ root: plug, env: {}, os: 'win', exists: (p) => p === join('/', 'st', 'server.js'), read });
     assert.equal(c2.stDir, join('/', 'st'));
-    // Termux: no SillyTavern management, logs in ~/.claude-max
-    const t = loadConfig({ root: ROOT, env: {}, os: 'linux', termux: true, exists: () => true, read, home: '/data/home' });
-    assert.equal(t.stDir, '');
-    assert.equal(t.logDir, join('/data/home', '.claude-max'));
 });
 
 test('parseNetstat keeps only LISTENING rows on that exact port', () => {
@@ -78,7 +74,7 @@ test('classify: ours by cwd, recorded PID or reported PID; everything else is fo
     assert.deepEqual(c.ours.sort(), [1, 4]);
     assert.deepEqual(c.foreign.sort(), [2, 3]); // a sibling folder with the same prefix is not ours
     assert.deepEqual(classify(svc, proc, { pidFile: () => 2 }).ours.sort(), [1, 2]);
-    // cannot list listeners (Termux without lsof): only trust the PID the proxy reports itself
+    // cannot list listeners (netstat / lsof failed to run): only trust the PID the proxy reports itself
     const blind = classify(svc, fakeProc({ listeners: null }), { reportedPid: 9, pidFile: () => 5 });
     assert.deepEqual(blind, { ours: [9], foreign: [], known: false });
 });
@@ -111,7 +107,7 @@ test('confirmStarted: the process we just spawned has to be the one answering', 
     assert.match(await confirmStarted(svc, 7, other, { status: async () => ({ pid: 8 }) }), /应答的是另一个进程（8/);
     assert.match(await confirmStarted(svc, 7, proc, { exited: () => true }), /又退出了/);
     assert.match(await confirmStarted(svc, 7, fakeProc({ listeners: [8] }), { status: async () => null }), /别的程序在听（8）/);
-    // Termux without lsof: the port and the proxy's own PID are all there is
+    // listeners unknown (lsof failed): the port and the proxy's own PID are all there is
     assert.equal(await confirmStarted(svc, 7, fakeProc({ listeners: null }), { status: async () => ({ pid: 7 }) }), true);
     assert.match(await confirmStarted(svc, 7, fakeProc({ listeners: null }), { status: async () => ({ pid: 9 }) }), /应答的是另一个进程（9/);
 });
@@ -192,7 +188,7 @@ test('stopAll：/status 报 runtime=plugin 时不杀那个 PID，并提示直接
     assert.match(r.lines.join('\n'), /酒馆内插件占用/);
 });
 
-test('stopAll：runtime=standalone 时照旧按代理自己报的 PID 关掉（Termux 没有 lsof）', async () => {
+test('stopAll：runtime=standalone 时照旧按代理自己报的 PID 关掉（列不出监听进程时）', async () => {
     const pid = 400;
     const proc = fakeProc({ listeners: null });
     const r = rec();
@@ -243,7 +239,7 @@ test('startService 只在 /status 确认是自己启动的进程后才报「已�
 });
 
 test('readState on Windows: proxy/HTTP fields filled', async () => {
-    const cfg = loadConfig({ root: ROOT, env: {}, os: 'win', termux: false, exists: () => false, read: () => { throw new Error(); }, home: 'C:\\Users\\u' });
+    const cfg = loadConfig({ root: ROOT, env: {}, os: 'win', exists: () => false, read: () => { throw new Error(); }, home: 'C:\\Users\\u' });
     cfg.stDir = 'D:\\SillyTavern';
     const s = await readState({
         cfg,
@@ -261,7 +257,7 @@ test('readState on Windows: proxy/HTTP fields filled', async () => {
 });
 
 test('readState: proxy down', async () => {
-    const cfg = loadConfig({ root: ROOT, env: {}, os: 'linux', termux: false, exists: () => false, read: () => { throw new Error(); }, home: '/home/u' });
+    const cfg = loadConfig({ root: ROOT, env: {}, os: 'mac', exists: () => false, read: () => { throw new Error(); }, home: '/Users/u' });
     const s = await readState({ cfg, fetch: jsonFetch({}), exists: () => false, portOpen: async () => false });
     assert.equal(s.proxy, false);
     assert.equal(s.loggedIn, null);
@@ -274,10 +270,7 @@ test('services: SillyTavern first when there is one; PID files shared with claud
     assert.deepEqual(services({ ...cfg, stDir: '' }).map((s) => s.key), ['proxy']);
 });
 
-test('action routing: check is Node everywhere; start/stop/restart Node except Termux', () => {
-    for (const os of ['mac', 'win', 'linux']) assert.ok(nodeAction('check', os, false));
-    assert.ok(nodeAction('check', 'linux', true));
-    assert.ok(nodeAction('restart', 'win', false));
-    assert.equal(nodeAction('start', 'linux', true), null);
-    assert.equal(nodeAction('login', 'win', false), null);
+test('action routing: check/start/stop/restart in Node; the rest goes to claude-max.ps1', () => {
+    for (const id of ['check', 'start', 'stop', 'restart']) assert.ok(nodeAction(id));
+    assert.equal(nodeAction('login'), null);
 });

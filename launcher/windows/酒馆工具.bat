@@ -1,5 +1,5 @@
 @echo off
-rem CCST toolbox (Windows): launcher shell. The menu itself is launcher\menu.mjs, shared with Termux.
+rem CCST toolbox (Windows): launcher shell. The menu itself is launcher\menu.mjs (Windows only).
 chcp 65001 >nul
 where node >nul 2>nul
 if errorlevel 1 (

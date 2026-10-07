@@ -47,7 +47,7 @@ test('macOS falls back to the "Claude Code-credentials" keychain item', () => {
 test('keychain is never consulted off macOS', () => {
     const { source, creds } = loadCredentials({
         env: {},
-        platform: 'linux',
+        platform: 'win32',
         readFile: noFile,
         exec: () => { throw new Error('keychain should not be read'); },
     });

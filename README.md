@@ -7,7 +7,7 @@
 [![版本](https://img.shields.io/github/package-json/v/kcgoofee-jpg/CCST?label=%E7%89%88%E6%9C%AC&color=c08a55)](https://github.com/kcgoofee-jpg/CCST/releases)
 [![最新发布](https://img.shields.io/github/v/release/kcgoofee-jpg/CCST?label=%E6%9C%80%E6%96%B0%E5%8F%91%E5%B8%83&color=c08a55)](https://github.com/kcgoofee-jpg/CCST/releases/latest)
 [![测试](https://github.com/kcgoofee-jpg/CCST/actions/workflows/test.yml/badge.svg)](https://github.com/kcgoofee-jpg/CCST/actions/workflows/test.yml)
-![平台](https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-Mac%20%7C%20Windows%20%7C%20Linux-555)
+![平台](https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-Mac%20%7C%20Windows-555)
 ![Node](https://img.shields.io/badge/node-%E2%89%A518-339933)
 [![许可证](https://img.shields.io/badge/%E8%AE%B8%E5%8F%AF%E8%AF%81-AGPL--3.0-blue)](LICENSE)
 
@@ -147,7 +147,7 @@ zsh -c "$(curl -fsSL https://raw.githubusercontent.com/kcgoofee-jpg/CCST/main/in
 
 ## 相关项目
 
-- [tt-root-module](https://github.com/kcgoofee-jpg/tt-root-module)：root 安卓手机上的 KernelSU 模块，自动备份、校验、同步 TauriTavern（及 SillyDroid / Termux 酒馆）的数据，一键恢复。
+- [tt-root-module](https://github.com/kcgoofee-jpg/tt-root-module)：root 安卓手机上的 KernelSU 模块，自动备份、校验、同步 TauriTavern 的数据，一键恢复。
 
 ## 许可证
 

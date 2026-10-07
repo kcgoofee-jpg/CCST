@@ -15,7 +15,7 @@ Node 18 以上。代理本地运行：`npm start`（默认 `127.0.0.1:8901`）�
 
 先读 [docs/架构.md](docs/架构.md)；产品边界在 [docs/产品定位.md](docs/产品定位.md)，计划在 [docs/路线图.md](docs/路线图.md)，用户向说明在 [docs/使用指南.md](docs/使用指南.md)（改了面板行为要同步这里和 README）。要点：
 
-- 面板在 `src/panel/`，代理在 `src/proxy/`，两边共用的纯函数在 `src/shared/`；原版酒馆的一键安装包在 `installer/`（Mac 用根目录 `install-plugin-mac.sh` 在终端下载运行 `CCST安装.command`；改了它要跑 `python3 scripts/build-installer-zip.py` 重新打 `CCST-mac.zip`，zip 只留给旧版面板的链接）；Windows / Termux 的「酒馆工具」菜单（实验性，`launcher/menu.mjs`）在 `launcher/`。
+- 面板在 `src/panel/`，代理在 `src/proxy/`，两边共用的纯函数在 `src/shared/`；原版酒馆的一键安装包在 `installer/`（Mac 用根目录 `install-plugin-mac.sh` 在终端下载运行 `CCST安装.command`；改了它要跑 `python3 scripts/build-installer-zip.py` 重新打 `CCST-mac.zip`，zip 只留给旧版面板的链接）；Windows 的「酒馆工具」菜单（实验性，`launcher/menu.mjs`）在 `launcher/`。
 - 路径从 `src/proxy/paths.js` 取；面板不静态导入酒馆模块。
 - 挪动面板文件时同时改 `manifest.json` 和 `src/proxy/plugin.js` 的 `UI_EXTENSION_FILES`。
 - 写法跟周围代码一致：注释说明「为什么」，界面文字用中文，日志前缀 `[claude-subscription]`。
