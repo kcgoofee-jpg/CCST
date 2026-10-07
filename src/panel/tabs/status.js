@@ -184,7 +184,7 @@ function usageTable(today, week) {
 /** The cache result in plain words (the proxy's headline has the numbers; this says what they mean). */
 function cacheVerdict(hitPct, firstTurn = false) {
     // 第一轮本来就读不到缓存：不是出错，用中性提示，别用黄色警告
-    if (firstTurn) return { tone: 'info', text: '本聊天第一轮：整段写入缓存，下一轮起读取' };
+    if (firstTurn) return { tone: 'info', text: '本聊天第一轮（或代理刚重启）：整段写入缓存，下一轮起读取' };
     if (hitPct >= 80) return { tone: 'ok', text: `缓存命中 ${hitPct}%，大部分读了缓存` };
     if (hitPct >= 50) return { tone: 'ok', text: `缓存命中 ${hitPct}%，大半读了缓存` };
     return { tone: 'warn', text: `缓存命中 ${hitPct}%，大部分重写了，通常偏慢、偏耗额度` };
@@ -232,7 +232,8 @@ function lastTurnCard(data) {
         if (cost) card.append(cost);
     }
     // The first reason is the conclusion; everything else is detail.
-    const [first, ...rest] = c.reasons;
+    // 第一轮的说明标题已经写了，不再重复
+    const [first, ...rest] = c.firstTurn ? c.reasons.filter((r) => !r.startsWith('本聊天的第一轮')) : c.reasons;
     if (first) card.append(el('small', 'cm-hint cm-cache-reason', first));
     const ph = last?.phases;
     const sec = (v) => (v / 1000).toFixed(1);
