@@ -240,6 +240,21 @@ test('dry run: the stand-in capture chains, and is found by text + the reply it 
     for (let i = 1; i < entries.length; i++) assert.ok(entries[i].parentUuid && entries[i].parentUuid === entries[i - 1].uuid, `entry ${i} chains`);
 }));
 
+test('dry run: a turn with the preset\'s post-history entries merged in is found again by the player\'s text', quiet(async () => {
+    __setSdkForTesting(fakeSdk());
+    __resetTurnCaptures();
+    const tail = { role: 'system', content: '<rules>字数规范：800–2000 字</rules>' };
+    const r = await fetch(`${base}/v1/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+        model: 'claude-opus-5', stream: false,
+        messages: [{ role: 'system', content: '规则' }, { role: 'assistant', content: '开场' }, { role: 'user', content: '问她试拍要准备什么' }, tail],
+        claude_subscription: { effort: 'low', debug_dump: true, dry_run: true },
+    }) });
+    assert.equal(r.status, 200);
+    const { sentTextFor } = await import('../src/proxy/features/turn-capture.js');
+    // Next turn ST sends the player's message back without the tail: the capture must answer to that text.
+    assert.equal(sentTextFor('问她试拍要准备什么', '开场'), `问她试拍要准备什么\n\n${tail.content}`);
+}));
+
 function limitSdk({ text, mode }) {
     return { query() {
         return (async function* run() {

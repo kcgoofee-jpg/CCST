@@ -655,6 +655,13 @@ async function completeChat(req, res, body, settings, conn) {
             const lastUser = fold.history.findLastIndex((m) => m?.role === 'user');
             const fresh = blocks.length ? newLoreOnly(blocks, earlierOf(fold.history, target)) : [];
             const withLore = injectBlocks(fold.history, fresh);
+            // The turn is filed under the player's text as ST will send it
+            // back next turn — also when nothing was moved: inline placement
+            // alone merges the preset's post-history entries into this
+            // message, and filed under that merged text the turn was never
+            // found again (history re-written every turn; measured 2026-10-07,
+            // 衡 + 军训14天, a chat with no lore moved).
+            if (typeof plain === 'string') settings.captureKey = plain;
             if (blocks.length || fold.folded || restored.some((m, i) => m !== history[i])) {
                 sent = [{ role: 'system', content: system }, ...withLore];
                 messages = sent;
