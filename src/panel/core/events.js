@@ -44,7 +44,9 @@ export function wireEvents({ eventSource, eventTypes }) {
     eventSource.on(eventTypes.MESSAGE_RECEIVED, onOwnReply(() => { if (connectionInfo().connected) setTimeout(() => refreshQuota(), 1500); }));
     eventSource.on(eventTypes.CHARACTER_MESSAGE_RENDERED ?? eventTypes.MESSAGE_RECEIVED, onOwnReply(() => setTimeout(() => F.notice.noticeLastTurn(), 400)));
     eventSource.on(eventTypes.CHAT_CHANGED, refreshIfOpen);
-    eventSource.on(eventTypes.OAI_PRESET_CHANGED_AFTER, () => F.presets.applyPresetRecommendation());
+    eventSource.on(eventTypes.OAI_PRESET_CHANGED_AFTER, () => { F.presets.applyPresetRecommendation(); renderGlance(); });
+    // 推理强度 is shown in the header; SillyTavern raises no event when it changes.
+    globalThis.jQuery?.(document).on('input change', '#openai_reasoning_effort', () => setTimeout(renderGlance, 50));
     if (eventTypes.CHATCOMPLETION_MODEL_CHANGED) eventSource.on(eventTypes.CHATCOMPLETION_MODEL_CHANGED, () => setTimeout(() => F.presets.applyModelProfile(), 150));
     const genStartEvent = eventTypes.GENERATION_AFTER_COMMANDS ?? eventTypes.GENERATION_STARTED;
     if (genStartEvent) eventSource.on(genStartEvent, (...a) => F.progress.genStart(...a));

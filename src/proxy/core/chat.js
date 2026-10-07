@@ -656,7 +656,12 @@ async function completeChat(req, res, body, settings, conn) {
                 console.log(`${PLUGIN_TAG} 本轮触发的世界书移出系统提示词（${n(blocks)} 字），放在发言开头 ${n(fresh)} 字（最近 ${LORE_WINDOW} 轮给过的不再重复）`);
             }
         }
-        if (!settings.auxiliary) noteLastRequest({ model: requestedModel, placed: sent, cacheDiag });
+        if (!settings.auxiliary) {
+            // Earlier turns go out as they were sent (turn captures): show those, not ST's copy.
+            const ctx = repliesBefore(sent);
+            const asSent = sent.map((m, i) => (m?.role === 'user' && typeof m.content === 'string' ? { ...m, content: sentTextFor(m.content, ctx[i]) ?? m.content } : m));
+            noteLastRequest({ model: requestedModel, placed: asSent, cacheDiag });
+        }
     } catch (err) {
         console.warn(`${PLUGIN_TAG} cache diagnostics failed:`, err instanceof Error ? err.message : err);
     }
