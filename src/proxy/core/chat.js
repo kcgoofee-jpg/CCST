@@ -43,7 +43,7 @@ import { buildSystemPrompt, extractSystemText } from './system-prompt.js';
 import { assembleEntries, splitHistoryForResume, currentToSdkUserMessage, singleMessageStream } from '../features/jsonl-entries.js';
 import { SDK_VERSION } from '../features/sdk-version.js';
 import { ResumeSessionStore, resumeScratchCwd, sweepSessionTranscript } from '../features/session-store.js';
-import { createTurnCollector, historyReplay, repliesBefore, replyBefore, sentTextFor, noteReplayHealth } from '../features/turn-capture.js';
+import { createTurnCollector, historyReplay, repliesBefore, replyBefore, sentTextFor, noteReplayHealth, rewriteCaptured } from '../features/turn-capture.js';
 import { StopScanner } from './stops.js';
 import { makeCompletionId, writeSse, chunkShell, roleChunk, contentChunk, reasoningChunk, finishChunk, errorEvent, toOpenAiUsage } from './sse.js';
 import { isExpiredTokenError, isRateLimitError, isExtraUsageRequiredError, isStaleSessionError, refreshOAuthToken } from '../features/oauth.js';
@@ -52,7 +52,7 @@ import { recordRequest, promptShape } from '../features/usage-stats.js';
 import { inlineLateSystemMessages } from '../features/system-placement.js';
 import { moveTailBlockToFront } from '../features/tail-block.js';
 import { diagnoseCache, describeDiag } from '../features/cache-diag.js';
-import { extractVolatileBlocks, foldTrailingInjections, injectBlocks, injectedTextFor, loreTarget, newLoreOnly, rememberInjected } from '../features/lore-tail.js';
+import { extractVolatileBlocks, foldTrailingInjections, injectBlocks, injectedTextFor, loreTarget, newLoreOnly, noteTail, rememberInjected, rewriteInjected } from '../features/lore-tail.js';
 import { dumpEntries, dumpRequest, noteDebugSetting } from '../features/debug-dump.js';
 import { keepReply, trackGeneration } from '../features/reply-keeper.js';
 import { recordRateLimit } from '../features/rate-limit.js';
@@ -240,7 +240,7 @@ export function __resetFoldStreakForTesting() {
 }
 
 function buildQueryConfig({ messages: rawMessages, modelInfo, oneMActive, settings, abortController, stream, env, sdk }) {
-    const messages = settings.systemPlacement === 'inline' ? inlineLateSystemMessages(rawMessages) : rawMessages;
+    const messages = settings.systemPlacement === 'inline' ? inlineLateSystemMessages(rawMessages, { late: settings.lateSnippets }) : rawMessages;
     const systemText = extractSystemText(messages);
 
     if (settings.useResume && envFlag('CLAUDE_SUBSCRIPTION_USE_RESUME', true)) {
@@ -601,11 +601,29 @@ async function completeChat(req, res, body, settings, conn) {
     // turn captures / context pin (buildQueryConfig). They may still READ
     // captured turns, which only helps their prompt match the chat's cache.
     if (!settings.auxiliary) try {
-        const placed = settings.systemPlacement === 'inline' ? inlineLateSystemMessages(messages) : messages;
+        const placed = settings.systemPlacement === 'inline' ? inlineLateSystemMessages(messages, { late: settings.lateSnippets }) : messages;
         const history = placed.filter((m) => m?.role !== 'system');
         cacheDiag = diagnoseCache(extractSystemText(placed), history, { moveVolatile: settings.loreTail });
         console.log(`${PLUGIN_TAG} ${describeDiag(cacheDiag)}`);
-        settings.systemSplitAt = cacheDiag?.splitAt ?? null;
+        // The CLI sends the system prompt as one block whatever it is given,
+        // so a split never got its own cache entry (wire capture, 2.1.285).
+        settings.systemSplitAt = null;
+        // Post-history entries changed (one switched off, edited): earlier
+        // turns go out again as sent, so swap their old copy for the new one
+        // (lore-tail.js noteTail). Not on a reroll: nothing was changed then.
+        const lastUserAt = messages.findLastIndex((m) => m?.role === 'user');
+        const trailing = lastUserAt >= 0 ? messages.slice(lastUserAt + 1) : null;
+        if (settings.systemPlacement === 'inline' && trailing && trailing.every((m) => m?.role === 'system' && typeof m.content === 'string')) {
+            const tail = trailing.map((m) => m.content).filter(Boolean).join('\n\n');
+            const change = noteTail(cacheDiag?.chat ?? null, tail);
+            if (change && !cacheDiag?.reroll) {
+                const from = `\n\n${change.from}`;
+                const to = change.to ? `\n\n${change.to}` : '';
+                const n = rewriteCaptured(from, to) + rewriteInjected(from, to);
+                if (n && cacheDiag) cacheDiag.tailRewritten = n;
+                if (n) console.log(`${PLUGIN_TAG} 预设放在聊天记录后面的条目变了（开关或编辑）：之前 ${n} 轮里的旧版本一起换成新的，这一轮聊天记录重写一次`);
+            }
+        }
         let sent = placed;
         if (settings.loreTail || settings.foldTail) {
             const volatile = settings.loreTail ? cacheDiag?.volatileTags ?? [] : [];
@@ -890,7 +908,7 @@ async function completeChat(req, res, body, settings, conn) {
         const described = err?.sdkErrorText === 'served-model-guard' ? `served-model guard: ${raw}` : raw;
         noteFoldOutcome(lastPath, settings);
         recordRequest({
-            backend: billedAs, cacheTtl: env1hTtl(billedAs), model: modelInfo.requested, effort: settings.effort ?? null, placement: settings.systemPlacement, auxiliary: settings.auxiliary, purpose: settings.purpose, chatKey: settings.chatKey, timing, path: lastPath, stream: wantStream, startedAt, firstTokenAt, shape, cacheDiag,
+            backend: billedAs, cacheTtl: env1hTtl(billedAs), model: modelInfo.requested, effort: settings.effort ?? null, placement: settings.systemPlacement, auxiliary: settings.auxiliary, purpose: settings.purpose, chatKey: settings.chatKey, timing, path: lastPath, stream: wantStream, startedAt, firstTokenAt, shape, cacheDiag, st: settings.stFingerprint,
             usage: usage ?? partialUsage, textChars: collectedText.length,
             error: described,
         });
@@ -923,7 +941,7 @@ async function completeChat(req, res, body, settings, conn) {
     }
 
     recordRequest({
-        backend: billedAs, cacheTtl: env1hTtl(billedAs), model: modelInfo.requested, effort: settings.effort ?? null, placement: settings.systemPlacement, auxiliary: settings.auxiliary, purpose: settings.purpose, chatKey: settings.chatKey, timing, path: lastPath, stream: wantStream, startedAt, firstTokenAt, shape, cacheDiag,
+        backend: billedAs, cacheTtl: env1hTtl(billedAs), model: modelInfo.requested, effort: settings.effort ?? null, placement: settings.systemPlacement, auxiliary: settings.auxiliary, purpose: settings.purpose, chatKey: settings.chatKey, timing, path: lastPath, stream: wantStream, startedAt, firstTokenAt, shape, cacheDiag, st: settings.stFingerprint,
         usage, textChars: collectedText.length,
         finish: finishReason, clientClosed: conn.aborted, notices,
     });

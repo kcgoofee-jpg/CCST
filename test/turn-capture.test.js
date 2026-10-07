@@ -368,3 +368,12 @@ test('three resume turns with no capture reset the captures and the pin (#26)', 
         assert.equal(noteReplayHealth(false), false, 'the streak starts over');
     });
 });
+
+test('rewriteCaptured swaps an old post-history block in captured turns', async () => {
+    const { createTurnCollector, sentTextFor, rewriteCaptured, __resetTurnCaptures } = await import('../src/proxy/features/turn-capture.js');
+    __resetTurnCaptures();
+    const c = createTurnCollector('你好\n\n<fmt>旧格式</fmt>', '你好', null, '');
+    c.onAppend([{ type: 'user', uuid: 'u', message: { role: 'user', content: '你好\n\n<fmt>旧格式</fmt>' } }, { type: 'assistant', uuid: 'a' }]);
+    assert.equal(rewriteCaptured('\n\n<fmt>旧格式</fmt>', ''), 1);
+    assert.equal(sentTextFor('你好', ''), '你好');
+});

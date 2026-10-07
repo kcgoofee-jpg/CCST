@@ -142,6 +142,8 @@ export function recordRequest(r) {
         finish: r.clientClosed ? 'client_closed' : (r.finish ?? null),
         shape: r.shape ?? null,
         cacheDiag: r.cacheDiag ?? null,
+        // SillyTavern's setup for this request (preset, post-processing, entries) — panel inject.js.
+        ...(r.st ? { st: r.st } : {}),
         // no-1m: asked for 1M context, served the base model; refusal /
         // fallback:<model>: the reply was cut by a safety stop (and redone
         // by another model)

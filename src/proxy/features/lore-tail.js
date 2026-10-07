@@ -162,9 +162,48 @@ export function injectedTextFor(raw, context = '') {
     return typeof raw === 'string' ? injected.get(turnKey(raw, context)) ?? null : null;
 }
 
+/** Replace `from` with `to` in every remembered message (see rewriteCaptured). */
+export function rewriteInjected(from, to) {
+    if (!from || from === to) return 0;
+    let n = 0;
+    for (const [key, sent] of injected) {
+        if (sent.includes(from)) { injected.set(key, sent.split(from).join(to)); n++; }
+    }
+    return n;
+}
+
+// The preset's post-history entries (the system messages after the player's
+// message) are merged into the player's message, and earlier turns are sent
+// again as they went out — so the cache keeps working. When the user changes
+// those entries (switches one off, edits it), every earlier turn would keep
+// the old version for good (seen live: an output-format entry switched off
+// still steered every reply). A tail that had been the same for a few turns
+// and then changed is a settings change, not per-turn content: the earlier
+// copies are replaced with the new one. That turn re-writes the history once.
+const MIN_TAIL_CHARS = 200;
+const STABLE_TURNS = 2;
+const MAX_TAIL_CHATS = 12;
+const tails = new Map(); // chat → { text, turns }
+
+/**
+ * @param {string|null} chat  chat key (cache-diag)
+ * @param {string|null} tail  this turn's post-history text as merged
+ * @returns {{ from: string, to: string } | null}  replace these, if the tail was changed
+ */
+export function noteTail(chat, tail) {
+    if (!chat || typeof tail !== 'string') return null;
+    const rec = tails.get(chat);
+    tails.delete(chat);
+    tails.set(chat, rec && rec.text === tail ? { text: tail, turns: rec.turns + 1 } : { text: tail, turns: 1 });
+    while (tails.size > MAX_TAIL_CHATS) tails.delete(tails.keys().next().value);
+    if (!rec || rec.text === tail || rec.turns < STABLE_TURNS || rec.text.length < MIN_TAIL_CHARS) return null;
+    return { from: rec.text, to: tail };
+}
+
 /** Test seam. */
 export function __resetInjected() {
     injected.clear();
+    tails.clear();
 }
 
 /**
@@ -175,6 +214,9 @@ export function __resetInjected() {
  * @param {{tag: string, text: string}[]} blocks
  * @param {string[]} earlierTexts  earlier user messages as sent
  */
+// A line that is only markup (`</money_scale>]`) says nothing on its own.
+const hasWords = (l) => l.replace(/<\/?[^<>\n]{1,60}>/g, '').replace(/[\s[\]{}()（）【】"'“”,.，。:：;；|*#>-]/g, '').length >= 4;
+
 export function newLoreOnly(blocks, earlierTexts) {
     const seen = new Set();
     for (const t of earlierTexts) for (const line of String(t).split('\n')) {
@@ -184,7 +226,8 @@ export function newLoreOnly(blocks, earlierTexts) {
     const out = [];
     for (const b of blocks) {
         const lines = b.text.split('\n').filter((l) => l.trim().length < 4 || !seen.has(l.trim()));
-        if (lines.some((l) => l.trim().length >= 4)) out.push({ tag: b.tag, text: lines.join('\n').trim() });
+        // Only closing tags left over (a block that shrank): nothing new to give.
+        if (lines.some((l) => l.trim().length >= 4 && hasWords(l))) out.push({ tag: b.tag, text: lines.join('\n').trim() });
     }
     return out;
 }

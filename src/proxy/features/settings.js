@@ -22,6 +22,19 @@ export function normalizeEffort(value) {
     return VALID_EFFORTS.includes(value) ? value : undefined;
 }
 
+const short = (v, n) => (typeof v === 'string' ? v.slice(0, n) : null);
+
+/** The panel's per-request fingerprint, kept to known fields of bounded size. */
+function stFingerprint(fp) {
+    if (!fp || typeof fp !== 'object' || Array.isArray(fp)) return null;
+    return {
+        preset: short(fp.preset, 80),
+        pp: short(fp.pp, 24),
+        order: short(fp.order, 16),
+        wi: Array.isArray(fp.wi) ? fp.wi.filter((s) => typeof s === 'string').map((s) => s.slice(0, 40)).slice(0, 80) : [],
+    };
+}
+
 /**
  * @param {object} body OpenAI chat completions request body
  * @returns {{
@@ -104,6 +117,16 @@ export function extractSettings(body) {
         // moves to the current message so the history stays cached (lore-tail.js).
         loreTail: ns.lore_tail !== undefined ? ns.lore_tail !== false : !/^(0|false|off|no)$/i.test(process.env.CLAUDE_SUBSCRIPTION_LORE_TAIL ?? ''),
         foldTail: ns.fold_tail !== undefined ? ns.fold_tail !== false : !/^(0|false|off|no)$/i.test(process.env.CLAUDE_SUBSCRIPTION_FOLD_TAIL ?? ''),
+        // Opening text of each prompt SillyTavern injects INTO the chat this
+        // request (depth world info, the preset's in-chat entries, Author's
+        // Note — panel inject.js). Early in a chat ST puts them above every
+        // message, where they would pass for part of the system prompt.
+        lateSnippets: Array.isArray(ns.late)
+            ? ns.late.filter((s) => typeof s === 'string' && s.trim().length >= 8).map((s) => s.trim()).slice(0, 64)
+            : [],
+        // What SillyTavern had set up for this request (preset, post-processing,
+        // entry order / toggles, triggered world info): only for the diagnostic report.
+        stFingerprint: stFingerprint(ns.st_fp),
         auxiliary,
         purpose: fromPanel ? purpose : (auxiliary ? 'aux' : 'chat'),
         maxTokens,

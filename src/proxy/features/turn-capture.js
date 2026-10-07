@@ -192,6 +192,27 @@ export function replayTurn(text, parentUuid, meta, { pinOn = false, context = ''
     return rechain(list, parentUuid, meta);
 }
 
+/**
+ * Replace `from` with `to` in the text of every captured user entry; returns
+ * how many entries changed. Used when the preset's post-history entries were
+ * changed (an entry switched off): earlier turns were replayed as sent, so
+ * without this the switched-off entry stayed in every one of them.
+ */
+export function rewriteCaptured(from, to) {
+    if (!from || from === to) return 0;
+    let n = 0;
+    const swap = (s) => (typeof s === 'string' && s.includes(from) ? s.split(from).join(to) : s);
+    for (const { entries } of captures.values()) {
+        const msg = entries[0]?.message;
+        if (!msg) continue;
+        const before = JSON.stringify(msg.content);
+        if (typeof msg.content === 'string') msg.content = swap(msg.content);
+        else if (Array.isArray(msg.content)) for (const b of msg.content) if (b?.type === 'text') b.text = swap(b.text);
+        if (JSON.stringify(msg.content) !== before) n++;
+    }
+    return n;
+}
+
 /** The text a past user message was actually sent with (null if unknown). */
 export function sentTextFor(text, context = '') {
     const found = captures.get(turnKey(text, context));

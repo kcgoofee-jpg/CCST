@@ -66,6 +66,56 @@ function postProcessingCheck(data) {
         { ms: 20000 });
 }
 
+// What SillyTavern injects INTO the chat this request, and how it was set up. Early in a chat ST
+// puts a depth-N injection above every message, where the proxy could not tell it from the preset;
+// the opening text of each one lets the proxy keep it with the current turn (system-placement.js).
+let activatedLore = [];
+export function resetActivatedLore() { activatedLore = []; }
+export function noteActivatedLore(entries) {
+    try {
+        const list = Array.isArray(entries) ? entries : [...(entries?.values?.() ?? [])];
+        activatedLore = list.map((e) => String(e?.comment || e?.uid || '').slice(0, 40)).filter(Boolean).slice(0, 80);
+    } catch { activatedLore = []; }
+}
+
+function enabledPromptIds(oai) {
+    const ids = new Set();
+    for (const o of oai.prompt_order ?? []) for (const p of o?.order ?? []) if (p?.enabled) ids.add(p.identifier);
+    return ids;
+}
+
+export function injectedOpenings(ctx = SillyTavern.getContext()) {
+    const sub = (t) => { try { return ctx.substituteParams ? ctx.substituteParams(t) : t; } catch { return t; } };
+    const pieces = [];
+    for (const p of Object.values(ctx.extensionPrompts ?? {})) {
+        if (p?.position === 1 && typeof p.value === 'string') pieces.push(sub(p.value));
+    }
+    const oai = ctx.chatCompletionSettings ?? {};
+    const on = enabledPromptIds(oai);
+    for (const pr of oai.prompts ?? []) {
+        if (pr?.injection_position === 1 && on.has(pr.identifier) && typeof pr.content === 'string') pieces.push(sub(pr.content));
+    }
+    return [...new Set(pieces.map((t) => t.trim()).filter((t) => t.length >= 8).map((t) => t.slice(0, 48)))].slice(0, 64);
+}
+
+// FNV-1a: enough to tell "the preset's entries changed" apart, no crypto needed.
+function fnv(text) {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+    return h.toString(16).padStart(8, '0');
+}
+
+export function stFingerprint(data, ctx = SillyTavern.getContext()) {
+    const oai = ctx.chatCompletionSettings ?? {};
+    const prompts = (oai.prompts ?? []).map((p) => [p.identifier, p.content, p.injection_position, p.injection_depth, p.role]);
+    return {
+        preset: String(oai.preset_settings_openai ?? ''),
+        pp: String(data?.custom_prompt_post_processing ?? '') || 'none',
+        order: fnv(JSON.stringify([oai.prompt_order ?? [], prompts])),
+        wi: activatedLore,
+    };
+}
+
 // One-shot effort for the next reply (M2): kept in memory only (store.nextEffort), used by
 // every request until a chat message arrives, then cleared.
 export function effectiveEffort(settings) {
@@ -121,7 +171,11 @@ export function onSettingsReady(data) {
         // The reply keeper hands out the reply's slot (null for quiet / impersonate / continue).
         const slot = F.keeper.openSlot(data) ?? null;
 
-        data.custom_include_body = (cleaned ? cleaned + '\n' : '') + buildIncludeBodyYaml(settings, data.type === 'quiet', slot, data.model ?? '');
+        const quiet = data.type === 'quiet';
+        let yaml = buildIncludeBodyYaml(settings, quiet, slot, data.model ?? '');
+        // JSON is valid YAML: the snippets carry quotes, colons and newlines safely.
+        if (!quiet) yaml += `\n  late: ${JSON.stringify(injectedOpenings())}\n  st_fp: ${JSON.stringify(stFingerprint(data))}`;
+        data.custom_include_body = (cleaned ? cleaned + '\n' : '') + yaml;
         preflightCheck(data);
         postProcessingCheck(data);
     } catch (err) {

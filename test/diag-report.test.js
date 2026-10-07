@@ -57,3 +57,13 @@ test('usage is read from a streamed reply (message_start + message_delta)', () =
     assert.equal(u.output_tokens, 7);
     assert.equal(u.cache_creation.ephemeral_1h_input_tokens, 20);
 });
+
+test('stChanges names what changed in SillyTavern between two turns of a chat', async () => {
+    const { stChanges } = await import('../src/proxy/features/diag-report.js');
+    const st = (over) => ({ preset: '衡', pp: 'none', order: 'aa', wi: ['输出格式', '机制索引'], ...over });
+    const a = { chatKey: 'k', st: st() };
+    assert.equal(stChanges({ chatKey: 'k', st: st() }, a), '');
+    assert.match(stChanges({ chatKey: 'k', st: st({ pp: 'strict', wi: ['机制索引'] }) }, a), /后处理none→strict.*−输出格式/);
+    assert.match(stChanges({ chatKey: 'k', st: st({ order: 'bb' }) }, a), /预设条目改动/);
+    assert.equal(stChanges({ chatKey: 'other', st: st({ pp: 'strict' }) }, a), '', 'another chat is not compared');
+});

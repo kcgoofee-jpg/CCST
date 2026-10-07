@@ -257,6 +257,9 @@ export function diagnoseCache(systemText, history, { moveVolatile = false } = {}
     // is not part of it). Reads back almost everything, so it says nothing
     // about what a new turn costs — reports keep it apart.
     const reroll = texts.length === prev.history.length && texts.every((t, i) => t === prev.history[i]);
+    // A reply that differs from the one sent last turn: the player picked
+    // another swipe (or edited the reply). Everything after it is re-written.
+    const replyChanged = historyDiffAt >= 0 && texts[historyDiffAt]?.startsWith('assistant:');
     return {
         chat: key, // hash of the chat's opening two messages — groups turns per chat in reports, carries no text
         firstTurn: false,
@@ -267,6 +270,7 @@ export function diagnoseCache(systemText, history, { moveVolatile = false } = {}
         historyDiffAt: historyDiffAt >= 0 ? historyDiffAt : null,
         historyLen: texts.length,
         ...(reroll ? { reroll: true } : {}),
+        ...(replyChanged ? { replyChanged: true } : {}),
         ...(rewrite ? { rewrite: true } : {}),
         splitAt,
         volatileTags: volatileTags(changes),
@@ -280,20 +284,17 @@ export function describeDiag(d) {
     if (d.firstTurn) return `缓存诊断：本聊天第一轮（系统提示词 ${d.systemChars.toLocaleString()} 字）${d.volatileTags?.length ? `，世界书 ${d.volatileTags.map((t) => `<${t}>`).join('、')} 一开始就移到消息里` : ''}，下一轮开始对比`;
     const parts = [];
     if (d.reroll) parts.push('重roll（和上一次请求的聊天记录相同，不代表新一轮的开销）');
-    if (d.rewrite) parts.push('系统提示词大部分换了（多半是换了预设）：这一轮整段重写，之前记下的切分点清零，从下一轮重新学');
+    if (d.rewrite) parts.push('系统提示词大部分换了（多半是换了预设）：这一轮整段重写');
     if (d.systemChanged) {
-        const covered = d.splitAt && d.splitAt <= d.systemDiffAt;
         parts.push(`系统提示词与上一轮不同，从第 ${d.systemDiffAt.toLocaleString()} / ${d.systemChars.toLocaleString()} 字开始` +
-            (d.systemDiffLabel ? `（位于 ${d.systemDiffLabel} 内）` : '') +
-            (covered ? '' : ' → 这一轮整段缓存失效'));
+            (d.systemDiffLabel ? `（位于 ${d.systemDiffLabel} 内）` : '') + ' → 这一轮整段缓存失效');
     } else {
         parts.push('系统提示词与上一轮相同');
     }
-    if (d.splitAt) {
-        parts.push(`已切分：前 ${d.splitAt.toLocaleString()} 字作为固定段单独缓存，之后的部分每轮重写`);
-    }
     if (d.historyDiffAt !== null) {
-        parts.push(`聊天记录从第 ${d.historyDiffAt + 1} / ${d.historyLen} 条开始与上一轮不同（正则改写旧楼层、深度注入移位、删改消息或 swipe 会造成）`);
+        parts.push(d.replyChanged
+            ? `第 ${d.historyDiffAt + 1} / ${d.historyLen} 条（一条回复）和上一轮发的不同：切换了回复分支（swipe）或编辑了回复，从这里往后重写`
+            : `聊天记录从第 ${d.historyDiffAt + 1} / ${d.historyLen} 条开始与上一轮不同（正则改写旧楼层、删改消息会造成）`);
     }
     return `缓存诊断：${parts.join('；')}`;
 }
@@ -366,15 +367,18 @@ export function explainCache(entry, prevEntry = null) {
             reasons.push(`${d.loreMoved.map((t) => `<${t}>`).join('、')} 每轮随剧情变化，已自动移到本轮消息开头：系统提示词和之前的聊天记录照常读缓存，只重写最近一轮。`);
         } else if (d.systemChanged) {
             const where = `第 ${d.systemDiffAt.toLocaleString()} 字${d.systemDiffLabel ? `（${d.systemDiffLabel} 内）` : ''}`;
-            reasons.push(d.splitAt && d.splitAt <= d.systemDiffAt
-                ? `系统提示词从${where}起和上一轮不同；前 ${d.splitAt.toLocaleString()} 字已单独缓存，只重写后面的部分。`
-                : `系统提示词在${where}就变了，这一处之后全部重写。常见原因：改了预设开关或角色卡、世界书按关键词触发、随机宏。一次性的改动过 3 轮会自动恢复。`);
+            reasons.push(`系统提示词在${where}变了，这一轮整段重写（Claude Code 把系统提示词作为一整块缓存，改一个字就整段读不到）。常见原因：改了预设开关或角色卡、世界书按关键词触发、随机宏或每轮变化的变量。一次性的改动，下一轮起恢复。`);
             if (d.systemDiffLabel === '<world_info>' || /world|世界/.test(d.systemDiffLabel ?? '')) {
                 reasons.push('世界书按关键词触发，每轮载入的条目不同，它后面的整段聊天记录都要重写。把这张卡的世界书条目改成常驻，聊天记录就能每轮读缓存（实测每轮写入从约 2.8 万降到约 3 千 token）。');
             }
         }
         if (d.historyDiffAt !== null && d.historyDiffAt !== undefined) {
-            reasons.push(`聊天记录从第 ${d.historyDiffAt + 1} / ${d.historyLen} 条起和上一轮不同，之后全部重写。常见原因：预设正则按楼层改写旧消息（如「5 楼外只发摘要」）；「深度注入保持原位」打开时，深度注入每轮往后挪一格；或删改、重新生成了消息。`);
+            reasons.push(d.replyChanged
+                ? `第 ${d.historyDiffAt + 1} 条回复和上一轮发的不同：切换了回复分支（swipe）或编辑了这条回复，从这里往后重写一次，属正常现象。`
+                : `聊天记录从第 ${d.historyDiffAt + 1} / ${d.historyLen} 条起和上一轮不同，之后全部重写。常见原因：预设正则按楼层改写旧消息（如「5 楼外只发摘要」）；「深度注入保持原位」打开时，深度注入每轮往后挪一格；或删改了消息。`);
+        }
+        if (d.tailRewritten) {
+            reasons.push(`预设放在聊天记录后面的条目变了（开关或编辑）：之前 ${d.tailRewritten} 轮里带的旧版本已换成新版本，聊天记录重写这一次，下一轮恢复。`);
         }
         if (prevEntry?.ok && prevEntry.effort !== undefined && entry.effort !== undefined && prevEntry.effort !== entry.effort) {
             reasons.push('思考深度和上一轮不同：系统提示词的缓存保留，聊天记录部分要重写一次。');

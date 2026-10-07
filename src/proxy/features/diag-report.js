@@ -136,6 +136,21 @@ function ratelimitLine(h) {
     return parts.length ? parts.join(' · ') : '（没有额度头）';
 }
 
+/** What changed on the SillyTavern side since the previous request of the same chat. */
+export function stChanges(e, prev) {
+    const a = prev?.st;
+    const b = e?.st;
+    if (!a || !b || (e.chatKey ?? e.cacheDiag?.chat) !== (prev.chatKey ?? prev.cacheDiag?.chat)) return '';
+    const out = [];
+    if (a.preset !== b.preset) out.push(`预设→${b.preset}`);
+    else if (a.order !== b.order) out.push('预设条目改动');
+    if (a.pp !== b.pp) out.push(`后处理${a.pp}→${b.pp}`);
+    const added = (b.wi ?? []).filter((x) => !(a.wi ?? []).includes(x));
+    const gone = (a.wi ?? []).filter((x) => !(b.wi ?? []).includes(x));
+    if (added.length || gone.length) out.push(`世界书${added.length ? ` +${added.join(',')}` : ''}${gone.length ? ` −${gone.join(',')}` : ''}`);
+    return out.length ? `酒馆变化: ${out.join('；')}` : '';
+}
+
 function usageEntryLine(e, prev) {
     const start = e.at - (e.durationMs ?? 0);
     const gap = prev ? Math.round((start - (prev.at - (prev.durationMs ?? 0))) / 1000) : null;
@@ -144,8 +159,8 @@ function usageEntryLine(e, prev) {
         d.firstTurn && '首轮',
         d.reroll && '重roll',
         d.systemChanged && `系统@${d.systemDiffAt}${d.systemDiffLabel ? d.systemDiffLabel : ''}`,
-        d.historyDiffAt != null && `历史@${d.historyDiffAt + 1}/${d.historyLen}`,
-        d.splitAt && `切分${d.splitAt}`,
+        d.historyDiffAt != null && `${d.replyChanged ? '换回复' : '历史'}@${d.historyDiffAt + 1}/${d.historyLen}`,
+        d.tailRewritten && `尾部换新${d.tailRewritten}`,
         d.volatileTags?.length && `移位${d.volatileTags.join('/')}`,
         d.chat && `聊天${d.chat.slice(0, 6)}`,
     ].filter(Boolean).join(' ');
@@ -159,6 +174,7 @@ function usageEntryLine(e, prev) {
         `${Math.round((e.durationMs ?? 0) / 1000)}s`,
         gap != null ? `距上条${gap}s` : '',
         diag,
+        stChanges(e, prev),
         e.notices?.length ? `[${e.notices.join(',')}]` : '',
     ].filter(Boolean).join(' | ');
 }

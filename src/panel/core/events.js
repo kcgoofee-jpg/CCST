@@ -7,7 +7,7 @@
 import { getSettings } from './settings.js';
 import { F } from './registry.js';
 import { isReplyEvent, recovery } from './replies.js';
-import { onSettingsReady } from './inject.js';
+import { onSettingsReady, noteActivatedLore, resetActivatedLore } from './inject.js';
 import { currentCharKey } from './st.js';
 import { connectionInfo } from './connection.js';
 import { refreshStats, refreshQuota } from './live.js';
@@ -22,6 +22,9 @@ export function wireEvents({ eventSource, eventTypes }) {
     for (const ev of [eventTypes.GENERATION_ENDED, eventTypes.GENERATION_STOPPED]) {
         if (ev) eventSource.on(ev, () => setTimeout(() => F.checkup.flushCheckup(), 300));
     }
+    // Which world info entries fired for this request (the diagnostic report lists them).
+    if (eventTypes.GENERATION_STARTED) eventSource.on(eventTypes.GENERATION_STARTED, resetActivatedLore);
+    if (eventTypes.WORLD_INFO_ACTIVATED) eventSource.on(eventTypes.WORLD_INFO_ACTIVATED, noteActivatedLore);
     eventSource.on(eventTypes.CHAT_COMPLETION_SETTINGS_READY, onSettingsReady);
     // Keep stats fresh while the panel is open.
     const refreshAfterReply = makeStatsAfterReply({ refresh: refreshStats, getStats: () => store.get().stats, canRun: () => !!document.getElementById('claude_max_stats') });

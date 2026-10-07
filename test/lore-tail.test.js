@@ -123,3 +123,24 @@ test('lore memory is keyed by text AND the reply it answers', () => {
     assert.equal(injectedTextFor('继续', '回复二'), null, 'a later 「继续」 in the same chat');
     assert.equal(injectedTextFor('继续', '别的聊天的开场'), null, 'the same text in another chat');
 });
+
+test('newLoreOnly: a block reduced to closing tags adds nothing', async () => {
+    const { newLoreOnly } = await import('../src/proxy/features/lore-tail.js');
+    const earlier = ['<money_scale>\n- 金额按现代高资产尺度判断\n'];
+    assert.deepEqual(newLoreOnly([{ tag: 'WorldFrame_components', text: '- 金额按现代高资产尺度判断\n</money_scale>]' }], earlier), []);
+    assert.equal(newLoreOnly([{ tag: 'W', text: '</money_scale>]\n新的设定一行' }], earlier).length, 1);
+});
+
+test('noteTail: a tail that was stable and then changed is a settings change; per-turn churn is not', async () => {
+    const { noteTail, __resetInjected } = await import('../src/proxy/features/lore-tail.js');
+    __resetInjected();
+    const old = '规则'.repeat(200);
+    assert.equal(noteTail('c', old), null);
+    assert.equal(noteTail('c', old), null);
+    assert.deepEqual(noteTail('c', '新规则'.repeat(100)), { from: old, to: '新规则'.repeat(100) });
+    // Changes every turn (variables in the tail): never rewritten.
+    __resetInjected();
+    noteTail('d', 'x'.repeat(300) + 1);
+    assert.equal(noteTail('d', 'x'.repeat(300) + 2), null);
+    assert.equal(noteTail('d', 'x'.repeat(300) + 3), null);
+});

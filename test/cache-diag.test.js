@@ -111,11 +111,12 @@ test('no split when the change is too close to the start', () => {
     assert.equal(diagnoseCache('B\n' + 'x'.repeat(5000), [A('g'), U('u'), A('a'), U('v')]).splitAt, null);
 });
 
-test('explainCache: split-covered change, history rewrite, effort switch', () => {
+test('explainCache: system change, history rewrite, effort switch', () => {
     const e = (over) => ({ ok: true, model: 'm', effort: 'high', inputTokens: 2, cacheReadTokens: 30000, cacheCreationTokens: 10000, ...over });
     const c = explainCache(e({ cacheDiag: { firstTurn: false, systemChanged: true, systemDiffAt: 36000, systemDiffLabel: '<world_info>', splitAt: 35000, historyDiffAt: 5, historyLen: 12 } }), e({}));
     assert.equal(c.hitPct, 75);
-    assert.match(c.reasons[0], /前 35,000 字已单独缓存/);
+    assert.match(c.reasons[0], /整段重写/);
+    assert.doesNotMatch(c.reasons.join('\n'), /单独缓存/, 'the CLI sends the system prompt as one block: no split claim');
     assert.match(c.reasons.join('\n'), /第 6 \/ 12 条/);
     assert.match(c.reasons.join('\n'), /世界书条目改成常驻/);
     const sw = explainCache(e({ cacheReadTokens: 0, cacheDiag: { firstTurn: false, systemChanged: false, historyDiffAt: null } }), e({ effort: 'medium' }));
@@ -269,4 +270,14 @@ test('usage-stats reads which TTL the cache was written with', async () => {
     assert.equal(writtenTtl({ cache_creation: { ephemeral_5m_input_tokens: 9, ephemeral_1h_input_tokens: 0 } }), '5m');
     assert.equal(writtenTtl({ cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 9 } }), '1h');
     assert.equal(writtenTtl({ cache_creation_input_tokens: 9 }), null);
+});
+
+test('a reply that differs from last turn is reported as a swipe / edit', () => {
+    __resetCacheDiag();
+    const sys = '规则'.repeat(1000);
+    diagnoseCache(sys, [A('greeting'), U('u1'), A('a1'), U('u2')]);
+    const d = diagnoseCache(sys, [A('greeting'), U('u1'), A('a1 另一个分支'), U('u2'), A('a2'), U('u3')]);
+    assert.equal(d.replyChanged, true);
+    const e = { ok: true, model: 'm', inputTokens: 1, cacheReadTokens: 100, cacheCreationTokens: 900, cacheDiag: d };
+    assert.match(explainCache(e, { ok: true, model: 'm' }).reasons.join(), /swipe/);
 });

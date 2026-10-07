@@ -98,3 +98,15 @@ test('a recorded system prompt is never captured, pinned or replayed', async () 
     assert.equal(c.captured, true);
 });
 
+
+test('a known depth injection above the chat (short chat) goes with the current turn, not the system prompt', () => {
+    const late = ['<elite_daily>\n原则'];
+    const turn1 = inlineLateSystemMessages([S('preset'), S('<elite_daily>\n原则：少写'), A('greeting'), U('u1'), S('tail')], { late });
+    assert.deepEqual(turn1, [S('preset'), A('greeting'), U('<elite_daily>\n原则：少写\n\nu1\n\ntail')]);
+    // Turn 2: ST now puts it between greeting and u1 → still the current turn, system unchanged.
+    const turn2 = inlineLateSystemMessages([S('preset'), A('greeting'), S('<elite_daily>\n原则：少写'), U('u1'), A('a1'), U('u2'), S('tail')], { late });
+    assert.deepEqual(turn2[0], S('preset'));
+    assert.equal(turn2.at(-1).content, '<elite_daily>\n原则：少写\n\nu2\n\ntail');
+    // Without the hint the fake-acknowledgement rule still applies.
+    assert.deepEqual(inlineLateSystemMessages([S('a'), A('ack'), S('b'), U('u')])[1], S('b'));
+});

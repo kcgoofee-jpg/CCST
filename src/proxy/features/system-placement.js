@@ -41,15 +41,25 @@ function mergeContent(a, b) {
 
 /**
  * @param {Array<{role: string, content: any}>} messages OpenAI messages
+ * @param {{ late?: string[] }} [opts] opening text of the prompts SillyTavern
+ *   injected into the chat this request (panel). While the chat is shorter
+ *   than their depth ST puts them above every message — in the preamble —
+ *   and a turn later they move down into the chat: the system prompt would
+ *   change for the first few turns of every chat and nothing would be read
+ *   from the cache (measured: 0% on 军训14天 turns 1-3, elite_daily at depth
+ *   3). Known injections always go with the current turn instead. ST joins
+ *   the injections of one depth into one message, so its text starts with
+ *   one of them.
  * @returns {Array} new array: leading system block, then history with
  *   later system messages folded into user turns
  */
-export function inlineLateSystemMessages(messages) {
+export function inlineLateSystemMessages(messages, { late = [] } = {}) {
+    const isLate = (m) => m?.role === 'system' && late.length > 0 && late.some((s) => contentToText(m.content).trimStart().startsWith(s));
     const firstUser = messages.findIndex((m) => m?.role === 'user' && contentToText(m.content).trim());
     const lead = firstUser < 0 ? messages.length : firstUser;
     const preamble = messages.slice(0, lead);
-    const head = preamble.filter((m) => m?.role === 'system');
-    const early = preamble.filter((m) => m?.role !== 'system' && contentToText(m.content).trim());
+    const head = preamble.filter((m) => m?.role === 'system' && !isLate(m));
+    const early = preamble.filter((m) => (m?.role !== 'system' && contentToText(m.content).trim()) || isLate(m));
     const rest = [...early, ...messages.slice(lead)];
     if (head.length === preamble.length && !rest.some((m) => m?.role === 'system')) return messages;
 
