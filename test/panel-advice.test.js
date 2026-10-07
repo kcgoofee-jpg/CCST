@@ -94,3 +94,10 @@ test('cost parts follow the model price row; API value in USD', async () => {
     assert.equal(apiValueUsd({ model: 'claude-opus-4-6', inputTokens: 3, cacheReadTokens: 60238, cacheCreationTokens: 9127, outputTokens: 2798 }).toFixed(4), '0.1914');
     assert.equal(apiValueUsd({ model: 'mystery' }), null);
 });
+
+test('usage pace stays quiet early in a long window unless half is already gone', async () => {
+    const { usagePace } = await import('../src/panel/tabs/status.js');
+    const D = 24 * 3600_000, now = 1_000_000_000_000;
+    assert.equal(usagePace(14, now + 6.68 * D, 7 * D, now).level, 'normal');
+    assert.equal(usagePace(60, now + 6.68 * D, 7 * D, now).level, 'critical');
+});

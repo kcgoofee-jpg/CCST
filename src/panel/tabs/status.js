@@ -88,15 +88,17 @@ const SEVEN_DAYS = 7 * 24 * 3600_000;
 /**
  * How fast a window is being used up: the used share projected linearly to the reset.
  * warning when it would end at 90% or more, critical when it would run out first; nothing
- * under 10% used (a projection that early is noise). Same rule as claude-hud's usage pace.
+ * under 10% used or too early in the window (a projection that early is noise). claude-hud's usage pace, plus the early-window guard.
  * @returns {{ level: 'normal'|'warning'|'critical', endPct: number, runOutMs: number|null } | null}
  */
 export function usagePace(pct, resetsAt, windowMs, now = Date.now()) {
     if (pct == null || !resetsAt) return null;
     const left = resetsAt - now;
     if (!(left > 0) || left >= windowMs) return null;
-    if (pct < 10) return { level: 'normal', endPct: pct, runOutMs: null };
     const elapsed = windowMs - left;
+    // Too early to project: under 10% used, or under 15% of the window gone with less than half used
+    // (7 days: 14% in the first 8 hours would read as 「两天后用完」).
+    if (pct < 10 || (elapsed < 0.15 * windowMs && pct < 50)) return { level: 'normal', endPct: pct, runOutMs: null };
     const endPct = Math.round(pct * (windowMs / elapsed));
     const runOutMs = endPct > 100 ? Math.round(((100 - pct) / pct) * elapsed) : null;
     return { level: endPct > 100 ? 'critical' : endPct >= 90 ? 'warning' : 'normal', endPct, runOutMs };
