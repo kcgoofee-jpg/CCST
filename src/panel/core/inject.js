@@ -70,12 +70,41 @@ function postProcessingCheck(data) {
 // puts a depth-N injection above every message, where the proxy could not tell it from the preset;
 // the opening text of each one lets the proxy keep it with the current turn (system-placement.js).
 let activatedLore = [];
-export function resetActivatedLore() { activatedLore = []; }
+// Keyword-triggered entries placed before / after the character (inside the system prompt): their text,
+// so the proxy can lift exactly them out when they change from turn to turn (lore-tail.js cutExactLore).
+let triggeredLore = [];
+const MAX_TRIGGERED_CHARS = 200_000;
+export function resetActivatedLore() { activatedLore = []; triggeredLore = []; }
 export function noteActivatedLore(entries) {
     try {
+        const ctx = SillyTavern.getContext();
+        const sub = (t) => { try { return ctx.substituteParams ? ctx.substituteParams(t) : t; } catch { return t; } };
         const list = Array.isArray(entries) ? entries : [...(entries?.values?.() ?? [])];
         activatedLore = list.map((e) => String(e?.comment || e?.uid || '').slice(0, 40)).filter(Boolean).slice(0, 80);
-    } catch { activatedLore = []; }
+        let total = 0;
+        triggeredLore = [];
+        for (const e of list) {
+            if (e?.constant || (e?.position !== 0 && e?.position !== 1) || typeof e?.content !== 'string') continue;
+            const t = sub(e.content).trim();
+            if (t.length < 20 || total + t.length > MAX_TRIGGERED_CHARS) continue;
+            total += t.length;
+            triggeredLore.push(t);
+        }
+    } catch { activatedLore = []; triggeredLore = []; }
+}
+
+/** Opening text of the first and last chat messages in this prompt: where the chat history starts
+ *  and ends. Presets put user / assistant entries before the history (Kemini, Izumi) and after it;
+ *  without these the proxy took the first user message for the start of the chat. */
+export function historyMarks(ctx = SillyTavern.getContext()) {
+    const sub = (t) => { try { return ctx.substituteParams ? ctx.substituteParams(t) : t; } catch { return t; } };
+    const snip = (m) => sub(String(m?.mes ?? '')).trim().slice(0, 40);
+    const shown = (ctx.chat ?? []).filter((m) => !m?.is_system);
+    const ok = (s) => s.length >= 8;
+    return {
+        start: shown.slice(0, 3).map(snip).filter(ok),
+        end: shown.slice(-2).map(snip).filter(ok),
+    };
 }
 
 function enabledPromptIds(oai) {
@@ -168,7 +197,11 @@ export function onSettingsReady(data) {
         const quiet = data.type === 'quiet';
         let yaml = buildIncludeBodyYaml(settings, quiet, slot, data.model ?? '');
         // JSON is valid YAML: the snippets carry quotes, colons and newlines safely.
-        if (!quiet) yaml += `\n  late: ${JSON.stringify(injectedOpenings())}\n  st_fp: ${JSON.stringify(stFingerprint(data))}`;
+        if (!quiet) {
+            yaml += `\n  late: ${JSON.stringify(injectedOpenings())}\n  st_fp: ${JSON.stringify(stFingerprint(data))}`;
+            yaml += `\n  hist: ${JSON.stringify(historyMarks())}\n  gen_type: ${JSON.stringify(String(data.type ?? 'normal'))}`;
+            if (triggeredLore.length) yaml += `\n  lore_text: ${JSON.stringify(triggeredLore)}`;
+        }
         data.custom_include_body = (cleaned ? cleaned + '\n' : '') + yaml;
         preflightCheck(data);
         postProcessingCheck(data);

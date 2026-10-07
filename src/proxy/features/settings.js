@@ -23,6 +23,7 @@ export function normalizeEffort(value) {
 }
 
 const short = (v, n) => (typeof v === 'string' ? v.slice(0, n) : null);
+const strList = (v, max, len) => (Array.isArray(v) ? v.filter((s) => typeof s === 'string' && s.trim()).map((s) => s.trim().slice(0, len)).slice(0, max) : []);
 
 /** The panel's per-request fingerprint, kept to known fields of bounded size. */
 function stFingerprint(fp) {
@@ -125,6 +126,15 @@ export function extractSettings(body) {
         // What SillyTavern had set up for this request (preset, post-processing,
         // entry order / toggles, triggered world info): only for the diagnostic report.
         stFingerprint: stFingerprint(ns.st_fp),
+        // Opening text of the first / last chat messages (panel inject.js historyMarks): where the
+        // chat history starts and ends inside the prompt (system-placement.js applyHistoryBounds).
+        hist: {
+            start: strList(ns.hist?.start, 3, 80),
+            end: strList(ns.hist?.end, 2, 80),
+        },
+        genType: typeof ns.gen_type === 'string' ? ns.gen_type.slice(0, 20) : null,
+        // Text of the keyword-triggered entries inside the system prompt (lore-tail.js cutExactLore).
+        loreText: strList(ns.lore_text, 120, 20_000),
         auxiliary,
         purpose: fromPanel ? purpose : (auxiliary ? 'aux' : 'chat'),
         maxTokens,

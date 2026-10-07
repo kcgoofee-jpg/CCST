@@ -40,6 +40,44 @@ function mergeContent(a, b) {
 }
 
 /**
+ * Where the chat history starts and ends, from the panel's marks (the opening
+ * text of the first and last chat messages). Without them the first user
+ * message was taken for the start of the chat; presets that put user- or
+ * assistant-role entries before the history (Kemini's 「雪融雪降」, Izumi's
+ * 「指南」) then had the whole card and world book treated as per-turn
+ * injections, re-written every turn (measured 2026-10-07: 木屋求生 × Kemini,
+ * 0% from turn 2). Entries before the history become system text (the preset
+ * block); entries after the last chat message — the preset's post-history
+ * part, an assistant-role 「明白了」 among them — become system text after
+ * the player's message, so they go with it instead of turning the reply into
+ * a prefill. A continue keeps its trailing assistant message as the prefill.
+ * @param {Array<{role: string, content: any}>} messages
+ * @param {{ start?: string[], end?: string[] }} hist
+ * @param {string|null} genType  SillyTavern's generation type ('continue', …)
+ * @returns {Array} the same array when nothing applies
+ */
+export function applyHistoryBounds(messages, hist, genType = null) {
+    const start = hist?.start ?? [];
+    const end = hist?.end ?? [];
+    if (!start.length) return messages;
+    const text = (m) => contentToText(m?.content);
+    const has = (m, list) => list.some((s) => text(m).includes(s));
+    const first = messages.findIndex((m) => m?.role !== 'system' && has(m, start));
+    if (first < 0) return messages;
+    let last = end.length ? messages.findLastIndex((m) => m?.role !== 'system' && has(m, end)) : -1;
+    if (last < first || genType === 'continue') last = -1;
+    const asSystem = (m) => (m?.role === 'system' ? m : { role: 'system', content: text(m) });
+    let changed = false;
+    const out = messages.map((m, i) => {
+        const outside = i < first || (last >= 0 && i > last);
+        if (!outside || m?.role === 'system' || !text(m).trim()) return m;
+        changed = true;
+        return asSystem(m);
+    });
+    return changed ? out : messages;
+}
+
+/**
  * @param {Array<{role: string, content: any}>} messages OpenAI messages
  * @param {{ late?: string[] }} [opts] opening text of the prompts SillyTavern
  *   injected into the chat this request (panel). While the chat is shorter

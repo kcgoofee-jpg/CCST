@@ -144,3 +144,15 @@ test('noteTail: a tail that was stable and then changed is a settings change; pe
     assert.equal(noteTail('d', 'x'.repeat(300) + 2), null);
     assert.equal(noteTail('d', 'x'.repeat(300) + 3), null);
 });
+
+test('cutExactLore lifts triggered entries out of the system prompt by their text', async () => {
+    const { cutExactLore } = await import('../src/proxy/features/lore-tail.js');
+    const a = '【柴火】木屋后面的柴堆只够烧两天，湿柴要先烘干。';
+    const b = '【雪地】外面的积雪没过膝盖，出门要绑绑腿防止雪灌进去。';
+    const sys = (...xs) => ['开头规则', ...xs, '结尾规则'].join('\n');
+    const one = cutExactLore(sys(a, b), [a, b]);
+    const two = cutExactLore(sys(b), [b]);
+    assert.equal(one.system, two.system, 'the system prompt is the same whichever entries fired');
+    assert.equal(one.text, `${a}\n\n${b}`);
+    assert.deepEqual(cutExactLore('无关', [a]), { system: '无关', text: '' });
+});

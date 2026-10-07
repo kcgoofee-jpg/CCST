@@ -162,6 +162,32 @@ export function injectedTextFor(raw, context = '') {
     return typeof raw === 'string' ? injected.get(turnKey(raw, context)) ?? null : null;
 }
 
+/**
+ * Lift keyword-triggered world info out of the system prompt by its exact
+ * text (the panel sends the text of each triggered entry placed before /
+ * after the character). Many presets put world info in the system prompt
+ * without a wrapping tag, so the tag-based learning above never finds it,
+ * and each change of the triggered set re-wrote the whole conversation.
+ * @param {string} system
+ * @param {string[]} texts
+ * @returns {{ system: string, text: string }}  text: what was lifted ('' if none)
+ */
+export function cutExactLore(system, texts) {
+    let out = system ?? '';
+    const found = [];
+    for (const t of texts ?? []) {
+        if (typeof t !== 'string' || t.length < 20) continue;
+        const i = out.indexOf(t);
+        if (i < 0) continue;
+        out = out.slice(0, i) + out.slice(i + t.length);
+        found.push(t);
+    }
+    if (!found.length) return { system: system ?? '', text: '' };
+    // The joins around a lifted entry differ with how many were triggered.
+    return { system: out.replace(/\n{3,}/g, '\n\n'), text: found.join('\n\n') };
+}
+export const TRIGGERED_TAG = 'triggered_lore';
+
 /** Replace `from` with `to` in every remembered message (see rewriteCaptured). */
 export function rewriteInjected(from, to) {
     if (!from || from === to) return 0;

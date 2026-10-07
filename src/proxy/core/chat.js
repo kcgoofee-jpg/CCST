@@ -47,9 +47,9 @@ import { makeCompletionId, writeSse, chunkShell, roleChunk, contentChunk, reason
 import { isExpiredTokenError, isRateLimitError, isExtraUsageRequiredError, isStaleSessionError, refreshOAuthToken } from '../features/oauth.js';
 import { explainError, formatErrorForUser } from '../features/errors-zh.js';
 import { recordRequest, promptShape } from '../features/usage-stats.js';
-import { inlineLateSystemMessages } from '../features/system-placement.js';
+import { applyHistoryBounds, inlineLateSystemMessages } from '../features/system-placement.js';
 import { diagnoseCache, describeDiag } from '../features/cache-diag.js';
-import { extractVolatileBlocks, foldTrailingInjections, injectBlocks, injectedTextFor, loreTarget, newLoreOnly, noteTail, rememberInjected, rewriteInjected } from '../features/lore-tail.js';
+import { extractVolatileBlocks, foldTrailingInjections, injectBlocks, injectedTextFor, loreTarget, newLoreOnly, noteTail, rememberInjected, rewriteInjected, cutExactLore, TRIGGERED_TAG } from '../features/lore-tail.js';
 import { dumpEntries, dumpRequest, noteDebugSetting } from '../features/debug-dump.js';
 import { keepReply, trackGeneration } from '../features/reply-keeper.js';
 import { recordRateLimit } from '../features/rate-limit.js';
@@ -566,10 +566,14 @@ async function completeChat(req, res, body, settings, conn) {
     // memory, lore-tail learning and the
     // turn captures / context pin (buildQueryConfig). They may still READ
     // captured turns, which only helps their prompt match the chat's cache.
+    // Preset entries before / after the chat history (system-placement.js applyHistoryBounds).
+    if (settings.systemPlacement === 'inline') messages = applyHistoryBounds(messages, settings.hist, settings.genType);
     if (!settings.auxiliary) try {
         const placed = settings.systemPlacement === 'inline' ? inlineLateSystemMessages(messages, { late: settings.lateSnippets }) : messages;
         const history = placed.filter((m) => m?.role !== 'system');
-        cacheDiag = diagnoseCache(extractSystemText(placed), history, { moveVolatile: settings.loreTail });
+        // Keyword-triggered world info inside the system prompt, by its exact text (lore-tail.js).
+        const exact = settings.loreTail && settings.loreText.length ? cutExactLore(extractSystemText(placed) ?? '', settings.loreText) : null;
+        cacheDiag = diagnoseCache(exact ? exact.system : extractSystemText(placed), history, { moveVolatile: settings.loreTail });
         console.log(`${PLUGIN_TAG} ${describeDiag(cacheDiag)}`);
         // The CLI sends the system prompt as one block whatever it is given,
         // so a split never got its own cache entry (wire capture, 2.1.285).
@@ -593,8 +597,9 @@ async function completeChat(req, res, body, settings, conn) {
         let sent = placed;
         if (settings.loreTail || settings.foldTail) {
             const volatile = settings.loreTail ? cacheDiag?.volatileTags ?? [] : [];
-            const systemText = extractSystemText(placed) ?? '';
+            const systemText = exact ? exact.system : extractSystemText(placed) ?? '';
             const { system, blocks } = volatile.length ? extractVolatileBlocks(systemText, volatile) : { system: systemText, blocks: [] };
+            if (exact?.text) blocks.unshift({ tag: TRIGGERED_TAG, text: exact.text });
             // Inline placement merges this turn's injections into the player's
             // message; next turn ST sends it back as the player wrote it.
             const plain = settings.systemPlacement === 'inline' ? plainPlayerText(messages) : null;

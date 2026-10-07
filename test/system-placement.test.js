@@ -110,3 +110,20 @@ test('a known depth injection above the chat (short chat) goes with the current 
     // Without the hint the fake-acknowledgement rule still applies.
     assert.deepEqual(inlineLateSystemMessages([S('a'), A('ack'), S('b'), U('u')])[1], S('b'));
 });
+
+test('history bounds: preset user/assistant entries before the chat join the system prompt; a post-history assistant entry is no prefill', async () => {
+    const { applyHistoryBounds } = await import('../src/proxy/features/system-placement.js');
+    const msgs = [U('💠雪融雪降 规则'), S('卡'), U('ROLE AND GUIDE'), A('开场白：木屋里很冷'), U('我去清点物资'), A('明白了，接下来'), S('尾部规则')];
+    const hist = { start: ['开场白：木屋里很冷'], end: ['我去清点物资'] };
+    const bounded = applyHistoryBounds(msgs, hist, 'normal');
+    assert.deepEqual(bounded.map((m) => m.role), ['system', 'system', 'system', 'assistant', 'user', 'system', 'system']);
+    const placed = inlineLateSystemMessages(bounded);
+    assert.deepEqual(placed.map((m) => m.role), ['system', 'system', 'system', 'assistant', 'user']);
+    assert.equal(placed.at(-1).content, '我去清点物资\n\n明白了，接下来\n\n尾部规则');
+    // A continue keeps its trailing assistant as the prefill.
+    const cont = applyHistoryBounds([U('规则'), A('开场白：木屋里很冷'), U('继续写'), A('她推开门')], { start: ['开场白：木屋里很冷'], end: ['她推开门'] }, 'continue');
+    assert.equal(cont.at(-1).role, 'assistant');
+    // No marks, or marks not found: unchanged.
+    assert.equal(applyHistoryBounds(msgs, { start: [], end: [] }), msgs);
+    assert.equal(applyHistoryBounds(msgs, { start: ['不存在的开头'], end: [] }), msgs);
+});
