@@ -462,7 +462,7 @@ export function explainCache(entry, prevEntry = null) {
     }
     const equiv = equivalentTokens(entry);
     const noCache = equivalentTokens({ inputTokens: total, outputTokens: entry.outputTokens });
-    reasons.push(`这一轮约合 ${k(equiv)} 等效输入 token（输出 ${k(entry.outputTokens ?? 0)} 占其中 ${equiv ? Math.round((5 * (entry.outputTokens ?? 0) / equiv) * 100) : 0}%）；完全不用缓存约 ${k(noCache)}。按官方价格比例折算，订阅额度怎么算官方未公开，适合前后对比。`);
+    reasons.push(`这一轮约合 ${k(equiv)} 等效输入 token；完全不用缓存约 ${k(noCache)}。按官方价格比例折算，订阅额度怎么算官方未公开，适合前后对比。`);
     return { read, wrote, hitPct, equiv, firstTurn: !d || !!d.firstTurn, headline: `读取缓存 ${k(read)} · 重新写入 ${k(wrote)} · 命中 ${hitPct}% · 约 ${k(equiv)} 等效`, reasons };
 }
 
