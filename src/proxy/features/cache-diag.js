@@ -475,7 +475,10 @@ export function explainCache(entry, prevEntry = null) {
             reasons.push('异常：系统提示词和聊天记录都没变、也没过缓存有效期，聊天记录却没读到缓存，代理的「逐轮还原」可能失效了（连着两轮会自动重置一次）。持续出现的话，在 CCST 文件夹运行 node scripts/wire-diagnosis.mjs，把输出发给维护者。刚重启过代理的第一轮除外。');
         }
         if (d.reroll) {
-            reasons.unshift('这是重roll：聊天记录和上一次请求一样，几乎全部读缓存。它不代表正常新一轮的开销，统计里的命中率不算它。');
+            // A reroll normally reads everything back; when it didn't, the reason above is the point.
+            reasons.unshift(hitPct >= 50
+                ? '这是重roll：聊天记录和上一次请求一样，几乎全部读缓存。它不代表正常新一轮的开销，统计里的命中率不算它。'
+                : `这是重roll，但没读到缓存：${d.systemChanged ? '两次之间系统提示词变了（多半是改了角色卡、用户设定或预设条目），' : ''}这一次整段重写。统计里的命中率不算它。`);
         }
         if (!reasons.length) {
             reasons.push(read > 0

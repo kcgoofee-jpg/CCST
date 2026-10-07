@@ -342,3 +342,12 @@ test('cache writes of unknown TTL count as 1 hour in both the equivalent tokens 
     assert.match(readFileSync(new URL('../src/shared/backends.js', import.meta.url), 'utf8'), /writeMult = cacheWriteMultiplier\(opts\.cacheTtl\)/);
     assert.match(readFileSync(new URL('../src/proxy/features/usage-stats.js', import.meta.url), 'utf8'), /estimateCostUsd\(entry, entry\.backend, \{ cacheTtl: entry\.cacheTtl \}\)/);
 });
+
+test('a reroll that read nothing does not claim it read everything', async () => {
+    const { explainCache } = await import('../src/proxy/features/cache-diag.js');
+    const base = { ok: true, model: 'claude-opus-5-5', inputTokens: 2, outputTokens: 2600, cacheTtl: '1h' };
+    const missed = explainCache({ ...base, cacheReadTokens: 0, cacheCreationTokens: 39878, cacheDiag: { chat: 'p1', firstTurn: false, reroll: true, systemChanged: true, systemDiffAt: 5609, systemDiffLabel: '<story_setting>', historyDiffAt: null, historyLen: 2 } });
+    assert.match(missed.reasons[0], /^这是重roll，但没读到缓存：两次之间系统提示词变了/);
+    const hit = explainCache({ ...base, cacheReadTokens: 65385, cacheCreationTokens: 0, cacheDiag: { chat: 'p1', firstTurn: false, reroll: true, systemChanged: false, historyDiffAt: null, historyLen: 6 } });
+    assert.match(hit.reasons[0], /几乎全部读缓存/);
+});
