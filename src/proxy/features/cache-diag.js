@@ -317,8 +317,26 @@ export function equivalentTokens(e) {
  * `entry` / `prevEntry` are usage-stats records; the first turn of a chat (or after a
  * proxy restart) never counts.
  */
+const TTL_MS = { '5m': 5 * 60_000, '1h': 60 * 60_000 };
+
+/**
+ * Minutes between the starts of two requests, when the previous turn's cache had
+ * already expired by then (its write TTL — 5 min or 1 h — is in usage-stats
+ * cacheTtl; unknown counts as 1 h). The cache is refreshed when a request starts,
+ * not when its reply ends: a 4-minute reply plus reading it outlasts 5 minutes.
+ * @returns {{ gapMin: number, ttl: string } | null}
+ */
+export function cacheExpired(entry, prevEntry) {
+    const start = (e) => (Number.isFinite(e?.at) ? e.at - (e.durationMs ?? 0) : NaN);
+    const gap = start(entry) - start(prevEntry);
+    const ttl = prevEntry?.cacheTtl === '5m' ? '5m' : '1h';
+    if (!(gap > TTL_MS[ttl])) return null;
+    return { gapMin: Math.round(gap / 60_000), ttl };
+}
+
 export function cacheAnomaly(entry, prevEntry) {
     if (!entry?.ok || !prevEntry?.ok) return false;
+    if (cacheExpired(entry, prevEntry)) return false; // expired, not broken
     const d = entry.cacheDiag;
     if (!d || d.firstTurn || !prevEntry.cacheDiag?.chat || prevEntry.cacheDiag.chat !== d.chat) return false;
     if (d.systemChanged) return false;
@@ -368,8 +386,16 @@ export function explainCache(entry, prevEntry = null) {
         // changed, yet the read did not grow past last turn's prompt — the
         // history is being re-written again. Most likely a CLI update changed
         // how it attaches its per-turn reminders.
+        const expired = prevEntry?.ok ? cacheExpired(entry, prevEntry) : null;
+        if (expired) {
+            reasons.push(expired.ttl === '5m'
+                ? `距上一轮开始已过 ${expired.gapMin} 分钟，上一轮的缓存只按 5 分钟写入，已经过期，这一轮整段重写。5.2.1 起代理固定要求 1 小时缓存；更新后仍看到这条，说明环境变量 CLAUDE_CODE_PROMPT_CACHE_TTL 或 FORCE_PROMPT_CACHING_5M 被设成了 5 分钟。`
+                : `距上一轮开始已过 ${expired.gapMin} 分钟，超过了 1 小时的缓存有效期，这一轮整段重写，属正常现象。`);
+        } else if (entry.cacheTtl === '5m') {
+            reasons.push('这一轮的缓存只按 5 分钟写入：下一轮若在 5 分钟后才发（长回复加阅读时间通常会超过），就读不到了。5.2.1 起代理固定要求 1 小时；仍看到这条请检查环境变量 CLAUDE_CODE_PROMPT_CACHE_TTL / FORCE_PROMPT_CACHING_5M。');
+        }
         if (cacheAnomaly(entry, prevEntry)) {
-            reasons.push('异常：系统提示词和聊天记录都没变，聊天记录却没读到缓存。可能是 Claude Code CLI 升级后改了附加提醒的方式，代理的「逐轮还原」失效了（连着两轮会自动重置一次）。自己恢复：在 CCST 文件夹里运行 npm install @anthropic-ai/claude-agent-sdk@出问题之前的版本 --save-exact，删掉 data/cli-context.json，重启代理——只回退 CCST 本身没用，出问题的是 SDK。刚重启过代理的第一轮除外。');
+            reasons.push('异常：系统提示词和聊天记录都没变、也没过缓存有效期，聊天记录却没读到缓存，代理的「逐轮还原」可能失效了（连着两轮会自动重置一次）。持续出现的话，在 CCST 文件夹运行 node scripts/wire-diagnosis.mjs，把输出发给维护者。刚重启过代理的第一轮除外。');
         }
         if (d.reroll) {
             reasons.unshift('这是重roll：聊天记录和上一次请求一样，几乎全部读缓存。它不代表正常新一轮的开销，统计里的命中率不算它。');
@@ -377,7 +403,7 @@ export function explainCache(entry, prevEntry = null) {
         if (!reasons.length) {
             reasons.push(read > 0
                 ? '系统提示词和聊天记录都和上一轮一致，只写入了新增的内容。'
-                : '内容和上一轮一致却没读到缓存：可能距离上一轮超过 1 小时，缓存已过期。');
+                : '内容和上一轮一致却没读到缓存。');
         }
     }
     const equiv = equivalentTokens(entry);

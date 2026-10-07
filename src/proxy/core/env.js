@@ -100,6 +100,15 @@ export function buildSubprocessEnv({ envPins, maxTokens, apiKey, backend = null 
         env.CLAUDE_CODE_PROMPT_CACHE_TTL ??= '1h';
     }
 
+    // The subscription does NOT reliably get 1 hour either. CLI 2.1.285 picks the TTL per
+    // request: 1h only while the account's server-side flag `tengu_prompt_cache_1h_config`
+    // lists the "sdk" query source and the account is not on extra usage — otherwise 5 minutes.
+    // A long RP reply (3–4 min) plus reading it outlasts 5 minutes, so every new turn found the
+    // cache expired and re-wrote everything, while a quick reroll still hit (2026-10 「缓存 0%」
+    // reports, after 5.2.0 had pinned the SDK). The env override is checked before both
+    // conditions; an explicit CLAUDE_CODE_PROMPT_CACHE_TTL in the environment still wins.
+    env.CLAUDE_CODE_PROMPT_CACHE_TTL ??= '1h';
+
     return env;
 }
 

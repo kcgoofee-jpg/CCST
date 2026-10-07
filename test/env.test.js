@@ -41,9 +41,9 @@ test('the proxy\'s own CLAUDE_SUBSCRIPTION_* settings never reach the CLI', () =
     }
 });
 
-test('API-key mode asks the CLI for a 1-hour prompt cache; subscription mode is left alone', () => {
+test('both API-key and subscription mode ask the CLI for a 1-hour prompt cache', () => {
     const sub = buildSubprocessEnv({ envPins: {}, maxTokens: undefined, apiKey: null });
-    assert.equal(sub.CLAUDE_CODE_PROMPT_CACHE_TTL, process.env.CLAUDE_CODE_PROMPT_CACHE_TTL);
+    assert.equal(sub.CLAUDE_CODE_PROMPT_CACHE_TTL, process.env.CLAUDE_CODE_PROMPT_CACHE_TTL ?? '1h');
     const api = buildSubprocessEnv({ envPins: {}, maxTokens: undefined, apiKey: 'sk-ant-test' });
     assert.equal(api.ANTHROPIC_API_KEY, 'sk-ant-test');
     assert.equal(api.CLAUDE_CODE_PROMPT_CACHE_TTL, process.env.CLAUDE_CODE_PROMPT_CACHE_TTL ?? '1h');

@@ -11,7 +11,7 @@
 ![Node](https://img.shields.io/badge/node-%E2%89%A518-339933)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
 
-[Install](#install-5-minutes) · [Guide](docs/使用指南.md) · [Roadmap](docs/路线图.md) · [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
+[Install](#install-5-minutes) · [FAQ](#faq) · [Guide](docs/使用指南.md) · [Roadmap](docs/路线图.md) · [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
 
 <sub>Not an official Anthropic product and not affiliated with Anthropic. Claude is a trademark of Anthropic.</sub>
 
@@ -19,6 +19,9 @@
 <img src="docs/assets/panel-status.png" width="200" alt="Status tab">
 
 </div>
+
+> [!IMPORTANT]
+> **This branch (main) is in maintenance**: from 5.2.x on it only gets critical bug fixes; existing users can keep using it. The next generation (a direct proxy written in Rust that no longer depends on the Claude Code CLI) is being built on the [`dev`](https://github.com/kcgoofee-jpg/CCST/tree/dev) branch.
 
 > The panel's interface is in Chinese for now.
 
@@ -117,6 +120,17 @@ The panel has four tabs; you mostly need the first. The first time, click **一�
 | **状态** (Status) | Last turn in this chat: time and cache hit (refreshed when a reply ends); a line when the latest reply was refused, cut off or empty; subscription quota; 7-day usage |
 | **设置** (Settings) | Proxy address, backend (subscription / API key / Bedrock …), thinking options, and an Advanced group (cache and context switches, thinking depth for background requests) |
 | **其他** (Other) | Phone connection, Mac remote, debugging; plus an experimental, off-by-default "体检（实验）" group (length, banned words, repeats, card check; may give false alarms depending on preset and extensions) |
+
+## FAQ
+
+**Cache hit stays at 0%; only rerolls hit.**
+Update to **5.2.1** and restart SillyTavern. The cache was expiring: the Claude Code CLI sometimes writes the cache for only 5 minutes, and a 3–4 minute reply plus reading time outlasts that, while a reroll is sent right away. From 5.2.1 the proxy always asks for a 1-hour cache. No downgrade and no file deletion needed.
+
+**The Status tab says the system prompt / history differs from message N on.**
+Your preset or world info changes the content every turn (keyword-triggered world info, random macros, regexes that rewrite old messages). The details line says where and what to do.
+
+**Still unexplained.**
+Run `node scripts/wire-diagnosis.mjs` in the CCST folder (uses about 30k tokens of quota) and send the output to the maintainer. Maintainer notes: [cache troubleshooting](docs/缓存命中排查.md) (Chinese).
 
 ## Other setups
 

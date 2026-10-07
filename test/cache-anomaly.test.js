@@ -29,14 +29,16 @@ test('cacheAnomaly: same chat, nothing changed, read below last turn\'s prompt',
     assert.equal(cacheAnomaly({ ...entry('c1', 3_000, 30_000), model: 'claude-sonnet-5' }, prev), false, 'another model re-writes on its own');
     assert.equal(cacheAnomaly({ ...entry('c1', 3_000, 30_000), cacheDiag: { ...diag('c1'), firstTurn: true } }, prev), false, 'the first turn after a restart');
     assert.equal(cacheAnomaly(entry('c1', 3_000, 30_000), null), false);
+    const t = 1_800_000_000_000;
+    assert.equal(cacheAnomaly({ ...entry('c1', 3_000, 30_000), at: t + 2 * 3_600_000, durationMs: 1000 }, { ...prev, at: t, durationMs: 1000 }), false, 'past the 1-hour TTL the cache expired');
 });
 
 test('explainCache still says it out loud, with the way to fix it', () => {
     const prev = entry('c1', 40_000, 2_000);
     const line = explainCache(entry('c1', 3_000, 30_000), prev).reasons.find((r) => r.startsWith('异常'));
     assert.ok(line, 'the panel keeps the explanation');
-    assert.match(line, /claude-agent-sdk@/);
-    assert.match(line, /data\/cli-context\.json/);
+    assert.match(line, /wire-diagnosis\.mjs/);
+    assert.doesNotMatch(line, /claude-agent-sdk@/, 'no more 「downgrade the SDK」: 5.2.0 pins it, and it never fixed an expired cache');
 });
 
 test('two turns in a row of it reset the replay and tell the panel (#26)', quiet(async () => {

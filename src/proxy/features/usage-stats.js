@@ -135,6 +135,9 @@ export function recordRequest(r) {
         outputTokens: u.output_tokens ?? 0,
         cacheReadTokens: u.cache_read_input_tokens ?? 0,
         cacheCreationTokens: u.cache_creation_input_tokens ?? 0,
+        // Which TTL the CLI actually asked for: a 5-minute write is gone before the
+        // next turn of a long reply (cache-diag.js cacheExpired).
+        cacheTtl: writtenTtl(u),
         textChars: r.textChars ?? 0,
         finish: r.clientClosed ? 'client_closed' : (r.finish ?? null),
         shape: r.shape ?? null,
@@ -164,6 +167,15 @@ export function recordRequest(r) {
     return entry;
 }
 
+/** '1h' / '5m' from the API's cache_creation split; null when nothing was written. */
+export function writtenTtl(u) {
+    const c = u?.cache_creation;
+    if (!c || typeof c !== 'object') return null;
+    if ((c.ephemeral_1h_input_tokens ?? 0) > 0) return '1h';
+    if ((c.ephemeral_5m_input_tokens ?? 0) > 0) return '5m';
+    return null;
+}
+
 const ANOMALY_RESET_AFTER = 2;
 let anomalyStreak = 0;
 
@@ -177,7 +189,7 @@ function noteCacheAnomaly(entry, prevEntry) {
     anomalyStreak += 1;
     if (anomalyStreak < ANOMALY_RESET_AFTER) return;
     anomalyStreak = 0;
-    resetReplayState(`SDK ${SDK_VERSION} 升级后缓存异常，已自动重置逐轮还原状态，本轮缓存会全量重写一次`);
+    resetReplayState(`连续两轮内容没变却没读到缓存（SDK ${SDK_VERSION}），已自动重置逐轮还原状态，本轮缓存会全量重写一次`);
     entry.notices = [...(entry.notices ?? []), 'replay-reset'];
 }
 
