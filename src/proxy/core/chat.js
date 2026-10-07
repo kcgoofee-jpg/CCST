@@ -36,7 +36,7 @@ import { renderTranscript } from './transcript.js';
 import { extractSettings } from '../features/settings.js';
 import { parseModelRequest, effortForModel, isExtendedContextKnownUnavailable, recordExtendedContextUnavailable } from './models.js';
 import { buildSubprocessEnv, pickApiKeyFromAuthHeader } from './env.js';
-import { tapBaseUrl } from '../features/wire-tap.js';
+import { tapBaseUrl, tapSkipReason } from '../features/wire-tap.js';
 import { resolveBackendConfig } from '../features/backend-config.js';
 import { buildSystemPrompt, extractSystemText } from './system-prompt.js';
 import { assembleEntries, splitHistoryForResume, currentToSdkUserMessage, singleMessageStream } from '../features/jsonl-entries.js';
@@ -56,6 +56,14 @@ import { keepReply, trackGeneration } from '../features/reply-keeper.js';
 import { recordRateLimit } from '../features/rate-limit.js';
 
 const PLUGIN_TAG = '[claude-subscription]';
+
+let tapSkipWarned = null;
+/** Say once per reason (not every turn) that diagnostics capture is skipped. */
+function warnTapSkippedOnce(reason) {
+    if (tapSkipWarned === reason) return;
+    tapSkipWarned = reason;
+    console.warn(`${PLUGIN_TAG} 诊断抓包不启用：${reason}。聊天照常直连。`);
+}
 const MAX_RATE_LIMIT_RETRIES = 2;
 // Below this max_tokens, the CLI's derived thinking budget violates the
 // API's >= 1024 floor on non-adaptive models (verified live).
@@ -698,7 +706,10 @@ async function completeChat(req, res, body, settings, conn) {
     let oneMActive = modelInfo.oneM && !isExtendedContextKnownUnavailable();
     // Diagnostics (panel → 状态 → 诊断): route the CLI through the in-process wire
     // capture. Anthropic's own endpoint only — other backends keep their URL.
-    const tapUrl = settings.diagCapture && (billedAs === 'subscription' || billedAs === 'apikey')
+    // Never with a non-http proxy in the environment (socks5:// …): the forwarder would bypass it.
+    const tapSkip = settings.diagCapture ? tapSkipReason() : null;
+    if (tapSkip) warnTapSkippedOnce(tapSkip);
+    const tapUrl = settings.diagCapture && !tapSkip && (billedAs === 'subscription' || billedAs === 'apikey')
         ? await tapBaseUrl().catch((err) => { console.warn(`${PLUGIN_TAG} 诊断抓包没能启动，本轮不记录：${err.message}`); return null; })
         : null;
     let didTokenRefresh = false;

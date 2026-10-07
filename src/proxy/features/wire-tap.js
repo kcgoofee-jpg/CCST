@@ -13,8 +13,10 @@
 // forwards every byte unchanged (credentials included, never stored) and
 // keeps the last requests IN MEMORY: the request body, the rate-limit
 // headers and the usage of the reply. Nothing is written to disk; the panel
-// reads it through diag-report.js. Off by default: a custom base URL can
-// change some CLI behavior, so capture is for diagnosing, not for every day.
+// reads it through diag-report.js. On by default in the panel (so a report
+// already has the data when someone needs it); skipped when the environment
+// routes through a proxy the forwarder cannot speak (see tapSkipReason), and
+// a forwarder that fails to start just means this turn is not recorded.
 
 import { createServer, request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
@@ -33,9 +35,28 @@ function upstreamBase() {
     return new URL(process.env.CLAUDE_SUBSCRIPTION_DEV_BASE_URL || 'https://api.anthropic.com');
 }
 
+const PROXY_VARS = ['HTTPS_PROXY', 'https_proxy', 'ALL_PROXY', 'all_proxy', 'HTTP_PROXY', 'http_proxy'];
+
+/**
+ * Why the CLI must NOT go through the forwarder, or null when it may. The forwarder only knows how to
+ * reach Anthropic directly or through an http:// CONNECT proxy; with a socks5:// (or https://, or
+ * scheme-less) proxy in the environment it would bypass the proxy the CLI is meant to use, and on a
+ * network that needs it every chat would fail. Then capture is skipped and the CLI talks to Anthropic itself.
+ */
+export function tapSkipReason(env = process.env) {
+    for (const k of PROXY_VARS) {
+        const v = String(env[k] ?? '').trim();
+        if (!v) continue;
+        let protocol = '';
+        try { protocol = new URL(v).protocol; } catch { /* not a URL */ }
+        if (protocol !== 'http:') return `${k} 是 ${protocol ? protocol.replace(/:$/, '') : '无法识别的'}代理，诊断转发口只支持 http 代理`;
+    }
+    return null;
+}
+
 /** An http:// proxy from the environment (HTTPS_PROXY & co.), if any: the CLI would have used it. */
 function envProxy() {
-    for (const k of ['HTTPS_PROXY', 'https_proxy', 'ALL_PROXY', 'all_proxy', 'HTTP_PROXY', 'http_proxy']) {
+    for (const k of PROXY_VARS) {
         const v = process.env[k];
         if (!v) continue;
         try {
