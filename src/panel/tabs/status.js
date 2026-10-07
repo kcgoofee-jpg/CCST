@@ -290,8 +290,10 @@ function lastTurnCard(data) {
         if (cost) card.append(cost);
     }
     // The first reason is the conclusion; everything else is detail.
-    // 第一轮的说明标题已经写了，不再重复
-    const [first, ...rest] = c.firstTurn ? c.reasons.filter((r) => !r.startsWith('本聊天的第一轮')) : c.reasons;
+    // 第一轮的说明标题已经写了；「花在」怎么算的说明只放详情
+    const reasons = c.reasons.filter((r) => !(c.firstTurn && r.startsWith('本聊天的第一轮')));
+    const lead = reasons.find((r) => !r.startsWith('「花在」'));
+    const [first, ...rest] = lead ? [lead, ...reasons.filter((r) => r !== lead)] : [null, ...reasons];
     if (first) card.append(el('small', 'cm-hint cm-cache-reason', first));
     const ph = last?.phases;
     const sec = (v) => (v / 1000).toFixed(1);
