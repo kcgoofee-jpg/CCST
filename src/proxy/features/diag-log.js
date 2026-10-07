@@ -5,7 +5,7 @@
 // Inside SillyTavern the proxy's console lines end up in SillyTavern's
 // terminal window, which the panel cannot read and users rarely copy whole.
 // Keep the proxy's own lines (tagged [claude-subscription]) in a small ring
-// so 「复制诊断报告」 carries them. Lines are what the proxy logs anyway: no
+// so 「导出诊断文件」 carries them. Lines are what the proxy logs anyway: no
 // chat text (the proxy never logs message content).
 
 const MAX_LINES = 300;

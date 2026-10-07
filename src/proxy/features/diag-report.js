@@ -3,7 +3,7 @@
 // ──────────────────────────────────────────────
 //
 // Asking a user to run scripts and dig through folders did not work (2026-10
-// 「缓存 0%」: the cause could not be found remotely). The panel's 「复制诊断报告」
+// 「缓存 0%」: the cause could not be found remotely). The panel's 「导出诊断文件」
 // takes this text, adds what only the browser knows (SillyTavern version,
 // prompt post-processing, preset, extensions) and puts it on the clipboard.
 //

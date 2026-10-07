@@ -29,6 +29,6 @@ Run step 2 again, then restart SillyTavern. The installer updates both the plugi
 ## Problems
 
 - **Install failed:** send the `CCST安装日志.txt` file on your Desktop.
-- **Chat errors or low cache hits:** CCST panel → 状态 → 复制诊断报告, after two or three turns.
+- **Chat errors or low cache hits:** after two or three turns, CCST panel → 状态 → 导出诊断文件, and send the file privately. It contains the character card and chat text.
 
 The old README is archived in [docs/归档](docs/归档/README-6.0.1.en.md). License: [AGPL-3.0](LICENSE).

@@ -11,7 +11,6 @@ import { shortModel } from '../core/connection.js';
 import { fetchProxy, proxyErrorText } from '../core/proxy.js';
 import { el, note, iconButton, group, collapsible, stateLine, button, toggleRow } from '../core/dom.js';
 import { notify } from '../core/notify.js';
-import { copyText } from '../core/external.js';
 import { refreshAll, refreshQuota, refreshStats } from '../core/live.js';
 import { getSettings, saveSettingsDebounced } from '../core/settings.js';
 import { promptMutators } from '../core/inject.js';
@@ -472,41 +471,31 @@ async function proxyText(path, direct) {
 function buildDiagGroup() {
     const g = group('诊断');
     const settings = getSettings();
-    const copy = button('复制诊断报告', async () => {
-        copy.disabled = true;
+    // One file with everything: the readable report first, then the raw data (captured requests, last full
+    // request). Users send the file instead of pasting a wall of text into a chat box.
+    const save = button('导出诊断文件', async () => {
+        save.disabled = true;
         try {
-            const proxyPart = await proxyText('/diag/report', '/v1/diag/report').then((r) => r.text());
-            const text = `# CCST 诊断报告 ${new Date().toLocaleString()}\n\n${await clientSection()}\n\n${proxyPart}\n`;
-            if (await copyText(text)) {
-                notify('ok', '已复制诊断报告', '直接粘贴发给维护者即可（不含聊天内容）。', { ms: 8000 });
-            } else {
-                showFallback(text);
-            }
-        } catch (err) {
-            notify('warn', '没拿到诊断报告', proxyErrorText('诊断报告', err) ?? String(err?.message ?? err));
-        } finally {
-            copy.disabled = false;
-        }
-    }, { icon: 'fa-copy', primary: true });
-    copy.title = '缓存或回复不对时发给维护者；不含聊天内容';
-    const full = button('下载完整请求', async () => {
-        try {
-            const data = await proxyText('/diag/full', '/v1/diag/full').then((r) => r.json());
-            data.client = await clientSection();
-            const blob = new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' });
+            const [report, full] = await Promise.all([
+                proxyText('/diag/report', '/v1/diag/report').then((r) => r.text()),
+                proxyText('/diag/full', '/v1/diag/full').then((r) => r.json()),
+            ]);
+            const stamp = new Date();
+            const text = `# CCST 诊断报告 ${stamp.toLocaleString()}\n\n${await clientSection()}\n\n${report}\n\n## 原始数据\n\n${JSON.stringify({ ...full, report: undefined }, null, 1)}\n`;
             const a = el('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = `ccst-diag-${Date.now()}.json`;
+            a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+            a.download = `ccst-诊断-${stamp.getMonth() + 1}${String(stamp.getDate()).padStart(2, '0')}-${String(stamp.getHours()).padStart(2, '0')}${String(stamp.getMinutes()).padStart(2, '0')}.txt`;
             a.click();
             setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+            notify('ok', '诊断文件已下载', '在浏览器的下载文件夹里。里面有角色卡和聊天原文：私发给作者，别公开贴。', { ms: 10000 });
         } catch (err) {
-            notify('warn', '没拿到完整请求', proxyErrorText('完整请求', err) ?? String(err?.message ?? err));
+            notify('warn', '没拿到诊断', proxyErrorText('诊断', err) ?? String(err?.message ?? err));
+        } finally {
+            save.disabled = false;
         }
-    }, { icon: 'fa-download', text: true });
-    full.title = '含角色卡、预设和聊天原文：只在维护者要时发，别公开贴';
-    const row = el('div', 'cm-btn-row');
-    row.append(copy, full);
-    g.body.append(row);
+    }, { icon: 'fa-download', primary: true });
+    save.title = '缓存或回复不对时发给作者；含角色卡和聊天原文，别公开贴';
+    g.body.append(save);
     g.body.append(toggleRow({
         id: 'claudeMaxDiagCapture',
         title: '记录原始请求',
@@ -514,16 +503,5 @@ function buildDiagGroup() {
         checked: !!settings.diagCapture,
         onChange: (on) => { getSettings().diagCapture = on; saveSettingsDebounced(); },
     }));
-    const fallback = el('textarea', 'text_pole');
-    fallback.id = 'claude_max_diag_fallback';
-    fallback.rows = 8;
-    fallback.hidden = true;
-    g.body.append(fallback);
-    function showFallback(text) {
-        fallback.value = text;
-        fallback.hidden = false;
-        fallback.select();
-        notify('warn', '没能自动复制', '报告已放在下面的框里，全选复制即可。');
-    }
     return g.root;
 }

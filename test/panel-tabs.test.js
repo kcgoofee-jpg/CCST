@@ -64,8 +64,9 @@ test('状态: no 缓存建议; the last-turn line leaves the model to the header
     assert.ok(!status.includes('缓存建议') && !status.includes('renderCacheCard'));
     assert.doesNotMatch(status, /shortModel\(last\.model\)/);
     assert.match(status, /group\('世界书缓存', \{ id: 'claude_max_lore_sec' \}\);\s*lore\.root\.hidden = true;/);
-    assert.ok(status.indexOf("button('复制诊断报告'") < status.indexOf("button('下载完整请求'"));
-    assert.ok(status.indexOf("button('下载完整请求'") < status.indexOf("title: '记录原始请求'"));
+    // One export button (report + raw data in one file), then the capture switch.
+    assert.ok(!status.includes("button('复制诊断报告'") && !status.includes("button('下载完整请求'"));
+    assert.ok(status.indexOf("button('导出诊断文件'") > 0 && status.indexOf("button('导出诊断文件'") < status.indexOf("title: '记录原始请求'"));
     assert.match(src('features/lore-cache.js'), /showSection\(parts\.length > 0\)/);
 });
 

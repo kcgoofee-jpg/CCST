@@ -23,8 +23,10 @@ const RULES = [
     {
         code: 'reasoning_extraction',
         test: /reasoning_extraction/i,
-        message: 'Claude 拒绝了这条请求：预设让模型把思考过程写进回复',
-        hint: 'Opus 5、Opus 5.5、Sonnet 5.5 会拒绝这样的请求，拒绝了也照常计费，别反复重试。把预设里让模型输出思考过程（<thinking>、草稿、自检注释）的条目关掉；想看写在正文里的思考，改用 Opus 4.6 并把思考模式关闭。',
+        message: 'Opus 5.5 拦下了这条：被判为要求交出思考过程',
+        // Measured 2026-10-08 (图灵预设 × Opus 5.5): 10 of 14 blocked; a reroll of the same request sometimes
+        // passed; every block still wrote ~40k cache twice (the CLI asks once more); Opus 4.6 passed.
+        hint: '多半是预设里要求「思考中按步骤完成 / 写思维链、草稿」的条目。关掉它，或换 Opus 4.6。重 roll 偶尔能过，但每次被拦都照扣额度。',
     },
     {
         code: 'safeguards',

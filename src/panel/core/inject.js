@@ -20,7 +20,9 @@ import { chatKeyOf } from './chat-key.js';
 const COT_TAGS = 'thinking|think|cot|draft_notes|draft|scratchpad|reasoning|analysis|思考|思维链';
 const COT_ASK = new RegExp(
     `(?:输出|写出|写下|先写|先在|用全英文|放进|output|write)[^\\n]{0,40}<(?:${COT_TAGS})>` +
-    `|<(?:${COT_TAGS})>[^\\n]{0,40}(?:中思考|里思考|内思考|中分析|里分析)`, 'i');
+    `|<(?:${COT_TAGS})>[^\\n]{0,40}(?:中思考|里思考|内思考|中分析|里分析)` +
+    // 「写正文前在思考中逐步完成以下步骤，每一步都要写出具体结论」(图灵预设的思维链条目，实测 Opus 5.5 十四次拦了十次)
+    '|(?:在|于)思考(?:中|里|时)[^\\n]{0,20}(?:逐步|按步骤|步骤|写出|完成以下)', 'i');
 const warnedPresets = new Set();
 function preflightCheck(data) {
     // Verified live: Opus 5 refuses these too, not only Opus 5.5 (the docs say 5.5 only).
@@ -40,9 +42,8 @@ function preflightCheck(data) {
     const where = asked
         ? `发现这段要求：「${asked[0].slice(0, 60)}」（多半在预设条目或角色卡的世界书里）。`
         : `预设「${preset}」要求模型把思考（<thinking> / <cot>）写进回复。`;
-    notify('warn', 'Opus 5 / 5.5 可能会拦这条请求',
-        `${where}这类条目让模型把思考写进回复，Opus 5、Opus 5.5、Sonnet 5.5 会拒绝这样的请求（拒绝了也照常计费）。` +
-        '把那一条关掉；想看写在正文里的思考，用 Opus 4.6 并把思考模式关闭。',
+    notify('warn', 'Opus 5.5 多半会拦这条',
+        `${where}关掉那一条，或换 Opus 4.6。被拦也照扣额度。`,
         { ms: 20000 });
 }
 
