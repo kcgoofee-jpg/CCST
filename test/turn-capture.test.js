@@ -377,3 +377,14 @@ test('rewriteCaptured swaps an old post-history block in captured turns', async 
     assert.equal(rewriteCaptured('\n\n<fmt>旧格式</fmt>', ''), 1);
     assert.equal(sentTextFor('你好', ''), '你好');
 });
+
+test('a player message wrapped only while it is the newest (Kemini <interactive_input>) is found bare next turn', async () => {
+    const { createTurnCollector, sentTextFor, __resetTurnCaptures } = await import('../src/proxy/features/turn-capture.js');
+    __resetTurnCaptures();
+    const wrapped = '<interactive_input>\n我走到窗边\n</interactive_input>';
+    const c = createTurnCollector(`规则\n\n${wrapped}`, wrapped, null, '开场');
+    c.onAppend([{ type: 'user', uuid: 'u', message: { role: 'user', content: `规则\n\n${wrapped}` } }, { type: 'assistant', uuid: 'a' }]);
+    assert.equal(sentTextFor('我走到窗边', '开场'), `规则\n\n${wrapped}`);
+    assert.equal(sentTextFor('我走到窗边', '另一段回复'), null, 'only under the same reply context');
+    assert.equal(sentTextFor('我走到', '开场'), null, 'part of the message is not the same turn');
+});

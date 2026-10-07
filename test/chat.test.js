@@ -255,6 +255,26 @@ test('dry run: a turn with the preset\'s post-history entries merged in is found
     assert.equal(sentTextFor('问她试拍要准备什么', '开场'), `问她试拍要准备什么\n\n${tail.content}`);
 }));
 
+test('dry run: preset entries around the chat (Kemini layout) — the turn is found again next turn', quiet(async () => {
+    __setSdkForTesting(fakeSdk());
+    __resetTurnCaptures();
+    const msgs = [
+        { role: 'user', content: '💠雪融雪降 规则很多很多' }, { role: 'system', content: '角色卡\n【柴火】木屋后面的柴堆只够烧两天，湿柴要先烘干。\n卡的结尾' },
+        { role: 'assistant', content: '开场白：木屋里很冷' }, { role: 'user', content: '我先清点物资' },
+        { role: 'system', content: '深度注入' }, { role: 'assistant', content: '明白了，接下来' }, { role: 'system', content: '尾部规则' },
+    ];
+    const r = await fetch(`${base}/v1/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+        model: 'claude-opus-5', stream: false, messages: msgs,
+        claude_subscription: { effort: 'low', debug_dump: true, dry_run: true, hist: { start: ['开场白：木屋里很冷'], end: ['我先清点物资'] }, gen_type: 'normal', lore_text: ['【柴火】木屋后面的柴堆只够烧两天，湿柴要先烘干。'] },
+    }) });
+    assert.equal(r.status, 200);
+    const { sentTextFor } = await import('../src/proxy/features/turn-capture.js');
+    const sent = sentTextFor('我先清点物资', '开场白：木屋里很冷');
+    assert.ok(sent, 'the turn is found by the player text');
+    assert.match(sent, /^<triggered_lore>\n【柴火】/);
+    assert.match(sent, /我先清点物资\n\n深度注入\n\n明白了，接下来\n\n尾部规则$/);
+}));
+
 function limitSdk({ text, mode }) {
     return { query() {
         return (async function* run() {

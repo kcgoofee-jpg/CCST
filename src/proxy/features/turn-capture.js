@@ -115,6 +115,7 @@ export function createTurnCollector(currentText, keyText = currentText, model = 
                 if (done) break;
                 if (!collecting) {
                     if (e?.type === 'user' && entryText(e) === currentText) collecting = [e];
+                    else if (e?.type === 'user' && debugCapture()) console.log(`[claude-subscription] capture: 用户条目对不上（${entryText(e).length} 字 vs ${String(currentText).length} 字）`);
                     continue;
                 }
                 if (e?.type === 'attachment') {
@@ -134,10 +135,13 @@ export function createTurnCollector(currentText, keyText = currentText, model = 
     };
 }
 
+const debugCapture = () => /^(1|on|true)$/i.test(process.env.CLAUDE_SUBSCRIPTION_DEBUG_CAPTURE ?? '');
+
 function remember(text, context, entries, contextPinned) {
     const key = turnKey(text, context);
+    if (debugCapture()) console.log(`[claude-subscription] capture: 记下 ${key.slice(0, 8)}（${String(text).slice(0, 20)}… / 回复前文 ${String(context).length} 字）`);
     captures.delete(key);
-    captures.set(key, { entries: entries.map((e) => JSON.parse(JSON.stringify(e))), contextPinned });
+    captures.set(key, { entries: entries.map((e) => JSON.parse(JSON.stringify(e))), contextPinned, text: String(text), context: String(context ?? '') });
     while (captures.size > MAX_TURNS) captures.delete(captures.keys().next().value);
 }
 
@@ -185,8 +189,31 @@ function rechain(entries, parentUuid, meta) {
  * date again to every new message and the previous one would change.
  * `context`: the reply this message answers (replyBefore).
  */
+// Presets that wrap only the newest player message (Kemini: a prompt-only
+// regex, maxDepth 1, puts it in <interactive_input>) send it wrapped on its
+// turn and bare the turn after, so the exact key never matched again and the
+// history was re-written every turn (measured 2026-10-07: 木屋求生 × Kemini).
+// When no exact key matches, a capture with the same reply context whose
+// text is this text plus a short wrapper is the same turn.
+const MAX_WRAPPER_CHARS = 200;
+function findCapture(text, context) {
+    const exact = captures.get(turnKey(text, context));
+    if (exact) return exact;
+    const t = String(text ?? '');
+    if (t.trim().length < 2) return null;
+    const ctx = String(context ?? '');
+    let best = null;
+    for (const c of captures.values()) {
+        if (c.context !== ctx || c.text === t || c.text.length - t.length > MAX_WRAPPER_CHARS || !c.text.includes(t)) continue;
+        // Only markup and whitespace around it: 「继续」 is not 「继续一下」.
+        if (!c.text.replace(t, '').replace(/<\/?[^<>\n]{1,60}>/g, '').trim()) best = c; // latest wins
+    }
+    return best;
+}
+
 export function replayTurn(text, parentUuid, meta, { pinOn = false, context = '' } = {}) {
-    const found = captures.get(turnKey(text, context));
+    const found = findCapture(text, context);
+    if (debugCapture()) console.log(`[claude-subscription] capture: 查 ${turnKey(text, context).slice(0, 8)}（${String(text).slice(0, 20)}… / 回复前文 ${String(context).length} 字）→ ${found ? '有' : '没有'}；已存 ${captures.size} 条`);
     if (!found) return null;
     const list = pinOn && found.contextPinned ? found.entries.filter((e) => e?.type !== 'attachment') : found.entries;
     return rechain(list, parentUuid, meta);
@@ -215,7 +242,7 @@ export function rewriteCaptured(from, to) {
 
 /** The text a past user message was actually sent with (null if unknown). */
 export function sentTextFor(text, context = '') {
-    const found = captures.get(turnKey(text, context));
+    const found = findCapture(text, context);
     return found ? entryText(found.entries[0]) : null;
 }
 
