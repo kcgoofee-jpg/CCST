@@ -16,7 +16,7 @@ body:
     id: source
     attributes:
       label: Claude 从哪来
-      options: [订阅（本代理）, API 密钥（本代理）, 官方 Claude 源直连, OpenRouter, 其他]
+      options: [订阅（本代理）, API 密钥（本代理）, 其他]
   - type: textarea
     id: what
     attributes: { label: 发生了什么, description: 报错原文、怎么操作的。不要贴聊天内容、密钥或访问密码。 }

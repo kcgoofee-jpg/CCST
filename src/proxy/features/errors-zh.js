@@ -18,7 +18,7 @@ const RULES = [
         // "oauth.{0,20}token has expired": the CLI says 「OAuth access token has expired」.
         test: /not logged in|please run \/login|oauth.{0,20}token has expired|token_expired|invalid_token|authentication_failed|authentication expired/i,
         message: 'Claude 订阅没登录，或登录已过期',
-        hint: '这次没法生成。重新登录一次就好，不用重启代理：在 SillyTavern/plugins/CCST 文件夹里运行 npm run login（用一键安装包的：打开「酒馆工具」，按 4 进「更多」，选「登录 Claude」）。',
+        hint: '这次没法生成。重新登录一次就好，不用重启代理：在 SillyTavern/plugins/CCST 文件夹里运行 npm run login（用「酒馆工具」的：进「更多」，选「登录 Claude」）。',
     },
     {
         code: 'reasoning_extraction',

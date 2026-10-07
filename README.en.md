@@ -31,9 +31,9 @@ SillyTavern on its own only talks to pay-per-token APIs. CCST is a SillyTavern p
 
 | | |
 | --- | --- |
-| 🎟️ **Use your subscription**<br>Claude Pro / Max, no separate API credit; API keys, Bedrock, Vertex and OpenRouter work too | 💰 **Long chats should cost less (estimate)**<br>In long chats the prompt cache can usually save re-processing part of the history; how much depends on your preset, world info and extensions |
+| 🎟️ **Use your subscription**<br>Claude Pro / Max, no separate API credit; an Anthropic API key works too | 💰 **Long chats should cost less (estimate)**<br>In long chats the prompt cache can usually save re-processing part of the history; how much depends on your preset, world info and extensions |
 | 🛟 **Replies survive disconnects**<br>Close the browser or drop the connection; the reply still finishes and is filled in later | 🔀 **Switch models in one click**<br>Opus 5.5 / Opus 4.6 / Sonnet 5.5, thinking depth on demand |
-| 🩺 **Refusal / truncation alerts**<br>When the model refuses or the reply is cut off or empty, the status says so; length, banned-word and similar checks are in 「其他」 (Other), experimental | 📦 **Short install**<br>SillyTavern: paste one line in Terminal (Mac) or double-click the installer (Windows); Mac for TauriTavern and phone: paste a different line in Terminal, it ends in the menu |
+| 🩺 **Refusal / truncation alerts**<br>When the model refuses or the reply is cut off or empty, the status says so | 📦 **Short install**<br>SillyTavern: paste one line in Terminal (Mac) or double-click the installer (Windows) |
 
 The panel also shows your quota and per-turn usage.
 
@@ -44,7 +44,7 @@ The panel also shows your quota and per-turn usage.
 
 ## You need
 
-- A computer (Mac / Windows / Linux) with [SillyTavern](https://github.com/SillyTavern/SillyTavern) installed. [Node.js](https://nodejs.org) 18+ (the installer tells you if it's missing). TauriTavern / phone only, no SillyTavern on the computer: see usage 2 under "Other setups" (Mac only for now).
+- A computer (Mac / Windows / Linux) with [SillyTavern](https://github.com/SillyTavern/SillyTavern) installed. [Node.js](https://nodejs.org) 18+ (the installer tells you if it's missing).
 - A Claude Pro or Max subscription (or an API key).
 - Chrome or Edge.
 
@@ -118,8 +118,8 @@ The panel has four tabs; you mostly need the first. The first time, click **一�
 | --- | --- |
 | **推理** (Reasoning) | Model and thinking depth (deeper = slower, more usage) |
 | **状态** (Status) | Last turn in this chat: time and cache hit (refreshed when a reply ends); a line when the latest reply was refused, cut off or empty; subscription quota; 7-day usage |
-| **设置** (Settings) | Proxy address, backend (subscription / API key / Bedrock …), thinking options, and an Advanced group (cache and context switches, thinking depth for background requests) |
-| **其他** (Other) | Phone connection, Mac remote, debugging; plus an experimental, off-by-default "体检（实验）" group (length, banned words, repeats, card check; may give false alarms depending on preset and extensions) |
+| **设置** (Settings) | Proxy address, backend (subscription / API key), thinking options, and an Advanced group (cache and context switches, thinking depth for background requests) |
+| **其他** (Other) | View the request sent to the model, re-run the guide, usage notes |
 
 ## FAQ
 
@@ -134,25 +134,14 @@ Run `node scripts/wire-diagnosis.mjs` in the CCST folder (uses about 30k tokens 
 
 ## Other setups
 
-- **API key / Bedrock / Vertex / OpenRouter instead of a subscription**: install as above, then switch in Settings → 代理后端 (proxy backend). Keys stay on your computer.
-- **No proxy, direct Claude API or OpenRouter**: just install the extension. Model switching and refusal / truncation notices work; reply recovery and quota don't.
-- **SillyTavern on a server / Docker**: see the [guide](docs/使用指南.md#用法三-服务器与-docker) (Chinese).
-
-**Three setups** (Chinese guide):
-- Usage 1, vanilla SillyTavern on a computer: the install flow above ([details](docs/使用指南.md#用法一-原版酒馆)).
-- Usage 2, TauriTavern / phone (**Mac only for now**): a Mac runs the standalone proxy; TauriTavern installs the panel and connects to it. Open Terminal and paste one line (installs to `~/CCST`; installs dependencies, signs in to Claude, puts a shortcut on the desktop, starts the proxy and opens TauriTavern without further questions, then drops straight into the 「酒馆工具」 menu; the window stays open until you press `q`):
-  ```bash
-  zsh -c "$(curl -fsSL https://raw.githubusercontent.com/kcgoofee-jpg/CCST/main/install-mac.sh)"
-  ```
-  On the phone: press `1` on the menu home page to open the 「手机」 (phone) page, press `x` to turn phone mode on, paste the 「手机连接码」 shown there into the panel card on the phone and tap 「连接」 (or scan the QR code and tap copy). To update: run the same line in Terminal again (it overwrites the code and keeps your login and data), then choose 「重启代理」 (restart proxy) in the menu. Windows / Linux: use usage 1 or 3. ([details](docs/使用指南.md#用法二-tauritavern-与手机))
-- Usage 3, server / cloud: one command or Docker ([details](docs/使用指南.md#用法三-服务器与-docker); CI-tested on Linux; the image `ghcr.io/kcgoofee-jpg/ccst` is public on GHCR — `docker pull` just works).
+- **Anthropic API key instead of a subscription**: install as above, then switch in Settings → 代理后端 (proxy backend). Keys stay on your computer.
+- **TauriTavern / not installed as a SillyTavern plugin**: run the proxy on its own on the same computer (`npm install`, `npm run login`, `npm start`); see the [guide](docs/使用指南.md#只跑代理命令行) (Chinese).
 
 More in the [guide](docs/使用指南.md) and [roadmap](docs/路线图.md) (Chinese).
 
 ## Limits
 
 - No temperature, Top-P or Top-K.
-- Phone / TauriTavern connecting to a proxy on your computer (phone connection code, QR code, the 「酒馆工具」 menu) is Mac only for now.
 - Usage is shared with Claude.ai and subject to the 5-hour and 7-day windows.
 - First token takes a few seconds longer than a direct API call.
 
