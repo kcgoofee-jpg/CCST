@@ -123,6 +123,8 @@ test('history bounds: preset user/assistant entries before the chat join the sys
     // A continue keeps its trailing assistant as the prefill.
     const cont = applyHistoryBounds([U('规则'), A('开场白：木屋里很冷'), U('继续写'), A('她推开门')], { start: ['开场白：木屋里很冷'], end: ['她推开门'] }, 'continue');
     assert.equal(cont.at(-1).role, 'assistant');
+    // A greeting stored with \r\n still matches what ST sends.
+    assert.equal(applyHistoryBounds([U('规则'), A('开场白：\n\n木屋里很冷'), U('走')], { start: ['开场白：\r\n\r\n木屋'], end: ['走'] }, 'normal')[1].role, 'assistant');
     // No marks, or marks not found: unchanged.
     assert.equal(applyHistoryBounds(msgs, { start: [], end: [] }), msgs);
     assert.equal(applyHistoryBounds(msgs, { start: ['不存在的开头'], end: [] }), msgs);

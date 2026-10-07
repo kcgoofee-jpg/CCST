@@ -61,7 +61,9 @@ export function applyHistoryBounds(messages, hist, genType = null) {
     const end = hist?.end ?? [];
     if (!start.length) return messages;
     const text = (m) => contentToText(m?.content);
-    const has = (m, list) => list.some((s) => text(m).includes(s));
+    // Whitespace-blind: a card's greeting is stored with \r\n and sent with \n.
+    const flat = (s) => String(s).replace(/\s+/g, '');
+    const has = (m, list) => { const t = flat(text(m)); return list.some((s) => flat(s) && t.includes(flat(s))); };
     const first = messages.findIndex((m) => m?.role !== 'system' && has(m, start));
     if (first < 0) return messages;
     let last = end.length ? messages.findLastIndex((m) => m?.role !== 'system' && has(m, end)) : -1;
