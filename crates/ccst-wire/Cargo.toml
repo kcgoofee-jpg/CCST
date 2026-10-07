@@ -1,0 +1,16 @@
+[package]
+name = "ccst-wire"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Anthropic Messages API 客户端：订阅请求头、流式解析、模型目录"
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+reqwest.workspace = true
+tokio.workspace = true
+sha2.workspace = true
+ccst-auth = { path = "../ccst-auth" }
