@@ -187,7 +187,7 @@ zip_install() {
     [[ -n "$top" && -f "$top/package.json" ]] || { rm -rf "$tmp"; return 1; }
     mkdir -p "$DEST" || { rm -rf "$tmp"; return 1; }
     # 更新：先清掉旧代码（新版删掉的文件不能留着），只留 data（聊天统计、设置）和 node_modules
-    local x; for x in "$DEST"/*(DN); do [[ "${x:t}" == (data|node_modules|launcher) ]] || rm -rf "$x"; done
+    local x; for x in "$DEST"/*(DN); do [[ "${x:t}" == (data|node_modules) ]] || rm -rf "$x"; done
     cp -R "$top/." "$DEST/"; local rc=$?
     rm -rf "$tmp"; return $rc
 }

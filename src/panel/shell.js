@@ -8,16 +8,15 @@ import { store } from './core/store.js';
 import { getSettings, saveSettingsDebounced, EFFORT_LABEL } from './core/settings.js';
 import { connectHelp, mismatchHelp, hostKind, loginHelp, updateHelp, isNewerVersion } from './core/connect-help.js';
 import { stepItem, downloadItem } from './core/help-items.js';
-import { IS_TAURI, APP_NAME, COARSE, cloudHosted, isOurEndpoint, stSideEndpoint } from './core/capabilities.js';
+import { IS_TAURI, APP_NAME, COARSE, cloudHosted, isOurEndpoint } from './core/capabilities.js';
 import { libs } from './core/libs.js';
 import { F } from './core/registry.js';
 import { connectionInfo, shortModel } from './core/connection.js';
 import { genLine } from './core/capabilities.js';
-import { effectiveEffort } from './core/inject.js';
+import { stEffort } from './core/inject.js';
 import { el, note } from './core/dom.js';
 import { notify } from './core/notify.js';
 import { refreshAll, refreshStatus, refreshStats } from './core/live.js';
-import { buildChatTab } from './tabs/chat.js';
 import { buildStatusTab } from './tabs/status.js';
 import { buildSettingsTab } from './tabs/settings.js';
 import { TABS, resolveTab } from './core/tabs.js';
@@ -40,14 +39,10 @@ function currentConnectionText() {
 /** Point SillyTavern's live connection fields at the proxy. */
 function applyConnection(settings) {
     $('#main_api').val('openai').trigger('change');
-    // Endpoint (and the LAN key) MUST be set before the source change: ST's change handler
-    // auto-reconnects immediately, and firing it with the stale custom_url would race a status
-    // check against the wrong endpoint.
-    $('#custom_api_url_text').val(stSideEndpoint(settings)).trigger('input');
-    // Only a LAN proxy needs a key (its access key). Otherwise the key field is left alone: it may
-    // hold the user's key for another service.
-    const keyField = $('#api_key_custom');
-    if (keyField.length && settings.accessKey) keyField.val(settings.accessKey).trigger('input');
+    // The endpoint MUST be set before the source change: ST's change handler auto-reconnects
+    // immediately, and firing it with the stale custom_url would race a status check against the
+    // wrong endpoint. The key field is left alone: it may hold the user's key for another service.
+    $('#custom_api_url_text').val(settings.endpoint).trigger('input');
     $('#chat_completion_source').val('custom').trigger('change');
     // '' is ST's 「无」 (the dropdown shows 「未选择」), and it is the recommended value, so the CCST
     // profile saved from these live fields rightly has 提示词后处理 未选择 (see postProcessingCheck in
@@ -61,8 +56,8 @@ function applyConnection(settings) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// One-click connect rewrites SillyTavern's LIVE connection fields (source, URL, post-processing, and
-// on a LAN the key), keeps a Claude model ST already has (else Opus 4.6), then saves that as the connection profile 「CCST」 (created, or
+// One-click connect rewrites SillyTavern's LIVE connection fields (source, URL, post-processing),
+// keeps a Claude model ST already has (else Opus 4.6), then saves that as the connection profile 「CCST」 (created, or
 // updated when it exists). Other profiles are never edited, but the live connection is replaced — so
 // it always asks first unless ST already points at this proxy.
 export async function connect(settings) {
@@ -77,7 +72,7 @@ export async function connect(settings) {
             for (const line of [
                 `一键连接会把${APP_NAME}现在的连接改成 CCST 代理：`,
                 `现在：${currentConnectionText() || '（未连接）'}`,
-                `改成：自定义来源 · ${stSideEndpoint(settings)}`,
+                `改成：自定义来源 · ${settings.endpoint}`,
                 '同时会新建（或更新）一个叫「CCST」的连接配置并选中它；已选的 Claude 模型不变，没有就选 Opus 4.6。你别的连接配置不会被改，想切回在「API 连接」顶部选回来即可。继续吗？',
             ]) { const p = document.createElement('p'); p.textContent = line; box.append(p); }
             const ok = await ctx.callGenericPopup(box, ctx.POPUP_TYPE.CONFIRM);
@@ -157,14 +152,14 @@ export const SOURCE_LABELS = { keychain: '钥匙串', file: '凭据文件', env:
 /** The header summary of the collapsed drawer and the status bar say the same thing:
  *  dot · model · where/billing · 5h quota. Clicking the bar opens 状态. */
 export function renderGlance() {
-    const { nextEffort, glance, gen } = store.get();
+    const { glance, gen } = store.get();
     const { connected, model, billing } = connectionInfo();
     const linked = glanceLinked({ connected }, store.get().status.phase);
-    const settings = getSettings();
-    const effort = effectiveEffort(settings);
+    // Thinking is SillyTavern's own 「推理强度」: named here when it isn't Auto.
+    const effort = stEffort();
     const parts = [];
     if (linked && model) parts.push(shortModel(model));
-    if (effort !== 'auto') parts.push(nextEffort ? `下一轮${EFFORT_LABEL[effort]}` : EFFORT_LABEL[effort]);
+    if (linked && effort !== 'auto') parts.push(EFFORT_LABEL[effort]);
     if (glance.quota != null) parts.push(`5h ${glance.quota}%`);
     const head = document.getElementById('claude_max_head_sum');
     if (head) head.textContent = parts.join(' · ');
@@ -184,8 +179,6 @@ export function renderGlance() {
             bar.replaceChildren(el('b', 'cm-bar-model', linked ? (model ? shortModel(model) : '未选模型') : '未连接'));
             // Only the local proxy is left: 「本机代理」 says nothing; the billing (订阅) does.
             if (linked && billing) bar.append(el('span', 'cm-bar-src', billing));
-            // One-off boost: the only effort worth a place in the bar, because it expires by itself.
-            if (connected && nextEffort) bar.append(el('span', 'cm-bar-effort', `下一轮${EFFORT_LABEL[effort]}`));
             if (q != null) {
                 const quota = el('span', 'cm-bar-quota', `5h ${q}%`);
                 // The worse of how much is used and how fast (pace, see tabs/status.js usagePace); ▲ = on track to run out.
@@ -247,8 +240,7 @@ function describeCard() {
     const phase = status.phase;
 
     if (phase === 'denied') {
-        const title = status.code === 401 ? '访问密码不对' : '代理拒绝连接';
-        return { ...base, tone: 'error', dot: 'offline', key: 'denied', title, sub: status.message };
+        return { ...base, tone: 'error', dot: 'offline', key: 'denied', title: '代理拒绝连接', sub: status.message };
     }
     if (phase === 'offline') {
         const help = connectHelp({ host: hostNow() });
@@ -394,7 +386,6 @@ const TAB_STORE = 'ccst.panelTab';
 export function savedTab() {
     let key = null;
     try { key = localStorage.getItem(TAB_STORE); } catch { /* storage blocked */ }
-    key ??= getSettings().panelTab; // settings from before 3.1
     return resolveTab(key);
 }
 
@@ -430,7 +421,6 @@ export function addExtensionSettings(settings) {
     }, 50));
 
     const panes = Object.fromEntries(TABS.map(([k]) => [k, el('div', 'cm-pane')]));
-    buildChatTab(panes.chat, settings, save);
     buildStatusTab(panes.status);
     buildSettingsTab(panes.settings, settings, save);
 
@@ -491,7 +481,7 @@ export function renderStatus() {
 /** Subscribe the shell's own drawing to the store (once; the drawing looks its DOM up by id, so a rebuilt panel needs nothing). */
 export function initShell() {
     store.subscribe('status', () => renderStatus());
-    store.subscribe(['glance', 'nextEffort', 'gen'], () => renderGlance());
+    store.subscribe(['glance', 'gen'], () => renderGlance());
     // A full refresh: re-read what SillyTavern is connected to (the connect note; the tabs' own pulse
     // listeners draw the cache card, lore box, check-up and card check).
     store.subscribe('pulse', () => { renderConnect(); renderGlance(); });

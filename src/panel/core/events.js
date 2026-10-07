@@ -12,7 +12,6 @@ import { refreshStats, refreshQuota } from './live.js';
 import { makeStatsAfterReply } from './stats-after-reply.js';
 import { store } from './store.js';
 import { renderConnect, renderGlance } from '../shell.js';
-import { clearOneShotEffort, syncAlwaysThinks } from '../tabs/chat.js';
 
 export function wireEvents({ eventSource, eventTypes }) {
     // Which world info entries fired for this request (the diagnostic report lists them).
@@ -28,7 +27,6 @@ export function wireEvents({ eventSource, eventTypes }) {
     };
     // Greetings (first_message) and /sendas-style messages (command) aren't replies to watch.
     const onOwnReply = (fn) => (id, type) => { if (isReplyEvent(type) && !recovery.emitting) fn(id, type); };
-    eventSource.on(eventTypes.MESSAGE_RECEIVED, onOwnReply(clearOneShotEffort));
     eventSource.on(eventTypes.MESSAGE_RECEIVED, (id, type) => F.keeper.onReplyReceived(id, type));
     eventSource.on(eventTypes.CHAT_CHANGED, () => { setTimeout(() => F.keeper.recoverKeptReply(), 1500); });
     if (eventTypes.STREAM_TOKEN_RECEIVED) eventSource.on(eventTypes.STREAM_TOKEN_RECEIVED, (...a) => F.keeper.markPendingFloor(...a));
@@ -36,12 +34,10 @@ export function wireEvents({ eventSource, eventTypes }) {
     if (eventTypes.GENERATION_ENDED) eventSource.on(eventTypes.GENERATION_ENDED, () => F.keeper.onGenerationEnded());
     if (eventTypes.MESSAGE_EDITED) eventSource.on(eventTypes.MESSAGE_EDITED, (...a) => F.keeper.onMessageEdited(...a));
     if (eventTypes.MESSAGE_DELETED) eventSource.on(eventTypes.MESSAGE_DELETED, (...a) => F.keeper.onMessageDeleted(...a));
-    eventSource.on(eventTypes.CHAT_CHANGED, () => setTimeout(() => F.lore.refreshLoreBox(), 200));
     // Model / API switches: keep the header summary and connect button current.
     for (const ev of [eventTypes.CHATCOMPLETION_MODEL_CHANGED, eventTypes.CHATCOMPLETION_SOURCE_CHANGED, eventTypes.MAIN_API_CHANGED, eventTypes.SETTINGS_UPDATED]) {
-        if (ev) eventSource.on(ev, () => setTimeout(() => { renderConnect(); renderGlance(); F.models.modelRowFollowsSource(); syncAlwaysThinks(); }, 100));
+        if (ev) eventSource.on(ev, () => setTimeout(() => { renderConnect(); renderGlance(); }, 100));
     }
-    eventSource.on(eventTypes.MESSAGE_RECEIVED, refreshIfOpen);
     eventSource.on(eventTypes.MESSAGE_RECEIVED, onOwnReply(() => refreshAfterReply()));
     // The quota is read after each reply (live.js keeps the 60 s gap and the backoff), not on opening.
     // Only when this chat talks to our proxy: elsewhere the subscription's 5h window says nothing.

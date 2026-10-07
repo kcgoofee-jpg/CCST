@@ -8,13 +8,13 @@
 // cache and whether the account is over its limits. A cache problem on a
 // user's machine could not be seen from here (2026-10 「缓存 0%」).
 //
-// With capture on (panel → 状态 → 诊断, per request), the CLI subprocess gets
+// With capture on (always, unless CLAUDE_SUBSCRIPTION_DIAG_CAPTURE=0), the CLI subprocess gets
 // ANTHROPIC_BASE_URL pointing at a loopback forwarder in this process. It
 // forwards every byte unchanged (credentials included, never stored) and
 // keeps the last requests IN MEMORY: the request body, the rate-limit
 // headers and the usage of the reply. Nothing is written to disk; the panel
-// reads it through diag-report.js. On by default in the panel (so a report
-// already has the data when someone needs it); skipped when the environment
+// reads it through diag-report.js, so a report already has the data when
+// someone needs it. Skipped when the environment
 // routes through a proxy the forwarder cannot speak (see tapSkipReason), and
 // a forwarder that fails to start just means this turn is not recorded.
 

@@ -16,91 +16,17 @@
 // usage.jsonl, the log and the panel): it is only named as a kind.
 
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
 
-import { extractVolatileBlocks } from './lore-tail.js';
 import { contentToText } from '../core/system-prompt.js';
-import { DATA_DIR } from '../paths.js';
 import { cacheWriteMultiplier, priceFor } from '../../shared/backends.js';
 
 const MAX_CHATS = 6;
-// Below this the static part isn't worth a cache breakpoint (Opus 5.5's
-// minimum cacheable prompt is 512 tokens; ~1500 CJK characters is safely above).
-const MIN_STATIC_CHARS = 1500;
-// How many recent turns decide the split point (see diagnoseCache).
-const SPLIT_WINDOW = 3;
-const previous = new Map(); // chatKey → { system, history: string[], splitAt: number|null, cuts: (number|null)[], changes: {tag: count} }
+const previous = new Map(); // chatKey → { system, history: string[] }
 const undo = new WeakMap(); // diagnosis → the chat's state before it (discardDiag)
-// Blocks that look like world info count as volatile after one change; any
-// other tag after two (a one-off preset toggle shouldn't move a block for good).
+// Heading text that looks like world info (only ever named as a kind, never quoted).
 const LORE_TAG = /world|lore|世界|设定集|worldinfo/i;
-// The wrappers presets put around SillyTavern's activated world info.
-const WORLD_INFO_WRAPPERS = ['Lore', 'lore', 'world_info', 'worldInfo', 'WorldInfo', 'world_info_before', 'world_info_after'];
-const MAX_VOLATILE_SHARE = 0.6; // world info can be ~40% of a long preset (measured 38k of 96k); a preset's all-enclosing wrapper is ~90%+
-
-/** The outermost enclosing tag at `offset` whose whole block is small
- *  enough to move (not the preset's all-enclosing wrapper). */
-function movableTag(text, offset) {
-    for (const t of openTags(text, offset)) {
-        const close = text.indexOf(`</${t.name}>`, offset);
-        if (close < 0) continue;
-        if (close - t.at <= MAX_VOLATILE_SHARE * text.length) return t.name;
-    }
-    return null;
-}
-
-/** Tag names that changed often enough in this chat to be moved to the turn. */
-function volatileTags(changes) {
-    return Object.entries(changes ?? {})
-        .filter(([name, n]) => n >= (LORE_TAG.test(name) ? 1 : 2))
-        .map(([name]) => name)
-        .slice(0, 3);
-}
 
 const hash = (s) => createHash('sha1').update(s).digest('hex').slice(0, 12);
-
-// What was learned per chat survives a proxy restart: which tags keep
-// changing and where the system prompt is split — tag names, counts and an
-// offset keyed by the chat's hash, no chat text. Without it every restart
-// cost one full re-write of the conversation while the proxy re-learned
-// (measured: 171k tokens on 母畜庄园).
-const MAX_REMEMBERED = 30;
-function memoryFile() {
-    if (process.env.CLAUDE_SUBSCRIPTION_CACHE_MEMORY_FILE) return process.env.CLAUDE_SUBSCRIPTION_CACHE_MEMORY_FILE;
-    if (process.env.NODE_TEST_CONTEXT) return null; // unit tests never touch the real file
-    return join(DATA_DIR, 'cache-memory.json');
-}
-let remembered = null; // chatKey → { changes, splitAt, at }
-function loadMemory() {
-    if (remembered) return remembered;
-    remembered = new Map();
-    const f = memoryFile();
-    try {
-        if (f && f !== 'off' && existsSync(f)) {
-            for (const [k, v] of Object.entries(JSON.parse(readFileSync(f, 'utf8')))) remembered.set(k, v);
-        }
-    } catch { /* unreadable: start fresh */ }
-    return remembered;
-}
-function remember(key, changes, splitAt) {
-    const mem = loadMemory();
-    const tags = Object.fromEntries(Object.entries(changes ?? {}).filter(([name]) => /^[\w\u4e00-\u9fff:.-]{1,40}$/.test(name)));
-    mem.delete(key);
-    mem.set(key, { changes: tags, splitAt: Number.isFinite(splitAt) ? splitAt : null, at: Date.now() });
-    while (mem.size > MAX_REMEMBERED) mem.delete(mem.keys().next().value);
-    const f = memoryFile();
-    if (!f || f === 'off') return;
-    try {
-        mkdirSync(dirname(f), { recursive: true });
-        // Whole-file write then rename: a proxy killed mid-write would leave
-        // half a JSON here, and loadMemory reads it at startup as "unreadable,
-        // start fresh" — every chat loses its learned split point.
-        const tmp = `${f}.${process.pid}.tmp`;
-        writeFileSync(tmp, JSON.stringify(Object.fromEntries(mem)));
-        renameSync(tmp, f);
-    } catch { /* best effort */ }
-}
 
 /** Same chat across turns: the opening of the conversation — everything up
  *  to and including the first user message — doesn't change. (The first two
@@ -172,86 +98,29 @@ export function nearestLabel(text, offset) {
 /**
  * @param {string} systemText  the system prompt as sent to Claude
  * @param {Array} history      non-system messages (history + current turn)
- * @param {{ moveVolatile?: boolean }} [opts]  the volatile blocks are moved out
- *        of the system prompt before sending (lore tail): place the split in
- *        the prompt as sent, not as received
- * @returns {object|null} diagnosis, or null on the first turn of a chat
+ * @param {{ chatKey?: string|null }} [opts]
+ * @returns {object} diagnosis (firstTurn: true when there is nothing to compare with yet)
  */
-export function diagnoseCache(systemText, history, { moveVolatile = false, chatKey = null } = {}) {
+export function diagnoseCache(systemText, history, { chatKey = null } = {}) {
     const system = systemText ?? '';
     const texts = history.map((m) => `${m.role}:${contentToText(m.content)}`);
     // The panel's chat id when it sent one: the opening of the first user
     // message changes while injections are merged onto it.
     const key = chatKey ? `p${chatKey}`.slice(0, 13) : chatKeyOf(texts);
     const prev = previous.get(key);
-    const learned = prev ? null : loadMemory().get(key);
 
     const diffAt = prev ? firstDiff(prev.system, system) : -1;
-    // Switching presets replaces most of the prompt. That turn misses anyway;
-    // remembering its early cut would pin the split there for SPLIT_WINDOW
-    // turns and rewrite the unchanged middle each time (measured: 50k chars ×
-    // 3 turns after 通用 → 庄园). Start the split history over instead.
+    // Switching presets replaces most of the prompt: said apart from an edit.
     const rewrite = diffAt >= 0 && isRewrite(prev.system, system);
 
-    // Split point for the system prompt: the start of the enclosing tag (or
-    // line) where it changed, taken as the EARLIEST such point over the last
-    // SPLIT_WINDOW turns. Parts that change every turn keep the split in
-    // place (so the static part stays byte-identical and hits the cache); a
-    // one-off early edit — the user flipping a preset toggle — only pulls the
-    // split forward for a few turns instead of pinning it there for good.
-    const changes = { ...(prev?.changes ?? learned?.changes ?? {}) };
-    // A chat we know nothing about yet: SillyTavern's world info wrappers
-    // change with the keywords of almost every turn, so treat them as
-    // volatile from the first turn instead of learning it from a miss.
-    // (Measured on 母畜庄园: learning <Lore> then <world_info> cost two full
-    // re-writes of ~250k tokens each, for every new chat.)
-    if (!prev && !learned && moveVolatile) {
-        for (const tag of WORLD_INFO_WRAPPERS) {
-            if (system.includes(`<${tag}>`) && system.includes(`</${tag}>`)) changes[tag] = changes[tag] ?? 1;
-        }
-    }
-    if (diffAt >= 0 && !rewrite) {
-        const tag = movableTag(system, diffAt);
-        if (tag) changes[tag] = (changes[tag] ?? 0) + 1;
-    }
-    // With the volatile blocks moved out, the prompt that is sent has a fixed
-    // placeholder where they were: a change inside them is no reason to split,
-    // and offsets must be those of the prompt as sent. (Measured: split points
-    // taken from the received prompt drifted when a persona edit shifted the
-    // world info by 30 characters, and each drift re-wrote 210k tokens.)
-    const moved = moveVolatile ? volatileTags(changes) : [];
-    const asSent = (text) => (moved.length ? extractVolatileBlocks(text, moved).system : text);
-    const sentSystem = asSent(system);
-    const sentDiffAt = !prev ? -1 : moved.length ? firstDiff(asSent(prev.system), sentSystem) : diffAt;
-    const recent = rewrite ? [] : (prev?.cuts ?? []).slice(-(SPLIT_WINDOW - 1));
-    if (rewrite) {
-        // no cut: the new prompt's own changes decide the split from the next turn
-    } else if (sentDiffAt >= 0) {
-        // Snap to the start of the innermost enclosing tag: a keyword-triggered
-        // section (<world_info>) reorders from turn to turn, so the first
-        // differing byte wanders around inside it and a line-based split
-        // would creep earlier each turn — each move costing a full miss.
-        const tags = openTags(sentSystem, sentDiffAt);
-        const tagStart = tags.length ? tags[tags.length - 1].at : sentDiffAt;
-        recent.push(sentSystem.lastIndexOf('\n', tagStart - 1) + 1);
-    } else if (prev) {
-        recent.push(null); // unchanged turn: no new constraint
-    }
-    const cutPoints = recent.filter((c) => c !== null);
-    let splitAt = cutPoints.length ? Math.min(...cutPoints) : rewrite ? null : (prev?.splitAt ?? learned?.splitAt ?? null);
-    if (splitAt !== null && (splitAt < MIN_STATIC_CHARS || splitAt > sentSystem.length)) splitAt = null;
-
-    const state = { system, history: texts, splitAt, cuts: recent, changes };
+    const state = { system, history: texts };
     previous.delete(key);
     previous.set(key, state);
     while (previous.size > MAX_CHATS) previous.delete(previous.keys().next().value);
-    remember(key, changes, splitAt);
 
-    // First turn since the proxy started: nothing to compare with, but what
-    // was learned about this chat before the restart still applies.
     if (!prev) {
-        const first = { chat: key, firstTurn: true, systemChars: system.length, splitAt: learned ? splitAt : null, volatileTags: learned || moved.length ? volatileTags(changes) : [], ...(learned ? { remembered: true } : {}) };
-        undo.set(first, { key, prev, learned, state });
+        const first = { chat: key, firstTurn: true, systemChars: system.length };
+        undo.set(first, { key, prev, state });
         return first;
     }
 
@@ -281,10 +150,8 @@ export function diagnoseCache(systemText, history, { moveVolatile = false, chatK
         ...(reroll ? { reroll: true } : {}),
         ...(replyChanged ? { replyChanged: true } : {}),
         ...(rewrite ? { rewrite: true } : {}),
-        splitAt,
-        volatileTags: volatileTags(changes),
     };
-    undo.set(diag, { key, prev, learned, state });
+    undo.set(diag, { key, prev, state });
     return diag;
 }
 
@@ -297,15 +164,12 @@ export function discardDiag(diag) {
     if (previous.get(u.key) !== u.state) return; // a newer request of this chat came in meanwhile
     previous.delete(u.key);
     if (u.prev) previous.set(u.key, u.prev);
-    const back = u.prev ?? u.learned;
-    if (back) remember(u.key, back.changes, back.splitAt);
 }
 
 /** One human-readable line for the proxy log. */
 export function describeDiag(d) {
     if (!d) return null;
-    if (d.firstTurn && d.remembered) return `缓存诊断：代理重启后这个聊天的第一轮，沿用之前学到的${d.volatileTags.length ? `（每轮变化的 ${d.volatileTags.map((t) => `<${t}>`).join('、')}）` : ''}，下一轮开始对比`;
-    if (d.firstTurn) return `缓存诊断：本聊天第一轮（系统提示词 ${d.systemChars.toLocaleString()} 字）${d.volatileTags?.length ? `，世界书 ${d.volatileTags.map((t) => `<${t}>`).join('、')} 一开始就移到消息里` : ''}，下一轮开始对比`;
+    if (d.firstTurn) return `缓存诊断：本聊天第一轮（系统提示词 ${d.systemChars.toLocaleString()} 字），下一轮开始对比`;
     const parts = [];
     if (d.reroll) parts.push('重roll（和上一次请求的聊天记录相同，不代表新一轮的开销）');
     if (d.rewrite) parts.push('系统提示词大部分换了（多半是换了预设）：这一轮整段重写');
@@ -495,5 +359,4 @@ export function explainCache(entry, prevEntry = null) {
 /** Test seam. */
 export function __resetCacheDiag() {
     previous.clear();
-    remembered = null;
 }

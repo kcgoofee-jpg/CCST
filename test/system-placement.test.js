@@ -72,20 +72,19 @@ test('no late system messages → same array back', () => {
     assert.equal(inlineLateSystemMessages(msgs), msgs);
 });
 
-test('system_placement setting defaults to inline', () => {
+test('system placement is inline; only the environment variable hoists', () => {
     assert.equal(extractSettings({}).systemPlacement, 'inline');
-    assert.equal(extractSettings({ claude_subscription: { system_placement: 'hoist' } }).systemPlacement, 'hoist');
+    assert.equal(extractSettings({ claude_subscription: { system_placement: 'hoist' } }).systemPlacement, 'inline', 'the panel no longer chooses');
+    process.env.CLAUDE_SUBSCRIPTION_INLINE_SYSTEM = 'off';
+    try { assert.equal(extractSettings({}).systemPlacement, 'hoist'); } finally { delete process.env.CLAUDE_SUBSCRIPTION_INLINE_SYSTEM; }
 });
 
-test('buildSystemPrompt splits at the boundary only when asked, and never lets the CLI record the prompt', async () => {
+test('buildSystemPrompt replaces the coding preamble and never lets the CLI record the prompt', async () => {
     const { buildSystemPrompt } = await import('../src/proxy/core/system-prompt.js');
     const plain = (prompt) => ({ type: 'custom', prompt, snapshot: false });
-    assert.deepEqual(buildSystemPrompt('abcdef', false), plain('abcdef'));
-    assert.deepEqual(buildSystemPrompt('abcdef', false, 3, null), plain('abcdef'));
-    assert.deepEqual(buildSystemPrompt('abcdef', false, 3, 'B'), plain(['abc', 'B', 'def']));
-    assert.deepEqual(buildSystemPrompt('abcdef', false, 6, 'B'), plain('abcdef'));
-    assert.deepEqual(buildSystemPrompt('', false), plain(''));
-    assert.equal(buildSystemPrompt('x', true).snapshot, false, 'identity mode too');
+    assert.deepEqual(buildSystemPrompt('abcdef'), plain('abcdef'));
+    assert.deepEqual(buildSystemPrompt(''), plain(''));
+    assert.deepEqual(buildSystemPrompt(undefined), plain(''));
 });
 
 test('a recorded system prompt is never captured, pinned or replayed', async () => {

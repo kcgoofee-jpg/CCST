@@ -1,5 +1,5 @@
 // ──────────────────────────────────────────────
-// Reply keeper client (proxy side: src/proxy/reply-keeper.js)
+// Reply keeper client (proxy side: src/proxy/features/reply-keeper.js)
 // ──────────────────────────────────────────────
 
 import { fetchProxy } from '../core/proxy.js';

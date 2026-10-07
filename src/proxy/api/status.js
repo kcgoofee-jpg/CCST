@@ -7,7 +7,6 @@
 // way to fully verify auth (the CLI may refresh a stale token itself), so
 // `credential.expired: true` is a warning, not a verdict.
 
-import { rateLimitSnapshot } from '../features/rate-limit.js';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -63,7 +62,6 @@ export async function handleStatus(req, res) {
             endpoint: localEndpoint(),
             credential: credentialSummary(),
             // 最近一次回复里 CLI 报的各额度窗口状态（还没回复过则为空）
-            rateLimit: rateLimitSnapshot(),
             backend: { id: 'subscription', label: BACKEND_LABELS.subscription },
             note: 'Credential expiry is advisory — the CLI can refresh a stale token on the next chat.',
             latencyMs: Date.now() - start,

@@ -11,7 +11,7 @@
 //      (effort / thinking / stops / max_tokens from the request body, with
 //      the companion UI extension's `claude_subscription` namespace).
 //   2. System messages → SDK systemPrompt (plain client string by default —
-//      the roleplay path; optional claude_code-preset "identity mode").
+//      the roleplay path: the coding preamble is replaced).
 //   3. Prior turns → synthetic Claude Code JSONL session, replayed through a
 //      one-shot SessionStore + `resume` so the model sees REAL multi-turn
 //      context (role fidelity + prompt caching). Trailing-assistant prefill
@@ -49,10 +49,9 @@ import { explainError, formatErrorForUser } from '../features/errors-zh.js';
 import { recordRequest, promptShape } from '../features/usage-stats.js';
 import { applyHistoryBounds, inlineLateSystemMessages } from '../features/system-placement.js';
 import { diagnoseCache, describeDiag, discardDiag } from '../features/cache-diag.js';
-import { extractVolatileBlocks, foldTrailingInjections, injectBlocks, injectedTextFor, loreTarget, newLoreOnly, noteTail, rememberInjected, rewriteInjected, cutExactLore, TRIGGERED_TAG } from '../features/lore-tail.js';
-import { dumpEntries, dumpRequest, noteDebugSetting } from '../features/debug-dump.js';
+import { foldTrailingInjections, injectBlocks, injectedTextFor, loreTarget, newLoreOnly, noteTail, rememberInjected, rewriteInjected, cutExactLore, TRIGGERED_TAG, LORE_WINDOW } from '../features/lore-tail.js';
+import { noteLastRequest, noteLastEntries } from '../features/last-request.js';
 import { keepReply, trackGeneration } from '../features/reply-keeper.js';
-import { recordRateLimit } from '../features/rate-limit.js';
 
 const PLUGIN_TAG = '[claude-subscription]';
 
@@ -89,11 +88,11 @@ const envFlag = (name, fallback) => {
     return !/^(0|false|no|off)$/i.test(v);
 };
 
-function buildSdkOptions({ modelInfo, oneMActive, settings, systemText, abortController, stream, env, resume, boundary }) {
+function buildSdkOptions({ modelInfo, oneMActive, settings, systemText, abortController, stream, env, resume }) {
     const options = {
         abortController,
         model: oneMActive ? modelInfo.sdkModel : modelInfo.baseId,
-        systemPrompt: buildSystemPrompt(systemText, settings.identityMode, settings.systemSplitAt, boundary),
+        systemPrompt: buildSystemPrompt(systemText),
         includePartialMessages: stream,
         env,
 
@@ -168,7 +167,8 @@ function buildSdkOptions({ modelInfo, oneMActive, settings, systemText, abortCon
             options.thinking = { type: 'disabled' };
         }
     }
-    const effort = effortForModel(modelInfo.baseId, settings.effort);
+    // 「不思考」 on a model that always thinks: the lowest depth is the closest it gets.
+    const effort = effortForModel(modelInfo.baseId, settings.effort ?? (settings.thinking === 'off' && modelInfo.adaptiveOnly ? 'low' : undefined));
     if (effort) {
         options.effort = effort;
     }
@@ -259,8 +259,8 @@ function buildQueryConfig({ messages: rawMessages, modelInfo, oneMActive, settin
                     ? null
                     : createTurnCollector(currentText, keyText, pinKey, replyBefore(split.history, split.history.length));
                 const resume = { sessionId, store: new ResumeSessionStore(sessionId, entries, collector?.onAppend), cwd };
-                if (settings.debugDump) dumpEntries(entries, prompt);
-                const options = buildSdkOptions({ modelInfo, oneMActive, settings, systemText, abortController, stream, env, resume, boundary: sdk?.SYSTEM_PROMPT_DYNAMIC_BOUNDARY });
+                if (settings.dryRun) noteLastEntries(entries);
+                const options = buildSdkOptions({ modelInfo, oneMActive, settings, systemText, abortController, stream, env, resume });
                 return { prompt, options, path: 'resume', sessionId, shape: split.shape, collector, currentText, hasHistory: split.history.length > 0 };
             }
             // No replayable history, but a string fold would drop image
@@ -270,7 +270,7 @@ function buildQueryConfig({ messages: rawMessages, modelInfo, oneMActive, settin
                 && split.current.content.some((p) => p?.type === 'image_url');
             if (hasImages) {
                 const prompt = singleMessageStream(currentToSdkUserMessage(split.current));
-                const options = buildSdkOptions({ modelInfo, oneMActive, settings, systemText, abortController, stream, env, resume: null, boundary: sdk?.SYSTEM_PROMPT_DYNAMIC_BOUNDARY });
+                const options = buildSdkOptions({ modelInfo, oneMActive, settings, systemText, abortController, stream, env, resume: null });
                 return { prompt, options, path: 'stream-input', sessionId: null, shape: split.shape };
             }
         } catch (err) {
@@ -282,7 +282,7 @@ function buildQueryConfig({ messages: rawMessages, modelInfo, oneMActive, settin
     // already have in systemText (its systemPrompt return is redundant here)
     // and folds the non-system turns into a labelled string prompt.
     const { prompt } = renderTranscript(messages);
-    const options = buildSdkOptions({ modelInfo, oneMActive, settings, systemText, abortController, stream, env, resume: null, boundary: sdk?.SYSTEM_PROMPT_DYNAMIC_BOUNDARY });
+    const options = buildSdkOptions({ modelInfo, oneMActive, settings, systemText, abortController, stream, env, resume: null });
     return { prompt, options, path: 'fold', sessionId: null, shape: 'fold' };
 }
 
@@ -447,7 +447,6 @@ async function* runQuery({ sdk, prompt, options, stream, guardTier, requestedMod
                 err.sdkErrorText = `${message.subtype} ${detail}`;
                 throw err;
             }
-            if (message.type === 'rate_limit_event') recordRateLimit(message.rate_limit_info);
             // Everything else (system/init, status, ...)
             // is bookkeeping; prompt_suggestion can arrive after result but
             // we return at result.
@@ -543,8 +542,6 @@ async function completeChat(req, res, body, settings, conn) {
     const requestedModel = body.model;
     // OpenAI's default is a single JSON response; SillyTavern always says which it wants.
     const wantStream = body.stream === true;
-    // The debug dumps live only while the switch is on (debug-dump.js).
-    if (body.claude_subscription && typeof body.claude_subscription === 'object') noteDebugSetting(settings.debugDump);
     // The proxy only runs on the subscription (API-key users use SillyTavern's own Claude source).
     const billedAs = 'subscription';
     const modelInfo = parseModelRequest(requestedModel);
@@ -586,11 +583,8 @@ async function completeChat(req, res, body, settings, conn) {
         const history = placed.filter((m) => m?.role !== 'system');
         // Keyword-triggered world info inside the system prompt, by its exact text (lore-tail.js).
         const exact = settings.loreTail && settings.loreText.length ? cutExactLore(extractSystemText(placed) ?? '', settings.loreText) : null;
-        cacheDiag = diagnoseCache(exact ? exact.system : extractSystemText(placed), history, { moveVolatile: settings.loreTail, chatKey: settings.chatKey });
+        cacheDiag = diagnoseCache(exact ? exact.system : extractSystemText(placed), history, { chatKey: settings.chatKey });
         console.log(`${PLUGIN_TAG} ${describeDiag(cacheDiag)}`);
-        // The CLI sends the system prompt as one block whatever it is given,
-        // so a split never got its own cache entry (wire capture, 2.1.285).
-        settings.systemSplitAt = null;
         // Post-history entries changed (one switched off, edited): earlier
         // turns go out again as sent, so swap their old copy for the new one
         // (lore-tail.js noteTail). Not on a reroll: nothing was changed then.
@@ -608,14 +602,18 @@ async function completeChat(req, res, body, settings, conn) {
             }
         }
         let sent = placed;
+        // Inline placement merges this turn's injections into the player's
+        // message; next turn ST sends it back as the player wrote it.
+        const plain = settings.systemPlacement === 'inline' ? plainPlayerText(messages) : null;
+        // The turn is filed under the player's text as ST will send it back
+        // next turn — also when nothing is moved: inline placement alone
+        // merges the preset's post-history entries into this message, and
+        // filed under that merged text the turn was never found again
+        // (history re-written every turn; measured 2026-10-07, 衡 + 军训14天).
+        if (typeof plain === 'string') settings.captureKey = plain;
         if (settings.loreTail || settings.foldTail) {
-            const volatile = settings.loreTail ? cacheDiag?.volatileTags ?? [] : [];
-            const systemText = exact ? exact.system : extractSystemText(placed) ?? '';
-            const { system, blocks } = volatile.length ? extractVolatileBlocks(systemText, volatile) : { system: systemText, blocks: [] };
-            if (exact?.text) blocks.unshift({ tag: TRIGGERED_TAG, text: exact.text });
-            // Inline placement merges this turn's injections into the player's
-            // message; next turn ST sends it back as the player wrote it.
-            const plain = settings.systemPlacement === 'inline' ? plainPlayerText(messages) : null;
+            const system = exact ? exact.system : extractSystemText(placed) ?? '';
+            const blocks = exact?.text ? [{ tag: TRIGGERED_TAG, text: exact.text }] : [];
             const rawTarget = loreTarget(history);
             const rawLast = history.findLastIndex((m) => m?.role === 'user');
             // Each user message is remembered by its text and the reply it
@@ -639,13 +637,6 @@ async function completeChat(req, res, body, settings, conn) {
             const lastUser = fold.history.findLastIndex((m) => m?.role === 'user');
             const fresh = blocks.length ? newLoreOnly(blocks, earlierOf(fold.history, target)) : [];
             const withLore = injectBlocks(fold.history, fresh);
-            // The turn is filed under the player's text as ST will send it
-            // back next turn — also when nothing was moved: inline placement
-            // alone merges the preset's post-history entries into this
-            // message, and filed under that merged text the turn was never
-            // found again (history re-written every turn; measured 2026-10-07,
-            // 衡 + 军训14天, a chat with no lore moved).
-            if (typeof plain === 'string') settings.captureKey = plain;
             if (repeats || blocks.length || fold.folded || restored.some((m, i) => m !== history[i])) {
                 sent = [{ role: 'system', content: system }, ...withLore];
                 messages = sent;
@@ -662,10 +653,10 @@ async function completeChat(req, res, body, settings, conn) {
             if (blocks.length) {
                 cacheDiag.loreMoved = blocks.map((b) => b.tag);
                 const n = (list) => list.reduce((k, b) => k + b.text.length, 0).toLocaleString();
-                console.log(`${PLUGIN_TAG} 每轮变化的 ${blocks.map((b) => `<${b.tag}>`).join('、')} 移出系统提示词（${n(blocks)} 字），本轮新增 ${n(fresh)} 字放在消息开头，之前给过的不再重复`);
+                console.log(`${PLUGIN_TAG} 本轮触发的世界书移出系统提示词（${n(blocks)} 字），放在发言开头 ${n(fresh)} 字（最近 ${LORE_WINDOW} 轮给过的不再重复）`);
             }
         }
-        if (settings.debugDump) dumpRequest({ model: requestedModel, settings, raw: body.messages, placed: sent, cacheDiag });
+        if (!settings.auxiliary) noteLastRequest({ model: requestedModel, placed: sent, cacheDiag });
     } catch (err) {
         console.warn(`${PLUGIN_TAG} cache diagnostics failed:`, err instanceof Error ? err.message : err);
     }
@@ -739,7 +730,7 @@ async function completeChat(req, res, body, settings, conn) {
             lastPath = cfg.path;
             replayWatch = cfg.path === 'resume' && cfg.hasHistory ? cfg.collector : null;
             if (settings.dryRun) {
-                // Cache simulation (scripts/cache_sim.py): what would go out is in data/debug/.
+                // Cache simulation (tests, scripts/cache-matrix.mjs): what would go out is in /v1/debug/last.
                 // Stand in for the CLI's own user entry so next turn replays this message as sent
                 // (with a uuid: the replayed entry is what the next entry chains to).
                 if (cfg.collector && cfg.currentText !== null) {

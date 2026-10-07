@@ -9,7 +9,7 @@
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-/** Repository root: package.json, manifest.json, data/, launcher/. */
+/** Repository root: package.json, manifest.json, data/. */
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 /** Runtime data (stats, caches, debug dumps). Local only, never committed. */

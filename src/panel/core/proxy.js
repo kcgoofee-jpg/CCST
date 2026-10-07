@@ -31,8 +31,7 @@ export async function fetchProxy(pluginPath, directPath, { method = 'GET', body 
     const settings = getSettings();
     const directOnly = proxyDirectOnly({ tauri: IS_TAURI, endpoint: settings.endpoint });
     try {
-        const key = settings.accessKey;
-        const headers = key ? { 'X-Claude-Max-Key': key } : {};
+        const headers = {};
         if (body !== undefined) headers['Content-Type'] = 'application/json';
         const direct = await fetch(`${proxyBase(settings)}${directPath}`, { method, signal: timeoutSignal(directOnly ? 12000 : 1500), headers, body: body !== undefined ? JSON.stringify(body) : undefined });
         if (direct.ok || directOnly) return direct;

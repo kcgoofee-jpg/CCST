@@ -18,7 +18,7 @@ import { apiValueUsd, cacheAnomaly, costParts, explainCache } from './cache-diag
 import { resetReplayState } from './turn-capture.js';
 import { SDK_VERSION } from './sdk-version.js';
 import { DATA_DIR } from '../paths.js';
-import { estimateCostUsd, BACKEND_LABELS, PRICES_AS_OF } from '../../shared/backends.js';
+import { PRICES_AS_OF } from '../../shared/backends.js';
 
 const PLUGIN_TAG = '[claude-subscription]';
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
@@ -92,7 +92,6 @@ export function formatLogLine(e) {
         parts.push(`输入 ${k(e.inputTokens)} + 缓存读 ${k(e.cacheReadTokens)} + 缓存写 ${k(e.cacheCreationTokens)}`);
         parts.push(`输出 ${k(e.outputTokens)}`);
         if (e.finish && e.finish !== 'stop') parts.push(e.finish);
-        if (e.costUsd != null) parts.push(`约 $${e.costUsd.toFixed(4)}`);
     } else {
         parts.push(`${e.errorCode}：${e.errorRaw}`);
     }
@@ -149,10 +148,6 @@ export function recordRequest(r) {
         // by another model)
         ...(r.notices?.length ? { notices: r.notices } : {}),
     };
-    // Estimated, from token counts × list prices (shared/backends.js); null on
-    // the subscription or for a model without a price row.
-    const cost = estimateCostUsd(entry, entry.backend, { cacheTtl: entry.cacheTtl });
-    if (cost != null) entry.costUsd = cost;
     if (failure) {
         entry.errorCode = failure.code;
         entry.errorRaw = failure.raw.slice(0, 500);
@@ -226,18 +221,6 @@ function aggregate(list, resent = resentAfterFailure(list)) {
     const ttft = ok.filter((e) => e.ttftMs != null);
     const models = {};
     for (const e of ok) models[e.model] = (models[e.model] ?? 0) + 1;
-    // Per backend: requests, tokens and the estimated cost (API-type backends).
-    const backends = {};
-    for (const e of list) {
-        const id = e.backend ?? 'subscription';
-        const b = backends[id] ??= { label: BACKEND_LABELS[id] ?? id, requests: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, costUsd: null };
-        b.requests += 1;
-        b.inputTokens += e.inputTokens ?? 0;
-        b.outputTokens += e.outputTokens ?? 0;
-        b.cacheReadTokens += e.cacheReadTokens ?? 0;
-        b.cacheCreationTokens += e.cacheCreationTokens ?? 0;
-        if (e.costUsd != null) b.costUsd = Math.round(((b.costUsd ?? 0) + e.costUsd) * 1e6) / 1e6;
-    }
     return {
         requests: list.length,
         succeeded: ok.length,
@@ -255,7 +238,6 @@ function aggregate(list, resent = resentAfterFailure(list)) {
         avgDurationMs: timed.length ? Math.round(timed.reduce((n, e) => n + e.durationMs, 0) / timed.length) : null,
         avgTtftMs: ttft.length ? Math.round(ttft.reduce((n, e) => n + e.ttftMs, 0) / ttft.length) : null,
         models,
-        backends,
     };
 }
 

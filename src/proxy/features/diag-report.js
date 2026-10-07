@@ -5,10 +5,10 @@
 // Asking a user to run scripts and dig through folders did not work (2026-10
 // 「缓存 0%」: the cause could not be found remotely). The panel's 「导出诊断文件」
 // takes this text, adds what only the browser knows (SillyTavern version,
-// prompt post-processing, preset, extensions) and puts it on the clipboard.
+// prompt post-processing, preset, extensions) and saves it as a file with the raw data.
 //
-// The report has NO chat text: versions, settings, the usage records (token
-// counts, hashes), the proxy log, and — when wire capture was on — the SHAPE
+// The readable report has no chat text (the raw data after it does): versions,
+// settings, the usage records (token counts, hashes), the proxy log, and the SHAPE
 // of what the CLI sent: block sizes, short hashes, cache breakpoints with
 // their TTL, the first place two consecutive requests differ, the cache usage
 // and rate-limit headers Anthropic returned. /diag/full adds the captured
@@ -202,7 +202,7 @@ export function buildReport({ usageCount = 20, exchangeCount = 12, logCount = 12
     });
 
     const ex = capturedExchanges().slice(-exchangeCount);
-    out.push('', `## 抓包：CLI 实际发给 Anthropic 的请求（${ex.length ? `最近 ${ex.length} 条` : '没有记录——面板「状态 → 诊断」里打开「记录原始请求」后再聊几轮（代理环境变量里有 socks 等非 http 代理时不记录）'}）`);
+    out.push('', `## 抓包：CLI 实际发给 Anthropic 的请求（${ex.length ? `最近 ${ex.length} 条` : '没有记录——代理重启后再聊几轮（环境变量里有 socks 等非 http 代理，或设了 CLAUDE_SUBSCRIPTION_DIAG_CAPTURE=0 时不记录）'}）`);
     let prevByModel = new Map();
     for (const x of ex) {
         const s = shapeOf(x.request);

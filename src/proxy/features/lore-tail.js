@@ -1,5 +1,5 @@
 // ──────────────────────────────────────────────
-// Volatile system-prompt blocks → the current turn
+// Keyword-triggered world info → the current turn (README「世界书移到本轮消息」)
 // ──────────────────────────────────────────────
 //
 // Keyword-triggered world info changes the system prompt almost every turn,
@@ -7,64 +7,19 @@
 // the whole chat history after it is written to the cache again (measured:
 // ~110k tokens per turn on a long chat, 42 of 150 turns in one day).
 //
-// cache-diag.js learns, per chat, which tagged block keeps changing
-// (<world_info>, <Lore>, …). Here that block's content leaves the system
-// prompt — a fixed one-line placeholder stays in its place — and is put at
-// the top of the current user message. The system prompt and every earlier
-// turn are then byte-identical to last turn and read back from the cache;
-// only the last exchange is written again. The lore also ends up next to
-// the turn it was triggered for.
+// Which entries fired is SillyTavern's decision, never ours: the panel sends
+// the text of this turn's keyword-triggered entries placed before / after
+// the character (constant entries are never sent, so they never move). Here
+// those texts leave the system prompt and go to the top of the player's
+// message, marked as setting material. The system prompt and every earlier
+// turn are then byte-identical to last turn and read back from the cache.
+// An entry already given in one of the last LORE_WINDOW player messages is
+// not repeated; one given longer ago is sent again in full, so an entry that
+// keeps firing stays near the current turn.
 
 import { turnKey } from './turn-capture.js';
 
-export const PLACEHOLDER_NOTE = '（这部分内容随剧情每轮变化，已移到最新一条消息开头的同名块里。）';
 export const TAIL_NOTE = '（以上是本轮按剧情触发的设定资料，来自系统设定，不是用户的发言。）';
-
-/** Outermost `<tag …>…</tag>` spans (same-name nesting counted). */
-function blockSpans(text, tag) {
-    const esc = tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const re = new RegExp(`<(/?)${esc}(?:\\s[^<>]*)?>`, 'g');
-    const spans = [];
-    let depth = 0;
-    let start = -1;
-    let innerStart = -1;
-    let m;
-    while ((m = re.exec(text))) {
-        if (!m[1]) {
-            if (m[0].endsWith('/>')) continue;
-            if (depth === 0) { start = m.index; innerStart = m.index + m[0].length; }
-            depth++;
-        } else if (depth > 0) {
-            depth--;
-            if (depth === 0) spans.push({ start, innerStart, innerEnd: m.index, end: m.index + m[0].length });
-        }
-    }
-    return spans;
-}
-
-/**
- * @param {string} system
- * @param {string[]} tags  tag names, without brackets
- * @param {{ maxShare?: number }} [opts]  skip a block larger than this share of the prompt
- * @returns {{ system: string, blocks: {tag: string, text: string}[] }}
- */
-export function extractVolatileBlocks(system, tags, { maxShare = 0.6 } = {}) {
-    let out = system ?? '';
-    const blocks = [];
-    for (const tag of tags ?? []) {
-        const spans = blockSpans(out, tag);
-        const inner = spans.map((s) => out.slice(s.innerStart, s.innerEnd).trim());
-        const size = inner.reduce((n, t) => n + t.length, 0);
-        if (!spans.length || !size || size > maxShare * out.length) continue;
-        // Replace back to front so earlier offsets stay valid.
-        for (let i = spans.length - 1; i >= 0; i--) {
-            const s = spans[i];
-            out = `${out.slice(0, s.innerStart)}\n${PLACEHOLDER_NOTE}\n${out.slice(s.innerEnd)}`;
-        }
-        blocks.push({ tag, text: inner.filter(Boolean).join('\n\n') });
-    }
-    return { system: out, blocks };
-}
 
 function prefixContent(content, prefix) {
     if (typeof content === 'string') return `${prefix}\n\n${content}`;
@@ -243,19 +198,21 @@ export function __resetInjected() {
 }
 
 /**
- * Drop lore lines the model has already been given in an earlier turn (those
- * turns are replayed as sent, so their lore is still in the history). Keeps
- * the history growing only by lore that is actually new. Very short lines
- * (separators, bare headings) are kept so an entry doesn't lose its frame.
+ * Drop lore lines the model was given in one of the last LORE_WINDOW player
+ * messages (those turns are replayed as sent, so their lore is still close
+ * by). Lore given longer ago is sent again. Very short lines (separators,
+ * bare headings) are kept so an entry doesn't lose its frame.
  * @param {{tag: string, text: string}[]} blocks
- * @param {string[]} earlierTexts  earlier user messages as sent
+ * @param {string[]} earlierTexts  earlier user messages as sent, oldest first
  */
 // A line that is only markup (`</money_scale>]`) says nothing on its own.
 const hasWords = (l) => l.replace(/<\/?[^<>\n]{1,60}>/g, '').replace(/[\s[\]{}()（）【】"'“”,.，。:：;；|*#>-]/g, '').length >= 4;
 
+export const LORE_WINDOW = 10;
+
 export function newLoreOnly(blocks, earlierTexts) {
     const seen = new Set();
-    for (const t of earlierTexts) for (const line of String(t).split('\n')) {
+    for (const t of earlierTexts.slice(-LORE_WINDOW)) for (const line of String(t).split('\n')) {
         const k = line.trim();
         if (k.length >= 4) seen.add(k);
     }

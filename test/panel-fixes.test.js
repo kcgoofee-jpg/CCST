@@ -2,23 +2,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { makeStatsAfterReply } from '../src/panel/core/stats-after-reply.js';
-import { extraModelId, appName } from '../src/panel/core/capabilities.js';
+import { appName } from '../src/panel/core/capabilities.js';
 import { canonicalModel, isAdaptiveOnly } from '../src/shared/sources.js';
 import { isAdaptiveOnlyModel } from '../src/proxy/core/models.js';
 
 const src = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), 'utf8');
-const PICKS = [{ value: 'claude-opus-5-5' }, { value: 'claude-opus-4-6' }, { value: 'claude-sonnet-5-5' }];
-
-test('model card: extra option only for Claude ids', () => {
-    assert.equal(extraModelId('gemini-2.5-pro', PICKS, canonicalModel), '');
-    assert.equal(extraModelId('gpt-5', PICKS, canonicalModel), '');
-    assert.equal(extraModelId(null, PICKS, canonicalModel), '');
-    assert.equal(extraModelId('claude-opus-4-6[1m]', PICKS, canonicalModel), '');
-    assert.equal(extraModelId('claude-haiku-4-5', PICKS, canonicalModel), 'claude-haiku-4-5');
-    assert.equal(extraModelId('anthropic/claude-opus-4.7', PICKS, canonicalModel), 'claude-opus-4-7');
-    assert.match(src('panel/features/models.js'), /dataset\.extra[\s\S]*rebuildPanel/);
-});
-
 test('stats refresh after a reply: waits, reads, retries once if lastRequest unchanged', async () => {
     const timers = [];
     let stats = { phase: 'ok', data: { lastRequest: { id: 1 } } };
@@ -71,15 +59,15 @@ test('always-thinking models: disabled 不思考, and the list matches the proxy
     for (const id of ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-fable-5-1', 'claude-opus-5-1']) assert.equal(isAdaptiveOnly(id), true, id);
     for (const id of ['claude-opus-4-7', 'claude-opus-4-8', 'anthropic/claude-opus-4.7', 'claude-opus-5', 'claude-opus-4-6', 'claude-opus-4-6[1m]', 'claude-sonnet-5', 'claude-sonnet-4-6', 'claude-haiku-4-5', 'gemini-2.5-pro', '']) assert.equal(isAdaptiveOnly(id), false, id);
     for (const id of ['claude-fable-5-1', 'claude-fable-5', 'claude-opus-5-5', 'claude-opus-5', 'claude-opus-4-8', 'claude-opus-4-7', 'claude-opus-4-6', 'claude-sonnet-5-5', 'claude-sonnet-5', 'claude-sonnet-4-6', 'claude-opus-4-5', 'claude-sonnet-4-5', 'claude-haiku-4-5']) assert.equal(isAdaptiveOnly(id), isAdaptiveOnlyModel(id), id);
-    assert.match(src('panel/tabs/chat.js'), /这个模型总会思考/);
 });
 
-test('不思考: no effort is sent', async () => {
-    globalThis.SillyTavern = { getContext: () => ({ chatCompletionSettings: {} }) };
+test('推理强度 decides thinking: a depth is sent, Minimum turns thinking off without a depth', async () => {
+    const cs = { reasoning_effort: 'high' };
+    globalThis.SillyTavern = { getContext: () => ({ chatCompletionSettings: cs }) };
     const { buildIncludeBodyYaml } = await import('../src/panel/core/inject.js');
-    const base = { effort: 'high', thinking: 'adaptive', showReasoning: true, identityMode: 'x', useResume: false, loreTail: false, foldTail: false };
-    assert.match(buildIncludeBodyYaml(base), /effort: high/);
-    const off = buildIncludeBodyYaml({ ...base, thinking: 'off' });
+    assert.match(buildIncludeBodyYaml({ loreTail: true }), /effort: high/);
+    cs.reasoning_effort = 'min';
+    const off = buildIncludeBodyYaml({ loreTail: true });
     assert.doesNotMatch(off, /effort:/);
     assert.match(off, /thinking: off/);
 });

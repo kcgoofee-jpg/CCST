@@ -15,7 +15,6 @@
 import './features/diag-log.js'; // first: keep the proxy's log lines for the diagnostics report
 import { startStandaloneListener, stopStandaloneListener, portInUseMessage, probeExistingProxy } from './api/listener.js';
 import { makeShutdownHandler } from './api/shutdown.js';
-import { networkInterfaces } from 'node:os';
 
 import { credentialSummary } from './features/oauth.js';
 import { noteSdkVersionRun } from './features/sdk-version.js';
@@ -55,16 +54,7 @@ if (cred.present) {
 } else {
     console.warn(`${TAG} 未找到订阅凭据 — 请先在扩展目录运行 npm run login 登录订阅账号（或设置 CLAUDE_CODE_OAUTH_TOKEN）`);
 }
-if (host === '0.0.0.0' || host === '::') {
-    // Listening on every interface: 0.0.0.0 is not an address anyone can connect to.
-    // Skip VPN/TUN (198.18/15) and link-local addresses; the phone can't reach those.
-    const lan = Object.values(networkInterfaces()).flat()
-        .filter((i) => i && i.family === 'IPv4' && !i.internal && !/^(198\.1[89]|169\.254)\./.test(i.address))
-        .map((i) => `http://${i.address}:${port}/v1`);
-    console.log(`${TAG} 本机端点 http://127.0.0.1:${port}/v1；局域网设备用 ${lan.join('、') || '（没有局域网地址，检查 Wi-Fi）'}。Ctrl+C 退出。`);
-} else {
-    console.log(`${TAG} 在酒馆里把 Custom (OpenAI-compatible) 端点设为 http://${host}:${port}/v1，或使用 CCST 面板一键连接。Ctrl+C 退出。`);
-}
+console.log(`${TAG} 在酒馆里把 Custom (OpenAI-compatible) 端点设为 http://127.0.0.1:${port}/v1，或使用 CCST 面板一键连接。Ctrl+C 退出。`);
 
 // Roleplay transcripts a crash or kill left on disk (see features/session-store.js).
 try {

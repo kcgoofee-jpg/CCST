@@ -241,7 +241,6 @@ test('CLAUDE_SUBSCRIPTION_CONTEXT_PIN_FILE=off keeps the pin in memory only', as
 // the player's message, so its capture must not be filed under the player's
 // text: next turn that text is history and would replay the instruction.
 const TMP = mkdtempSync(join(tmpdir(), 'cm-prefill-'));
-process.env.CLAUDE_SUBSCRIPTION_DEBUG_DIR = join(TMP, 'debug');
 process.env.CLAUDE_SUBSCRIPTION_SCRATCH_CWD = join(TMP, 'scratch');
 process.env.CLAUDE_SUBSCRIPTION_CONTEXT_PIN_FILE = 'off';
 process.env.CLAUDE_SUBSCRIPTION_CACHE_MEMORY_FILE = 'off';
@@ -249,10 +248,11 @@ process.env.CLAUDE_SUBSCRIPTION_CACHE_MEMORY_FILE = 'off';
 const { handleChatCompletions } = await import('../src/proxy/core/chat.js');
 const { __setSdkForTesting } = await import('../src/proxy/core/sdk-loader.js');
 const { diagnoseCache, __resetCacheDiag } = await import('../src/proxy/features/cache-diag.js');
+const { __lastEntries } = await import('../src/proxy/features/last-request.js');
 const { EventEmitter } = await import('node:events');
 
 /** One dry-run request: build everything, dump the transcript, never call Claude. */
-async function turn(messages) {
+async function turn(messages, ns = {}) {
     const res = new EventEmitter();
     res.statusCode = 200;
     res.writableFinished = false;
@@ -263,12 +263,12 @@ async function turn(messages) {
     const log = console.log; const warn = console.warn;
     console.log = () => {}; console.warn = () => {};
     try {
-        await handleChatCompletions({ body: { model: 'claude-opus-5', messages, claude_subscription: { dry_run: true, debug_dump: true } }, get: () => '' }, res);
+        await handleChatCompletions({ body: { model: 'claude-opus-5', messages, claude_subscription: { dry_run: true, ...ns } }, get: () => '' }, res);
     } finally {
         console.log = log; console.warn = warn;
     }
     assert.equal(res.statusCode, 200, JSON.stringify(res.body));
-    return JSON.parse(readFileSync(join(process.env.CLAUDE_SUBSCRIPTION_DEBUG_DIR, 'last-entries.json'), 'utf8'));
+    return __lastEntries();
 }
 const text = (e) => (typeof e.message?.content === 'string' ? e.message.content : (e.message?.content ?? []).map((b) => b?.text ?? '').join('\n'));
 
@@ -277,24 +277,28 @@ test('a prefill turn is filed under its own instruction, not under the player me
     __resetTurnCaptures();
     __resetCacheDiag();
     const rules = '规则'.repeat(2000);
-    // world_info changes every turn, so lore-tail moves it onto the player message.
-    const sys = (wi) => `<rules>${rules}</rules>\n<world_info>${wi}</world_info>`;
-    await turn([{ role: 'system', content: sys('甲') }, { role: 'assistant', content: '开场' }, { role: 'user', content: '我推门' }]);
+    // Keyword world info changes every turn, so lore-tail moves it onto the player message.
+    const lore = (k) => `【${k}】这一条世界书只在提到它的时候才会触发出现。`;
+    const sys = (k) => `<rules>${rules}</rules>\n${lore(k)}`;
+    const wi = (k) => ({ lore_text: [lore(k)] });
+    await turn([{ role: 'system', content: sys('甲') }, { role: 'assistant', content: '开场' }, { role: 'user', content: '我推门' }], wi('甲'));
+    const firstSent = sentTextFor('我推门', '开场');
+    assert.match(firstSent, /^<triggered_lore>\n【甲】[\s\S]*我推门$/, 'filed as sent, lore included');
 
     // The prefill round: SillyTavern ends with the assistant text it wants continued.
     const prefill = await turn([
         { role: 'system', content: sys('乙') }, { role: 'assistant', content: '开场' },
         { role: 'user', content: '我推门' }, { role: 'assistant', content: '门开了' },
-    ]);
+    ], wi('乙'));
     assert.ok(!prefill.some((e) => text(e).includes('Continue the assistant')), 'the instruction is not history');
-    assert.equal(sentTextFor('我推门', '开场'), '我推门', 'the prefill round does not refile the player message');
+    assert.equal(sentTextFor('我推门', '开场'), firstSent, 'the prefill round does not refile the player message');
 
     // Next turn: the player message is back in history and must still be there.
     const next = await turn([
         { role: 'system', content: sys('乙') }, { role: 'assistant', content: '开场' },
         { role: 'user', content: '我推门' }, { role: 'assistant', content: '门开了' },
         { role: 'user', content: '我点灯' },
-    ]);
+    ], wi('乙'));
     const players = next.filter((e) => text(e).includes('我推门'));
     assert.equal(players.length, 1, 'the player message is replayed once');
     assert.ok(!next.some((e) => text(e).includes('Continue the assistant')), 'no continuation instruction replaces it');

@@ -1,6 +1,5 @@
 // ──────────────────────────────────────────────
-// Tab 状态: last-turn cache, the latest reply's reliable checks, quota, usage, the world-info cache
-// tool (only when it has something to do), diagnostics.
+// Tab 状态: last-turn cache, the latest reply's reliable checks, quota, usage, diagnostics.
 // Draws what core/live.js put in the store (quota, stats).
 // ──────────────────────────────────────────────
 
@@ -9,10 +8,10 @@ import { libs } from '../core/libs.js';
 import { normalizeEndpoint } from '../core/capabilities.js';
 import { shortModel } from '../core/connection.js';
 import { fetchProxy, proxyErrorText } from '../core/proxy.js';
-import { el, note, iconButton, group, collapsible, stateLine, button, toggleRow } from '../core/dom.js';
+import { el, note, iconButton, group, collapsible, stateLine, button } from '../core/dom.js';
 import { notify } from '../core/notify.js';
 import { refreshAll, refreshQuota, refreshStats } from '../core/live.js';
-import { getSettings, saveSettingsDebounced } from '../core/settings.js';
+import { getSettings } from '../core/settings.js';
 import { promptMutators } from '../core/inject.js';
 
 /** What /status's self-checks say needs telling (#30, #36). Pure: the status
@@ -38,6 +37,27 @@ export function statusAdvisories(status, endpoint) {
     return out;
 }
 
+// Presets that make the model write its chain of thought INTO the reply
+// (<thinking>…</thinking>) leave the native reasoning box empty, and ST's
+// auto-parse only catches it when its prefix/suffix match those tags.
+function checkInlineCot() {
+    const tip = document.getElementById('claude_max_cot_tip');
+    if (!tip) return;
+    const chat = SillyTavern.getContext().chat ?? [];
+    const last = [...chat].reverse().find((m) => !m.is_user && !m.is_system);
+    const match = last?.mes?.match(/<(thinking|think|cot|analysis)\b[^>]*>/i);
+    if (!match || last.extra?.reasoning) {
+        tip.hidden = true;
+        return;
+    }
+    const tag = match[1];
+    tip.hidden = false;
+    tip.replaceChildren(
+        el('div', 'cm-note-title', '预设把思维链写进了正文'),
+        el('small', 'cm-hint', `收进折叠框：酒馆「用户设置 → 推理 → 自动解析」，前缀 <${tag}>、后缀 </${tag}>。`),
+    );
+}
+
 function renderAdvice(status) {
     const box = document.getElementById('claude_max_advice');
     if (!box) return;
@@ -49,6 +69,8 @@ function renderAdvice(status) {
 export function init() {
     store.subscribe('quota', ({ quota }) => renderQuota(quota));
     store.subscribe('stats', ({ stats }) => renderStats(stats));
+    // Every finished stats read (ok or not) is a moment to look at the latest reply for a written-out chain of thought.
+    store.subscribe('stats', ({ stats }) => { if (stats.phase === 'ok' || stats.phase === 'error') checkInlineCot(); });
     store.subscribe('status', ({ status }) => renderAdvice(status));
     store.subscribe('statsAt', ({ statsAt }) => {
         const stamp = document.getElementById('claude_max_stats_time');
@@ -266,12 +288,15 @@ export function outputSpeed(e) {
     return Math.round(e.outputTokens / (ms / 1000));
 }
 
+// Models with a 1M context of their own (no [1m] suffix needed).
+const NATIVE_1M = /sonnet-5[-.]5/i;
+
 /** How full the model's context window was: everything sent (input + cache read + write) against
  *  1M for a 1M-context model, else 200k. Colours at 70% / 85% (claude-hud's thresholds). */
 export function contextUse(e) {
     const tokens = (e?.inputTokens ?? 0) + (e?.cacheReadTokens ?? 0) + (e?.cacheCreationTokens ?? 0);
     if (!tokens) return null;
-    const size = /1m/i.test(String(e.model ?? '')) ? 1_000_000 : 200_000;
+    const size = /1m/i.test(String(e.model ?? '')) || NATIVE_1M.test(String(e.model ?? '')) ? 1_000_000 : 200_000;
     const pct = Math.min(100, Math.round((tokens / size) * 100));
     return { tokens, size, pct, level: pct >= 85 ? 'critical' : pct >= 70 ? 'warning' : '' };
 }
@@ -359,13 +384,17 @@ function renderStats(stats) {
     }
 }
 
-/** Tab 状态: last turn first, then the latest reply's problems, quota, usage, world-info cache, diagnostics. */
+/** Tab 状态: last turn first, then the latest reply's problems, quota, usage, diagnostics. */
 export function buildStatusTab(pane) {
     // 代理自检结果（SDK 兼容性、逐轮还原、实际地址）；没有问题时不显示。
     const adviceBox = el('div', 'cm-stats');
     adviceBox.id = 'claude_max_advice';
     adviceBox.hidden = true;
     pane.append(adviceBox);
+    const cotTip = note('warn');
+    cotTip.id = 'claude_max_cot_tip';
+    cotTip.hidden = true;
+    pane.append(cotTip);
 
     const stamp = el('small', 'cm-hint');
     stamp.id = 'claude_max_stats_time';
@@ -405,22 +434,13 @@ export function buildStatusTab(pane) {
     usage.body.append(statsBox);
     pane.append(usage.root);
 
-    // Hidden until features/lore-cache.js finds keyword entries (or a backup to restore).
-    const lore = group('世界书缓存', { id: 'claude_max_lore_sec' });
-    lore.root.hidden = true;
-    const loreBox = el('div', 'cm-field');
-    loreBox.id = 'claude_max_lore';
-    lore.body.append(loreBox);
-    pane.append(lore.root);
-
     pane.append(buildDiagGroup());
 }
 
-// ── 诊断：一键复制给维护者的报告 ──
-// The proxy's half (diag-report.js: versions, usage records, proxy log, and — with capture on —
-// the shape of what the CLI really sent) plus what only the browser knows: SillyTavern's
-// version, the connection's prompt post-processing, the preset, the extensions that can
-// change the prompt. No chat text in the copied report.
+// ── 诊断：导出给维护者的文件 ──
+// The proxy's half (diag-report.js: versions, usage records, proxy log, what the CLI really sent)
+// plus what only the browser knows: SillyTavern's version, the connection's prompt post-processing,
+// the preset, the extensions that can change the prompt. The raw data holds chat text.
 
 /** SillyTavern-side facts for the report (each one best-effort). */
 export async function clientSection(ctx = SillyTavern.getContext()) {
@@ -456,7 +476,7 @@ export async function clientSection(ctx = SillyTavern.getContext()) {
         return list.filter((e) => e.type !== 'system').map((e) => `${e.name.replace(/^third-party\//, '')}${disabled.has(e.name) ? '(停用)' : ''}`).join(', ');
     });
     await safe('面板设置', () => {
-        const { accessKey, leakWords, presetRecoRecord, checkupMuted, ...rest } = getSettings();
+        const { presetRecoRecord, ...rest } = getSettings();
         return JSON.stringify(rest);
     });
     return lines.join('\n');
@@ -470,7 +490,6 @@ async function proxyText(path, direct) {
 
 function buildDiagGroup() {
     const g = group('诊断');
-    const settings = getSettings();
     // One file with everything: the readable report first, then the raw data (captured requests, last full
     // request). Users send the file instead of pasting a wall of text into a chat box.
     const save = button('导出诊断文件', async () => {
@@ -496,12 +515,5 @@ function buildDiagGroup() {
     }, { icon: 'fa-download', primary: true });
     save.title = '缓存或回复不对时发给作者；含角色卡和聊天原文，别公开贴';
     g.body.append(save);
-    g.body.append(toggleRow({
-        id: 'claudeMaxDiagCapture',
-        title: '记录原始请求',
-        tip: '报告里多出每轮实际发给 Claude 的请求结构和缓存读写；只存在代理内存里',
-        checked: !!settings.diagCapture,
-        onChange: (on) => { getSettings().diagCapture = on; saveSettingsDebounced(); },
-    }));
     return g.root;
 }

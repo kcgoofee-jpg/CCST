@@ -48,7 +48,7 @@ export const SCRUB_KEYS = [
 export function buildSubprocessEnv({ envPins, maxTokens, cacheTtl = '1h' }) {
     const env = { ...process.env };
     for (const key of SCRUB_KEYS) delete env[key];
-    // The proxy's own settings (LAN access key, file paths, …) are none of
+    // The proxy's own settings (file paths, switches, …) are none of
     // the CLI's business — it reads only ANTHROPIC_* / CLAUDE_CODE_* / CLAUDE_CONFIG_DIR.
     for (const key of Object.keys(env)) if (key.startsWith('CLAUDE_SUBSCRIPTION_')) delete env[key];
     // Dev only: route the CLI through a local request tap (scripts/api_tap) to see what it really sends.

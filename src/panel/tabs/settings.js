@@ -1,17 +1,17 @@
 // ──────────────────────────────────────────────
-// Tab 设置: connection to the local proxy, two display options, the folded 高级 (cache &
-// context switches, 始终思考, the saved request), and 重新引导 at the bottom.
+// Tab 设置: the connection to the proxy, the two choices that are really the user's (cache lifetime,
+// moving triggered world info), the viewer of what goes to the model, and 重新引导. Thinking, the
+// model and showing reasoning are SillyTavern's own settings (API 连接 / 预设).
 // ──────────────────────────────────────────────
 
 import { store } from '../core/store.js';
-import { getSettings, DEFAULT_ENDPOINT } from '../core/settings.js';
-import { normalizeEndpoint, APP_NAME, debugViewState } from '../core/capabilities.js';
-import { el, segmented, toggleRow, group, collapsible, button } from '../core/dom.js';
+import { DEFAULT_ENDPOINT, getSettings } from '../core/settings.js';
+import { normalizeEndpoint, APP_NAME } from '../core/capabilities.js';
+import { el, segmented, toggleRow, group, button } from '../core/dom.js';
 import { notify } from '../core/notify.js';
 import { F } from '../core/registry.js';
 import { refreshStatus } from '../core/live.js';
-import { connect, renderGlance, SOURCE_LABELS } from '../shell.js';
-import { syncThinkingControls } from './chat.js';
+import { connect, SOURCE_LABELS } from '../shell.js';
 import { restartGuide } from '../guide.js';
 
 /** 设置 → 连接's one status line. Plan and model are in the header: not repeated here. */
@@ -44,33 +44,8 @@ export function buildSettingsTab(pane, settings, save) {
     conn.body.append(info, endpointField(settings, save), reconnectButton());
     pane.append(conn.root);
 
-    const opts = group('选项');
-    opts.body.append(toggleRow({
-        id: 'claudeMaxShowReasoning', title: '显示思考过程', tip: '跟随酒馆「显示模型思维」；关掉则总不显示',
-        checked: settings.showReasoning, onChange: (v) => { settings.showReasoning = v; save(); },
-    }));
-    opts.body.append(toggleRow({
-        id: 'claudeMaxIdentity', title: '身份模式', tip: '加 Claude Code 官方前言：模型能说出型号，但多耗 token。角色扮演建议关',
-        checked: settings.identityMode, onChange: (v) => { settings.identityMode = v; save(); },
-    }));
-    pane.append(opts.root);
-
-    // These decide themselves (defaults on, the preset's own recommendation, the proxy watching each
-    // chat). Kept for chasing cache problems, folded away so nobody has to think about it.
-    const adv = collapsible('高级', '', { id: 'claude_max_advanced' });
-    const add = (x) => adv.body.append(x);
-    // 只管「借用酒馆当前连接、被酒馆标成静默生成」的请求；扩展自己配了独立 API 的不经过代理，管不到。
-    // 能关思考的模型上后台请求本来就不思考，这项只对总会思考的模型（Opus 5.5、Sonnet 5.5…）有影响。
-    add(segmented({
-        label: '后台请求思考深度',
-        options: [
-            { value: 'low', label: '低', hint: '总结、变量更新等后台请求用「低」（只影响总会思考的模型）' },
-            { value: 'follow', label: '跟随', hint: '后台请求也用「聊天」页的思考深度' },
-        ],
-        current: settings.quietEffort === 'follow' ? 'follow' : 'low',
-        onChange: (v) => { settings.quietEffort = v === 'follow' ? 'follow' : 'low'; save(); },
-    }));
-    add(segmented({
+    const cache = group('缓存');
+    cache.body.append(segmented({
         label: '缓存有效期',
         options: [
             { value: '1h', label: '1 小时', hint: '写缓存按 2 倍价；读回复、想下一句超过 5 分钟也不用重写' },
@@ -79,45 +54,16 @@ export function buildSettingsTab(pane, settings, save) {
         current: settings.cacheTtl === '5m' ? '5m' : '1h',
         onChange: (v) => { settings.cacheTtl = v === '5m' ? '5m' : '1h'; save(); },
     }));
-    add(toggleRow({
-        id: 'claudeMaxAlwaysThink', title: '始终思考', tip: '每次都先思考（关 = 自适应）。Sonnet 5 按自适应处理',
-        checked: settings.thinking === 'on',
-        onChange: (v) => {
-            settings.thinking = v ? 'on' : 'adaptive';
-            save();
-            renderGlance();
-            syncThinkingControls();
-        },
-    }));
-    add(toggleRow({
-        id: 'claudeMaxResume', title: '会话续接', tip: '按真实多轮发送，能用上缓存。只在排查时关',
-        checked: settings.useResume, onChange: (v) => { settings.useResume = v; save(); },
-    }));
-    add(toggleRow({
-        id: 'claudeMaxInlineSystem', title: '深度注入保持原位', tip: '关掉则深度条目都提到系统提示词，一条变化整段缓存失效',
-        checked: settings.inlineSystem, onChange: (v) => { settings.inlineSystem = v; save(); },
-    }));
-    add(toggleRow({
-        id: 'claudeMaxLoreTail', title: '世界书变化部分移到末尾', tip: '每轮在变的世界书挪进本轮消息，旧内容能读缓存',
+    cache.body.append(toggleRow({
+        id: 'claudeMaxLoreTail', title: '世界书移到本轮消息',
+        tip: '关键词触发的世界书放到你这轮发言前面，聊天记录能一直读缓存。靠互斥条目切换状态的卡（好感度分段、昼夜）建议关，关掉和原版酒馆完全一样。详见 README',
         checked: settings.loreTail, onChange: (v) => { settings.loreTail = v; save(); },
     }));
-    add(toggleRow({
-        id: 'claudeMaxFoldTail', title: '发言后的注入并进发言', tip: 'MVU 等放在发言后的深度 0 条目并进发言，下一轮缓存能对上',
-        checked: settings.foldTail, onChange: (v) => { settings.foldTail = v; save(); },
-    }));
-    add(toggleRow({
-        id: 'claudeMaxDebugDump', title: '保存最近一次完整请求', tip: '存在代理那台电脑的 data/debug/，每次覆盖',
-        checked: settings.debugDump, onChange: (v) => { settings.debugDump = v; save(); syncView(); },
-    }));
-    const viewBtn = button('查看', () => F.debug.showDebugRequest(), { icon: 'fa-magnifying-glass', text: true, id: 'claude_max_debug_view' });
-    const syncView = () => {
-        const st = debugViewState(settings);
-        viewBtn.disabled = !st.enabled;
-        viewBtn.title = st.hint;
-    };
-    syncView();
-    add(viewBtn);
-    pane.append(adv.root);
+    pane.append(cache.root);
+
+    const view = group('排查');
+    view.body.append(button('查看发给模型的内容', () => F.debug.showDebugRequest(), { icon: 'fa-magnifying-glass', text: true, id: 'claude_max_debug_view' }));
+    pane.append(view.root);
 
     const again = el('button', 'cm-link-btn cm-guide-again', '重新引导');
     again.type = 'button';

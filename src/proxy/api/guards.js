@@ -2,11 +2,8 @@
 // Request guards and CORS (shared by the standalone listener)
 // ──────────────────────────────────────────────
 //
-// Host / Origin / LAN-key checks and the CORS headers. routes.js picks which
+// Host / Origin / this-machine-only checks and the CORS headers. routes.js picks which
 // of these each endpoint gets; listener.js installs the global ones.
-
-import { timingSafeEqual } from 'node:crypto';
-import { envValue } from '../env-value.js';
 
 // Reflect only loopback origins — a wildcard would let ANY web page the user
 // visits read subscription/billing data off these unauthenticated GETs.
@@ -33,8 +30,7 @@ export function isAllowedOrigin(origin, extra = process.env.CLAUDE_SUBSCRIPTION_
 // POST backend) are not for just any page on this
 // machine: a dev server on http://localhost:5173, or any local web app the
 // user happens to open, is a browser page that can drive them. Only the
-// TauriTavern WebView and origins the user listed are trusted here; a
-// loopback page must carry the access key like any other remote caller.
+// TauriTavern WebView and origins the user listed are trusted here.
 // SillyTavern's server-side forward sends no Origin at all and is unaffected.
 export function isTrustedPostOrigin(origin, extra = process.env.CLAUDE_SUBSCRIPTION_ALLOWED_ORIGINS) {
     if (!origin) return false;
@@ -45,10 +41,8 @@ export function isTrustedPostOrigin(origin, extra = process.env.CLAUDE_SUBSCRIPT
 // 127.0.0.1 and then talk to this unauthenticated proxy as "same origin" —
 // spending the subscription or reading /v1/debug/last. Browsers always send
 // the name they looked up as Host, so only accept loopback names, the bind
-// host itself, IP literals when bound to every interface (LAN use), and
-// whatever CLAUDE_SUBSCRIPTION_ALLOWED_HOSTS lists.
+// host itself, and whatever CLAUDE_SUBSCRIPTION_ALLOWED_HOSTS lists.
 const LOOPBACK_HOST = /^(localhost|127\.\d+\.\d+\.\d+|\[::1\]|tauri\.localhost)$/i;
-const IP_LITERAL = /^(\d+\.\d+\.\d+\.\d+|\[[0-9a-f:.]+\])$/i;
 
 export function isAllowedHost(hostHeader, bindHost, extra = process.env.CLAUDE_SUBSCRIPTION_ALLOWED_HOSTS) {
     if (!hostHeader) return true; // HTTP/1.0 clients; a browser always sends Host
@@ -56,7 +50,6 @@ export function isAllowedHost(hostHeader, bindHost, extra = process.env.CLAUDE_S
     if (LOOPBACK_HOST.test(name)) return true;
     const bind = String(bindHost ?? '').toLowerCase();
     if (name === bind || `[${bind}]` === name) return true;
-    if ((bind === '0.0.0.0' || bind === '::') && IP_LITERAL.test(name)) return true;
     return String(extra ?? '').split(',').map((h) => h.trim().toLowerCase()).filter(Boolean).includes(name);
 }
 
@@ -73,50 +66,28 @@ export function guardPostOrigin(req, res, next) {
     const origin = req.headers.origin;
     if (!origin || isTrustedPostOrigin(origin)) return next();
     if (LOOPBACK_ORIGIN.test(origin)) {
-        // A page on this machine: only its caller's identity proves it isn't
-        // some other local web app, and that proof is the access key.
-        if (keyMatches(presentedKey(req), envValue(process.env.CLAUDE_SUBSCRIPTION_LAN_KEY))) return next();
-        res.status(401).json({ error: { message: `代理要求访问密码才接受来自本机网页（${origin}）的写入请求：这类请求会花你的订阅或改动后端设置。酒馆自己的聊天请求不受影响；确实要让这个页面用的话，把它加进 CLAUDE_SUBSCRIPTION_ALLOWED_ORIGINS，或在请求里带上 CLAUDE_SUBSCRIPTION_LAN_KEY。` } });
+        // A page on this machine could be any local web app (a dev server, …): it does not get to spend the subscription.
+        res.status(403).json({ error: { message: `代理不接受来自本机网页（${origin}）的写入请求：这类请求会花你的订阅。酒馆自己的聊天请求不受影响；确实要让这个页面用的话，把它加进 CLAUDE_SUBSCRIPTION_ALLOWED_ORIGINS。` } });
         return;
     }
     res.status(403).json({ error: { message: `代理拒绝了来自其他网站（${origin}）的请求：只有酒馆页面可以用这个代理。` } });
 }
 
-// LAN use (a client on another machine talking to this proxy): requests
-// from another machine must carry the access key set in
-// CLAUDE_SUBSCRIPTION_LAN_KEY, as `Authorization: Bearer <key>` (the API key
-// field of the Custom endpoint) or `X-Claude-Max-Key`. Without a key set,
-// other machines are refused outright — binding 0.0.0.0 alone never opens
-// the subscription to the network. This machine (loopback) needs no key.
+// The proxy is for the computer it runs on: requests from another machine are
+// refused (6.1 dropped LAN access and its access key).
 const LOOPBACK_ADDR = /^(127\.|::1$|::ffff:127\.)/;
 
 export function isLoopbackAddress(addr) {
     return LOOPBACK_ADDR.test(String(addr ?? ''));
 }
 
-export function keyMatches(given, expected) {
-    if (!given || !expected) return false;
-    const a = Buffer.from(String(given)); const b = Buffer.from(String(expected));
-    return a.length === b.length && timingSafeEqual(a, b);
-}
-
-/** The access key a request carries: X-Claude-Max-Key, else the Bearer
- *  token. An empty or blank header does not hide a valid Bearer key. */
-export function presentedKey(req) {
-    const header = String(req.headers?.['x-claude-max-key'] ?? '').trim();
-    const auth = String(req.headers?.authorization ?? '').match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
-    return header || auth || null;
-}
-
 // A reverse proxy on the same machine connects from 127.0.0.1, but adds one of
 // these headers (Caddy, nginx, Cloudflare all do): such a request is really
-// remote and needs the key. Direct local callers (SillyTavern's plugin, the
-// panel on localhost) don't send them. CLAUDE_SUBSCRIPTION_REQUIRE_KEY=1
-// demands the key from everyone.
+// remote. Direct local callers (SillyTavern's plugin, the panel on localhost)
+// don't send them.
 const PROXY_HEADERS = ['x-forwarded-for', 'forwarded', 'x-real-ip', 'cf-connecting-ip'];
 
-export function isLocalCaller(req, env = process.env) {
-    if (/^(1|true|yes|on)$/i.test(String(env.CLAUDE_SUBSCRIPTION_REQUIRE_KEY ?? '').trim())) return false;
+export function isLocalCaller(req) {
     if (!isLoopbackAddress(req.socket?.remoteAddress)) return false;
     return !PROXY_HEADERS.some((h) => req.headers?.[h] !== undefined);
 }
@@ -129,12 +100,7 @@ export function guardRemote(req, res, next) {
         res.setHeader('Access-Control-Allow-Origin', req.headers.origin);
         res.setHeader('Vary', 'Origin');
     }
-    const expected = envValue(process.env.CLAUDE_SUBSCRIPTION_LAN_KEY);
-    if (!expected) {
-        return res.status(403).json({ error: { message: '这个代理只给它所在的电脑用，没有开放给其他设备（手机、另一台电脑）。' } });
-    }
-    if (keyMatches(presentedKey(req), expected)) return next();
-    res.status(401).json({ error: { message: '访问密码不对：代理开放给其他设备使用时需要密码（CLAUDE_SUBSCRIPTION_LAN_KEY）。' } });
+    res.status(403).json({ error: { message: '这个代理只给它所在的电脑用，不接受其他设备（手机、另一台电脑）的请求。' } });
 }
 
 /** Async route handler → rejections go to the error handler (express 4 does
@@ -169,7 +135,7 @@ const corsGetWith = (trusted) => (req, res, next) => {
         res.setHeader('Vary', 'Origin');
     }
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Claude-Max-Key');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     next();
 };
 

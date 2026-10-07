@@ -1,25 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { extractVolatileBlocks, injectBlocks, PLACEHOLDER_NOTE, TAIL_NOTE } from '../src/proxy/features/lore-tail.js';
-import { diagnoseCache, __resetCacheDiag } from '../src/proxy/features/cache-diag.js';
-
-const rules = '规则'.repeat(2000);
-
-test('extract: block content leaves, a fixed placeholder stays', () => {
-    const a = `<rules>${rules}</rules>\n<world_info>\n条目甲\n</world_info>\n<end>尾</end>`;
-    const b = `<rules>${rules}</rules>\n<world_info>\n条目乙\n条目丙\n</world_info>\n<end>尾</end>`;
-    const ra = extractVolatileBlocks(a, ['world_info']);
-    const rb = extractVolatileBlocks(b, ['world_info']);
-    assert.equal(ra.system, rb.system);
-    assert.ok(ra.system.includes(PLACEHOLDER_NOTE));
-    assert.deepEqual(rb.blocks, [{ tag: 'world_info', text: '条目乙\n条目丙' }]);
-});
-
-test('extract: a block that is most of the prompt is left alone', () => {
-    const r = extractVolatileBlocks(`<world_info>${rules}</world_info>短`, ['world_info']);
-    assert.equal(r.blocks.length, 0);
-});
+import { injectBlocks, TAIL_NOTE } from '../src/proxy/features/lore-tail.js';
 
 test('inject: goes on top of the last user message, before a prefill', () => {
     const h = [
@@ -33,17 +15,7 @@ test('inject: goes on top of the last user message, before a prefill', () => {
     assert.equal(h[1].content, '我推门');
 });
 
-test('diag learns a world-info tag after one change, others after two', () => {
-    __resetCacheDiag();
-    const hist = (n) => [{ role: 'user', content: '开始' }, ...Array.from({ length: n }, (_, i) => ({ role: i % 2 ? 'user' : 'assistant', content: `第${i}句` }))];
-    const sys = (wi, other) => `<rules>${rules}</rules>\n<world_info>${wi}</world_info>\n<status>${other}</status>`;
-    assert.deepEqual(diagnoseCache(sys('甲', 'x'), hist(1)).volatileTags, []);
-    assert.deepEqual(diagnoseCache(sys('乙', 'x'), hist(3)).volatileTags, ['world_info']);
-    assert.deepEqual(diagnoseCache(sys('乙', 'y'), hist(5)).volatileTags, ['world_info']);
-    assert.deepEqual(diagnoseCache(sys('乙', 'z'), hist(7)).volatileTags, ['world_info', 'status']);
-});
-
-import { newLoreOnly } from '../src/proxy/features/lore-tail.js';
+import { newLoreOnly, LORE_WINDOW } from '../src/proxy/features/lore-tail.js';
 import { createTurnCollector, sentTextFor, __resetTurnCaptures } from '../src/proxy/features/turn-capture.js';
 
 test('newLoreOnly: lines already given in earlier turns are not repeated', () => {
@@ -51,6 +23,14 @@ test('newLoreOnly: lines already given in earlier turns are not repeated', () =>
     const out = newLoreOnly([{ tag: 'world_info', text: '地窖在木屋北侧\n溪水向东流' }], earlier);
     assert.deepEqual(out, [{ tag: 'world_info', text: '溪水向东流' }]);
     assert.deepEqual(newLoreOnly([{ tag: 'world_info', text: '地窖在木屋北侧' }], earlier), []);
+});
+
+test('newLoreOnly: an entry last given more than LORE_WINDOW player messages ago is sent again in full', () => {
+    const lore = [{ tag: 'triggered_lore', text: '地窖在木屋北侧' }];
+    const given = '<triggered_lore>\n地窖在木屋北侧\n</triggered_lore>\n我推门';
+    const filler = Array.from({ length: LORE_WINDOW }, (_, i) => `第${i}句`);
+    assert.deepEqual(newLoreOnly(lore, [given, ...filler.slice(1)]), [], 'still within the window');
+    assert.deepEqual(newLoreOnly(lore, [given, ...filler]), lore, 'fell out of the window');
 });
 
 test('collector files the sent message under the text ST sends next turn', () => {

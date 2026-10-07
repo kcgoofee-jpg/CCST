@@ -14,20 +14,20 @@
 //
 //   core/       state store, settings, platform capabilities, notices, proxy access, live data, events
 //   shell.js    the drawer, header, status bar and tab bar
-//   tabs/       one module per tab (聊天 / 状态 / 设置)
-//   features/   optional pieces (reply keeper, latest-reply check, lore cache, models, …):
+//   tabs/       one module per tab (状态 / 设置)
+//   features/   optional pieces (reply keeper, latest-reply check, presets, …):
 //               each is loaded on its own, and one that fails to load is skipped, never fatal
 //   ../shared/  pure helpers also used by the tests, loaded by core/libs.js the same forgiving way
 //
 // What it does:
 //   • One-click Connect: pilots SillyTavern's Custom (OpenAI-compatible) source at the plugin's local
-//     endpoint — no URL typing. The endpoint and key are set BEFORE the source switch because ST's
+//     endpoint — no URL typing. The endpoint is set BEFORE the source switch because ST's
 //     change handler auto-reconnects immediately with whatever URL is current.
-//   • Claude-native settings (effort low..max, thinking mode, reasoning display, identity mode,
-//     session resume) injected per-request through `custom_include_body` — the only channel ST's
-//     backend forwards unconditionally for Custom sources. ST's own Reasoning Effort dropdown is
-//     bypassed entirely (it downgrades max→high client-side and drops the field for Claude model IDs
-//     server-side); leave it on "Auto".
+//   • Claude-native settings injected per-request through `custom_include_body` — the only channel
+//     ST's backend forwards unconditionally for Custom sources: thinking from ST's own 「推理强度」
+//     (read from the settings: ST downgrades max→high client-side and drops the field for Claude
+//     model IDs server-side), reasoning display from 「显示模型思维」, the cache choices, and what
+//     the proxy needs to keep the cache (triggered world info, injection openings).
 //   • Quota meter: the proxy directly first (source of truth); with the default endpoint, ST's
 //     same-origin plugin route as the fallback (works from remote browsers, where 127.0.0.1 is not
 //     the proxy).
@@ -37,7 +37,7 @@
 
 // [name it registers under (F.<name>), file in features/]
 const FEATURES = [
-    ['keeper', 'reply-keeper'], ['lore', 'lore-cache'], ['checkup', 'checkup'],
+    ['keeper', 'reply-keeper'], ['checkup', 'checkup'],
     ['models', 'models'], ['presets', 'presets'], ['notice', 'turn-notice'], ['progress', 'gen-progress'],
     ['debug', 'debug-request'],
 ];

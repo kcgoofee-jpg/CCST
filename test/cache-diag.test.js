@@ -47,71 +47,6 @@ test('nearestLabel names tags, but never quotes a heading (prompt text) — only
     assert.equal(nearestLabel('<rules>abc', 8), '<rules>');
 });
 
-test('split point settles at the start of the enclosing tag and only moves earlier', () => {
-    __resetCacheDiag();
-    const head = '规则'.repeat(1000) + '\n';           // 2001 chars, stable
-    const sys = (wi, tail = '尾部规则') => `${head}<Lore>\n${wi}\n</Lore>\n${tail}`;
-    const h = [A('greeting'), U('u1')];
-    assert.equal(diagnoseCache(sys('雪山'), h).splitAt, null);
-    const d2 = diagnoseCache(sys('沙漠'), [...h, A('a1'), U('u2')]);
-    assert.equal(d2.splitAt, head.length);          // snapped to the <Lore> line
-    const d3 = diagnoseCache(sys('森林'), [...h, A('a1'), U('u2'), A('a2'), U('u3')]);
-    assert.equal(d3.splitAt, d2.splitAt);           // stable → static part is byte-identical
-    const d4 = diagnoseCache(sys('森林', '新尾部'), [...h, A('a1'), U('u2'), A('a2'), U('u3'), A('a3'), U('u4')]);
-    assert.equal(d4.splitAt, d2.splitAt);           // a later change doesn't move it
-});
-
-test('a diff wandering inside one tagged section keeps the same split', () => {
-    __resetCacheDiag();
-    const head = '规则'.repeat(1000) + '\n';
-    const sys = (...lines) => `${head}<world_info>\n${lines.join('\n')}\n</world_info>`;
-    const h = [A('greeting'), U('u1')];
-    diagnoseCache(sys('甲', '乙', '丙'), h);
-    const d2 = diagnoseCache(sys('甲', '乙', '丁'), [...h, A('a1'), U('u2')]);
-    const d3 = diagnoseCache(sys('甲', '戊'), [...h, A('a1'), U('u2'), A('a2'), U('u3')]);
-    assert.equal(d2.splitAt, head.length);
-    assert.equal(d3.splitAt, head.length);
-});
-
-test('a one-off early edit stops pinning the split after a few turns', () => {
-    __resetCacheDiag();
-    const a = '规则'.repeat(1000) + '\n';
-    const b = '设定'.repeat(1000) + '\n';
-    const sys = (toggle, wi) => `${a}${toggle}\n${b}<world_info>\n${wi}\n</world_info>`;
-    let h = [A('greeting'), U('u1')];
-    const turn = (toggle, wi) => { const d = diagnoseCache(sys(toggle, wi), h); h = [...h, A('a'), U('u')]; return d; };
-    turn('开关甲', '雪山');
-    const wiStart = (a + '开关甲\n' + b).length;
-    assert.equal(turn('开关甲', '沙漠').splitAt, wiStart);
-    assert.equal(turn('开关乙', '森林').splitAt, a.length);     // user flipped a toggle: split pulled forward
-    turn('开关乙', '海边');
-    turn('开关乙', '草原');
-    assert.equal(turn('开关乙', '雪原').splitAt, wiStart);      // edit is 3 turns old: back behind the toggles
-});
-
-test('switching presets (most of the prompt replaced) resets the split instead of pinning it early', () => {
-    __resetCacheDiag();
-    const head = '开头'.repeat(1500) + '\n';
-    const presetA = Array.from({ length: 300 }, (_, i) => `通用规则${i}：`.padEnd(60, '甲')).join('\n') + '\n';
-    const presetB = Array.from({ length: 400 }, (_, i) => `庄园规则${i}：`.padEnd(60, '乙')).join('\n') + '\n';
-    const sys = (preset, wi) => `${head}${preset}<world_info>\n${wi}\n</world_info>`;
-    let h = [A('greeting'), U('u1')];
-    const turn = (preset, wi) => { const d = diagnoseCache(sys(preset, wi), h); h = [...h, A('a'), U('u')]; return d; };
-    turn(presetA, '雪山');
-    const switched = turn(presetB, '雪山');
-    assert.equal(switched.rewrite, true);
-    assert.equal(switched.splitAt, null);                       // not pinned at the start of the preset
-    assert.match(describeDiag(switched), /换了预设/);
-    const next = turn(presetB, '沙漠');
-    assert.equal(next.splitAt, (head + presetB).length);        // learned from the new prompt right away
-});
-
-test('no split when the change is too close to the start', () => {
-    __resetCacheDiag();
-    diagnoseCache('A\n' + 'x'.repeat(5000), [A('g'), U('u')]);
-    assert.equal(diagnoseCache('B\n' + 'x'.repeat(5000), [A('g'), U('u'), A('a'), U('v')]).splitAt, null);
-});
-
 test('explainCache: system change, history rewrite, effort switch', () => {
     const e = (over) => ({ ok: true, model: 'm', effort: 'high', inputTokens: 2, cacheReadTokens: 30000, cacheCreationTokens: 10000, ...over });
     const c = explainCache(e({ cacheDiag: { firstTurn: false, systemChanged: true, systemDiffAt: 36000, systemDiffLabel: '<world_info>', splitAt: 35000, historyDiffAt: 5, historyLen: 12 } }), e({}));
@@ -166,90 +101,6 @@ test('a reroll (same conversation sent again) is marked', () => {
     diagnoseCache(sys, h);
     assert.equal(diagnoseCache(sys, h).reroll, true);
     assert.equal(diagnoseCache(sys, [...h, { role: 'assistant', content: '门开了' }, { role: 'user', content: '进去' }]).reroll, undefined);
-});
-
-test('what was learned about a chat survives a restart (tags and split only)', async () => {
-    const { mkdtempSync, readFileSync } = await import('node:fs');
-    const { join } = await import('node:path');
-    const { tmpdir } = await import('node:os');
-    const file = join(mkdtempSync(join(tmpdir(), 'cm-')), 'mem.json');
-    process.env.CLAUDE_SUBSCRIPTION_CACHE_MEMORY_FILE = file;
-    try {
-        __resetCacheDiag();
-        const rules = '规则'.repeat(2000);
-        const sys = (wi) => `<rules>${rules}</rules>\n<world_info>${wi}</world_info>`;
-        const h = (n) => [{ role: 'user', content: '开始' }, ...Array.from({ length: n }, (_, i) => ({ role: i % 2 ? 'user' : 'assistant', content: `第${i}句` }))];
-        diagnoseCache(sys('甲'), h(1));
-        assert.deepEqual(diagnoseCache(sys('乙'), h(3)).volatileTags, ['world_info']);
-        const saved = readFileSync(file, 'utf8');
-        assert.ok(!saved.includes('第') && !saved.includes('规则'), 'no chat or prompt text on disk');
-        __resetCacheDiag(); // "restart"
-        const first = diagnoseCache(sys('丙'), h(5));
-        assert.equal(first.firstTurn, true);
-        assert.equal(first.remembered, true);
-        assert.deepEqual(first.volatileTags, ['world_info']);
-    } finally {
-        delete process.env.CLAUDE_SUBSCRIPTION_CACHE_MEMORY_FILE;
-        __resetCacheDiag();
-    }
-});
-
-test('what was learned is written whole, not in place', async () => {
-    const { mkdtempSync, readdirSync, readFileSync } = await import('node:fs');
-    const { join } = await import('node:path');
-    const { tmpdir } = await import('node:os');
-    const dir = mkdtempSync(join(tmpdir(), 'cm-mem-'));
-    const file = join(dir, 'mem.json');
-    process.env.CLAUDE_SUBSCRIPTION_CACHE_MEMORY_FILE = file;
-    try {
-        __resetCacheDiag();
-        diagnoseCache('<world_info>雪山</world_info>', [A('hi'), U('u1')]);
-        assert.ok(JSON.parse(readFileSync(file, 'utf8')), 'valid JSON after one turn');
-        assert.deepEqual(readdirSync(dir).filter((f) => f !== 'mem.json'), [], 'the temp file was renamed away');
-        // A truncated file here would land in loadMemory's catch and the chat
-        // would relearn its split point after every restart.
-        const src = readFileSync(new URL('../src/proxy/features/cache-diag.js', import.meta.url), 'utf8');
-        for (const [, target] of src.matchAll(/writeFileSync\(\s*([^,]+),/g)) {
-            assert.match(target, /tmp/, `${target.trim()} would be written in place`);
-        }
-    } finally {
-        delete process.env.CLAUDE_SUBSCRIPTION_CACHE_MEMORY_FILE;
-        __resetCacheDiag();
-    }
-});
-
-test('with the lore moved out, a change inside it sets no split and later changes do not move it', () => {
-    __resetCacheDiag();
-    const head = '规则'.repeat(1000) + '\n';
-    const sys = (wi, tail = '尾部') => `${head}<Lore>\n${wi}\n</Lore>\n${tail}`;
-    const h = [A('greeting'), U('u1')];
-    const opts = { moveVolatile: true };
-    diagnoseCache(sys('雪山'), h, opts);
-    const d2 = diagnoseCache(sys('沙漠'), [...h, A('a1'), U('u2')], opts);
-    assert.deepEqual(d2.volatileTags, ['Lore']);
-    assert.equal(d2.splitAt, null);                 // only the moved block changed: nothing to split
-    const d3 = diagnoseCache(sys('森林', '尾部改了'), [...h, A('a1'), U('u2'), A('a2'), U('u3')], opts);
-    assert.ok(d3.splitAt > head.length);            // split after the placeholder, where the sent prompt changed
-    const d4 = diagnoseCache(sys('城市', '尾部改了'), [...h, A('a1'), U('u2'), A('a2'), U('u3'), A('a3'), U('u4')], opts);
-    assert.equal(d4.splitAt, d3.splitAt);           // lore changing every turn never moves it
-});
-
-test('with lore moving on, a new chat treats the world info wrappers as volatile from the first turn', () => {
-    __resetCacheDiag();
-    const sys = (w, l) => `<preset>${'r'.repeat(3000)}</preset><Lore>${l}</Lore><world_info>${w}</world_info><end>x</end>`;
-    const first = diagnoseCache(sys('雪山', '甲'), [A('greet-lore'), U('u1')], { moveVolatile: true });
-    assert.equal(first.firstTurn, true);
-    assert.deepEqual([...first.volatileTags].sort(), ['Lore', 'world_info']);
-    assert.match(describeDiag(first), /一开始就移到消息里/);
-    // Both blocks change next turn: the prompt as sent is unchanged, so no split.
-    const d = diagnoseCache(sys('沙漠', '乙'), [A('greet-lore'), U('u1'), A('a1'), U('u2')], { moveVolatile: true });
-    assert.equal(d.splitAt, null);
-});
-
-test('without lore moving, a new chat learns nothing up front', () => {
-    __resetCacheDiag();
-    const first = diagnoseCache('<Lore>a</Lore>', [A('greet-plain'), U('u1')]);
-    assert.deepEqual(first.volatileTags, []);
 });
 
 test('a turn started after the cache TTL ran out is expiry, not a broken replay', async () => {
@@ -332,15 +183,13 @@ test('a failed request is discarded: the resend is compared with the last reques
     assert.equal(diagnoseCache('<p>rules</p>', h1, { chatKey: 'n' }).firstTurn, true);
 });
 
-test('cache writes of unknown TTL count as 1 hour in both the equivalent tokens and the cost estimate', async () => {
+test('cache writes of unknown TTL count as 1 hour in the equivalent tokens', async () => {
     const { cacheWriteMultiplier } = await import('../src/shared/backends.js');
     const { equivalentTokens } = await import('../src/proxy/features/cache-diag.js');
     assert.equal(cacheWriteMultiplier(null), 2);
     assert.equal(cacheWriteMultiplier('1h'), 2);
     assert.equal(cacheWriteMultiplier('5m'), 1.25);
     assert.equal(equivalentTokens({ cacheCreationTokens: 1000, cacheTtl: null }), 2000);
-    assert.match(readFileSync(new URL('../src/shared/backends.js', import.meta.url), 'utf8'), /writeMult = cacheWriteMultiplier\(opts\.cacheTtl\)/);
-    assert.match(readFileSync(new URL('../src/proxy/features/usage-stats.js', import.meta.url), 'utf8'), /estimateCostUsd\(entry, entry\.backend, \{ cacheTtl: entry\.cacheTtl \}\)/);
 });
 
 test('a reroll that read nothing does not claim it read everything', async () => {

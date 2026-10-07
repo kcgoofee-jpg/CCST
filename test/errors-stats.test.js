@@ -75,8 +75,6 @@ test('usage stats record metadata only and aggregate today / week', async () => 
     assert.equal(s.lastError.code, 'not_logged_in');
     assert.equal(s.background.today.requests, 1, 'background calls counted apart');
     assert.equal(s.lastRequest.model, 'claude-fable-5', 'the last-turn card ignores background calls');
-    assert.deepEqual(Object.keys(s.today.backends), ['subscription'], 'lines without a backend are the subscription');
-    assert.equal(s.today.backends.subscription.costUsd, null, 'no cost on the subscription');
     const log2 = console.log;
     console.log = () => {};
     try {
@@ -86,8 +84,7 @@ test('usage stats record metadata only and aggregate today / week', async () => 
         console.log = log2;
     }
     const s2 = stats.summarizeStats();
-    assert.equal(s2.today.backends.subscription.requests, 3);
-    assert.equal(s2.today.backends.subscription.costUsd, null);
+    assert.equal(s2.today.requests, 3);
     const file = readFileSync(process.env.CLAUDE_SUBSCRIPTION_STATS_FILE, 'utf8');
     assert.equal(file.trim().split('\n').length, 4);
     assert.ok(!/mes|content|秘密日记|小美|规则|开场/.test(file), 'no message or prompt text persisted, cache diagnosis included');

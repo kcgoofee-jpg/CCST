@@ -1,15 +1,14 @@
 // ──────────────────────────────────────────────
-// Preset recommendations and per-model profiles. A preset can ship `extensions.claude_max`
-// (effort, thinking, model, byModel …); switching to it applies those values so preset and panel stay in sync.
+// Preset recommendations and per-model entries. A preset can ship `extensions.claude_max`
+// ({ loreTail, cacheTtl, byModel }); switching to it applies those values. Thinking and the model
+// are the preset's own SillyTavern fields (推理强度, 模型), so they need nothing here.
 // ──────────────────────────────────────────────
 
 import { libs } from '../core/libs.js';
-import { getSettings, saveSettingsDebounced, defaultSettings, VALID_EFFORTS, VALID_THINKING, THINKING_OPTIONS } from '../core/settings.js';
+import { getSettings, saveSettingsDebounced, defaultSettings } from '../core/settings.js';
 import { connectionInfo, shortModel, modelKey } from '../core/connection.js';
 import { notify } from '../core/notify.js';
-import { F } from '../core/registry.js';
 import { rebuildPanel } from '../shell.js';
-import { syncThinkingControls } from '../tabs/chat.js';
 
 // Recommendations applied by v2.5.0 left no record, so switching away
 // couldn't undo them. If the active preset's recommendation is in effect
@@ -36,29 +35,23 @@ export function adoptUnrecordedReco() {
 
 // ── Preset-recommended settings ──
 
-// A preset can ship `extensions.claude_max = { effort, thinking, ... }`;
-// switching to it applies those values so preset and panel stay in sync.
+// A preset can ship `extensions.claude_max = { loreTail, cacheTtl }`; switching to it applies those
+// values (and switching away restores them). Fields of older versions (effort, thinking, …) are ignored.
 const PRESET_FIELDS = {
-    effort: { label: '思考深度', valid: (v) => VALID_EFFORTS.includes(v) },
-    thinking: { label: '思考模式', valid: (v) => VALID_THINKING.includes(v) },
-    showReasoning: { label: '显示思考过程', valid: (v) => typeof v === 'boolean' },
-    useResume: { label: '会话续接', valid: (v) => typeof v === 'boolean' },
-    inlineSystem: { label: '深度注入保持原位', valid: (v) => typeof v === 'boolean' },
-    loreTail: { label: '世界书变化部分移到末尾', valid: (v) => typeof v === 'boolean' },
-    foldTail: { label: '发言后的注入并进发言', valid: (v) => typeof v === 'boolean' },
-    identityMode: { label: '身份模式', valid: (v) => typeof v === 'boolean' },
+    loreTail: { label: '世界书移到本轮消息', valid: (v) => typeof v === 'boolean' },
+    cacheTtl: { label: '缓存有效期', valid: (v) => v === '1h' || v === '5m' },
 };
 
 export function applyPresetRecommendation() {
     applyPresetRecoCore();
-    applyModelProfile(); // last: the model profile wins over the preset-wide thinking setting
+    applyModelProfile();
 }
 
-// A preset can tune itself per model: extensions.claude_max.byModel =
-//   { "claude-opus-4-6": { thinking: "off", prompts: { "<entry id>": true } }, "claude-opus-5-5": { … } }
+// A preset can switch its own entries per model: extensions.claude_max.byModel =
+//   { "claude-opus-4-6": { prompts: { "<entry id>": true } }, "claude-opus-5-5": { prompts: { "<entry id>": false } } }
 // Applied on every model change and preset switch — e.g. on Opus 4.6 turn on an entry that writes
-// the chain of thought into the reply and turn native thinking off; on Opus 5.5 (which refuses
-// requests to write reasoning into the reply) turn that entry off again.
+// the chain of thought into the reply; on Opus 5.5 (which refuses requests to write reasoning into
+// the reply) turn it off again.
 export async function applyModelProfile() {
     const ctx = SillyTavern.getContext();
     const byModel = ctx.chatCompletionSettings?.extensions?.claude_max?.byModel;
@@ -67,13 +60,6 @@ export async function applyModelProfile() {
     const prof = byModel[modelKey(model)];
     if (!prof || typeof prof !== 'object') return;
     const done = [];
-    const settings = getSettings();
-    if (connected && VALID_THINKING.includes(prof.thinking) && settings.thinking !== prof.thinking) {
-        settings.thinking = prof.thinking;
-        saveSettingsDebounced();
-        syncThinkingControls();
-        done.push(`思考模式「${THINKING_OPTIONS.find((o) => o.value === prof.thinking)?.label ?? prof.thinking}」`);
-    }
     if (prof.prompts && typeof prof.prompts === 'object') {
         const pm = (await import('/scripts/openai.js').catch(() => null))?.promptManager;
         if (pm?.activeCharacter) {
@@ -94,8 +80,6 @@ export async function applyModelProfile() {
 function applyPresetRecoCore() {
     const ctx = SillyTavern.getContext();
     const rec = ctx.chatCompletionSettings?.extensions?.claude_max;
-    F.models.applyPresetModel(rec?.model);
-    F.models.syncModelControl();
     if (!libs.presetReco) return;
     const settings = getSettings();
     const { next, restored, applied, record } = libs.presetReco.planPresetReco(settings, rec, settings.presetRecoRecord ?? null, PRESET_FIELDS);

@@ -56,7 +56,7 @@ export async function refreshStatus() {
         const res = await fetchProxy('/status', '/status');
         const data = await res.json().catch(() => ({}));
         if (res.status === 401 || res.status === 403) {
-            // Reached the proxy, which turned us away (access key / LAN not on)
+            // Reached the proxy, which turned us away (another device: the proxy is for its own computer)
             store.set({ proxyState: 'offline', status: { phase: 'denied', code: res.status, message: data.error?.message ?? `HTTP ${res.status}` } });
             return;
         }
@@ -118,9 +118,7 @@ export async function heartbeat() {
         clearNotice('proxy');
     } else if (!up && !heartbeatDown && connected) {
         heartbeatDown = true;
-        if (status === 401) {
-            notify('bad', '访问密码不对', '代理拒绝了这台设备：访问密码不对。', { ms: 0, replace: 'proxy' });
-        } else if (status === 403) {
+        if (status === 401 || status === 403) {
             notify('bad', '代理不让这台设备用', '代理只开放给它所在的那台电脑。', { ms: 0, replace: 'proxy' });
         } else {
             notify('bad', '连不上代理，重试中', '先确认代理还在运行、那台电脑没睡眠。', { ms: 0, replace: 'proxy' });
@@ -210,7 +208,7 @@ export async function refreshStatsPage() {
 }
 
 // ── Full refresh (drawer opened, 重新检测) ──
-// Local renders (connect note, cache card, lore box, check-up, card check) listen to `pulse`;
+// Local renders (connect note, cache card, check-up) listen to `pulse`;
 // the fetches start here.
 
 // 最新版本：GitHub 上 main 的 package.json（一键安装装的就是它），6 小时查一次，记在本机
@@ -222,7 +220,7 @@ export async function checkLatest(now = Date.now()) {
         if (saved?.version && now - saved.at < 6 * 3600_000) { store.set({ latestVersion: saved.version }); return; }
     } catch { /* 读不了就重新查 */ }
     try {
-        const pkg = await fetch(LATEST_URL, { cache: 'no-store', signal: AbortSignal.timeout(8000) }).then((r) => r.json());
+        const pkg = await fetch(LATEST_URL, { cache: 'no-store', signal: timeoutSignal(8000) }).then((r) => r.json());
         if (typeof pkg?.version !== 'string') return;
         try { localStorage.setItem(LATEST_KEY, JSON.stringify({ version: pkg.version, at: now })); } catch { /* 无痕模式 */ }
         store.set({ latestVersion: pkg.version });

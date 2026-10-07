@@ -31,4 +31,8 @@ Run step 2 again, then restart SillyTavern. The installer updates both the plugi
 - **Install failed:** send the `CCST安装日志.txt` file on your Desktop.
 - **Chat errors or low cache hits:** after two or three turns, CCST panel → 状态 → 导出诊断文件, and send the file privately. It contains the character card and chat text.
 
+## World info moved to the current message (on by default)
+
+Claude's cache only matches an unchanged beginning. Keyword-triggered world-info entries sit inside the system prompt and change from turn to turn, so every change re-writes the whole chat to the cache. CCST takes the entries SillyTavern triggered this turn out of the system prompt and puts their text in front of your message, so the rest stays cached. Which entries fire is still SillyTavern's decision; constant entries never move. An entry given in the last 10 turns is not repeated; older ones are sent again. An entry that stops firing stays in the turn where it was given. For cards that switch state with mutually exclusive entries (affection levels, day / night), turn it off in CCST → 设置 → 缓存 → 「世界书移到本轮消息」: it then behaves exactly like plain SillyTavern.
+
 The old README is archived in [docs/归档](docs/归档/README-6.0.1.en.md). License: [AGPL-3.0](LICENSE).

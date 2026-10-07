@@ -12,6 +12,8 @@
 // Direct API users (curl, other frontends) can send the same object, or the
 // standard OpenAI `reasoning_effort` field, or nothing at all.
 
+const envOn = (name) => !/^(0|false|off|no)$/i.test(process.env[name] ?? '');
+
 export const VALID_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
 const VALID_THINKING = ['off', 'adaptive', 'on'];
 
@@ -46,7 +48,6 @@ function stFingerprint(fp) {
  *   thinking: 'off'|'adaptive'|'on',
  *   thinkingBudget: number|undefined,
  *   showReasoning: boolean,
- *   identityMode: boolean,
  *   useResume: boolean,
  *   systemPlacement: 'inline'|'hoist',
  *   auxiliary: boolean,
@@ -100,25 +101,25 @@ export function extractSettings(body) {
         thinking,
         thinkingBudget,
         showReasoning: ns.show_reasoning !== false, // default ON — ST renders reasoning_content natively
-        identityMode: ns.identity_mode === true,     // claude_code preset + append (self-ID fix, coding framing)
-        useResume: ns.use_resume !== false,          // synthetic-session resume (fold fallback when off/failed)
+        // The cache switches below are fixed on since 6.1 (no panel switch); the environment
+        // variables turn them off when chasing a problem.
+        useResume: envOn('CLAUDE_SUBSCRIPTION_USE_RESUME'),  // synthetic-session resume (fold fallback when off/failed)
         // Depth-injected system messages stay in place as user turns (like
-        // SillyTavern's own Claude converter) unless explicitly hoisted.
-        systemPlacement: ns.system_placement === 'hoist' ? 'hoist' : 'inline',
-        // Dev tool: save the last full request (system prompt + messages) locally.
-        debugDump: ns.debug_dump === true,
+        // SillyTavern's own Claude converter).
+        systemPlacement: envOn('CLAUDE_SUBSCRIPTION_INLINE_SYSTEM') ? 'inline' : 'hoist',
         // Diagnostics: send the CLI through the wire capture (features/wire-tap.js).
-        diagCapture: ns.diag_capture === true,
+        diagCapture: envOn('CLAUDE_SUBSCRIPTION_DIAG_CAPTURE'),
         // Hash of the open chat: the usage log files each request under it (per-chat last turn).
         chatKey: typeof ns.chat_key === 'string' && /^[0-9a-f]{8,40}$/.test(ns.chat_key) ? ns.chat_key : null,
         // Slot the finished reply is kept under (features/reply-keeper.js): a hash of chat + player message.
         replySlot: typeof ns.reply_slot === 'string' && /^[0-9a-f]{8,40}$/.test(ns.reply_slot) ? ns.reply_slot : null,
-        // Dev only: build everything (placement, lore tail, transcript) and dump it, but never call Claude.
-        dryRun: ns.dry_run === true && ns.debug_dump === true,
-        // A system-prompt block that changes every turn (keyword world info)
-        // moves to the current message so the history stays cached (lore-tail.js).
-        loreTail: ns.lore_tail !== undefined ? ns.lore_tail !== false : !/^(0|false|off|no)$/i.test(process.env.CLAUDE_SUBSCRIPTION_LORE_TAIL ?? ''),
-        foldTail: ns.fold_tail !== undefined ? ns.fold_tail !== false : !/^(0|false|off|no)$/i.test(process.env.CLAUDE_SUBSCRIPTION_FOLD_TAIL ?? ''),
+        // Dev only: build everything (placement, lore, transcript), keep it for /v1/debug/last, never call Claude.
+        dryRun: ns.dry_run === true,
+        // Keyword-triggered world info moves from the system prompt to the
+        // current message so the history stays cached (lore-tail.js; README).
+        loreTail: ns.lore_tail !== undefined ? ns.lore_tail !== false : envOn('CLAUDE_SUBSCRIPTION_LORE_TAIL'),
+        // A card's depth-0 injections after the player's message are folded into it.
+        foldTail: envOn('CLAUDE_SUBSCRIPTION_FOLD_TAIL'),
         // Opening text of each prompt SillyTavern injects INTO the chat this
         // request (depth world info, the preset's in-chat entries, Author's
         // Note — panel inject.js). Early in a chat ST puts them above every

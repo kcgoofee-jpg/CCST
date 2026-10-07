@@ -1,25 +1,16 @@
 // ──────────────────────────────────────────────
-// Proxy backends: names, cost estimate
+// Proxy backends: names, API list prices
 // ──────────────────────────────────────────────
 //
 // Pure functions shared by the proxy (env / usage stats) and the panel
-// (labels). Which env vars select a backend is decided in
-// by the proxy (subscription only); this file only knows names and numbers.
+// (labels). Only the subscription is left; the prices value a turn at API
+// rates (cache-diag.js 「按 API 价」).
 
 export const BACKENDS = ['subscription'];
 
 export const BACKEND_LABELS = {
     subscription: '订阅（Claude 登录）',
 };
-
-/** Billed per token (everything except the subscription). */
-export function isApiBilled(backend) {
-    return BACKENDS.includes(backend) && backend !== 'subscription';
-}
-
-export function normalizeBackend(value) {
-    return BACKENDS.includes(value) ? value : 'subscription';
-}
 
 // ── Cost estimate ──
 // USD per million tokens, Anthropic first-party list prices as of
@@ -58,24 +49,4 @@ export function priceFor(model) {
  *  written, older records) counts as 1 hour, the TTL CCST asks for. */
 export function cacheWriteMultiplier(ttl) {
     return ttl === '5m' ? 1.25 : 2;
-}
-
-/**
- * Estimated USD for one request's token counts; null when the model has no
- * price row or the backend is the subscription (no per-token bill).
- * @param {{ model: string, inputTokens?: number, outputTokens?: number,
- *   cacheReadTokens?: number, cacheCreationTokens?: number }} e
- * @param {string} backend
- * @param {{ cacheTtl?: '5m'|'1h' }} [opts] how cache writes were billed
- */
-export function estimateCostUsd(e, backend, opts = {}) {
-    if (!isApiBilled(backend)) return null;
-    const p = priceFor(e?.model);
-    if (!p) return null;
-    const writeMult = cacheWriteMultiplier(opts.cacheTtl);
-    const usd = ((e.inputTokens ?? 0) * p.input
-        + (e.outputTokens ?? 0) * p.output
-        + (e.cacheReadTokens ?? 0) * p.cacheRead
-        + (e.cacheCreationTokens ?? 0) * p.input * writeMult) / 1e6;
-    return Math.round(usd * 1e6) / 1e6;
 }

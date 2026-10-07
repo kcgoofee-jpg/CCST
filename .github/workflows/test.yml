@@ -23,14 +23,13 @@ jobs:
       - run: npm test
       - name: 语法检查
         run: |
-          for f in server.js bin/*.js scripts/*.mjs launcher/*.mjs src/*/*.js; do node --check "$f"; done
+          for f in server.js bin/*.js scripts/*.mjs src/*/*.js; do node --check "$f"; done
       - run: node scripts/version.mjs --check
 
-  # Windows 真机执行：npm test + 启动器（core.mjs 的 netstat / tasklist / 后台启动）+ claude-max.ps1
+  # Windows 真机执行：npm test + 一键安装
   windows:
     runs-on: windows-latest
     env:
-      PROXY_PORT: '18951'
       NO_COLOR: '1'
     steps:
       - uses: actions/checkout@v4
@@ -39,24 +38,6 @@ jobs:
           node-version: 22
       - run: npm install --ignore-scripts --no-audit --no-fund
       - run: npm test
-      - name: 启动器：启动代理（备用端口）
-        shell: powershell
-        run: node launcher/core.mjs start; if ($LASTEXITCODE -ne 0) { exit 1 }
-      - name: 启动器：检查状态
-        shell: powershell
-        run: node launcher/core.mjs check; if ($LASTEXITCODE -ne 0) { exit 1 }
-      - name: claude-max.ps1 status（Windows PowerShell 5.1）
-        shell: powershell
-        run: |
-          powershell -NoProfile -ExecutionPolicy Bypass -File launcher\windows\claude-max.ps1 status
-          if ($LASTEXITCODE -ne 0) { exit 1 }
-      - name: 启动器：按端口上的进程号关闭，并确认端口空了
-        shell: powershell
-        run: |
-          node launcher/core.mjs stop
-          if ($LASTEXITCODE -ne 0) { exit 1 }
-          Start-Sleep -Seconds 2
-          if (netstat -ano | Select-String ":$env:PROXY_PORT\s.*LISTENING") { Write-Error 'port still listening'; exit 1 }
       - name: 一键安装（Windows）：在克隆的 SillyTavern 上跑 .bat 和 .ps1，检查结果
         shell: powershell
         env:
@@ -98,10 +79,3 @@ jobs:
           powershell -NoProfile -ExecutionPolicy Bypass -File installer\ccst-install.ps1
           if ($LASTEXITCODE -ne 0) { Write-Error 'zip install failed'; exit 1 }
           if (-not (Test-Path "$env:RUNNER_TEMP\ST2\plugins\CCST\package.json")) { Write-Error 'plugins/CCST missing'; exit 1 }
-      - name: 收尾：万一前面失败，按 PID 文件关掉代理
-        if: always()
-        shell: powershell
-        run: |
-          Get-ChildItem data\logs -Filter *.pid -ErrorAction SilentlyContinue | ForEach-Object {
-            $p = [int](Get-Content $_.FullName); Stop-Process -Id $p -Force -ErrorAction SilentlyContinue
-          }

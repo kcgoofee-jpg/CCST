@@ -30,35 +30,20 @@ test('host guard: loopback names pass, rebinding names do not', () => {
     }
 });
 
-test('host guard: LAN binding accepts IP literals; extra names are opt-in', () => {
-    assert.equal(isAllowedHost('192.168.1.5:8901', '0.0.0.0', ''), true);
-    assert.equal(isAllowedHost('mac.local:8901', '0.0.0.0', ''), false);
+test('host guard: bound to every interface, IP literals are still refused; extra names are opt-in', () => {
+    assert.equal(isAllowedHost('192.168.1.5:8901', '0.0.0.0', ''), false);
     assert.equal(isAllowedHost('mac.local:8901', '0.0.0.0', 'mac.local, other'), true);
     assert.equal(isAllowedHost('myhost:8901', 'myhost', ''), true);
 });
 
-import { isLoopbackAddress, keyMatches, isLocalCaller } from '../src/proxy/api/guards.js';
+import { isLoopbackAddress, isLocalCaller } from '../src/proxy/api/guards.js';
 
-test('LAN access: loopback needs no key, others must match it exactly', () => {
+test('this machine only: loopback addresses', () => {
     assert.equal(isLoopbackAddress('127.0.0.1'), true);
     assert.equal(isLoopbackAddress('::1'), true);
     assert.equal(isLoopbackAddress('::ffff:127.0.0.1'), true);
     assert.equal(isLoopbackAddress('192.168.31.20'), false);
     assert.equal(isLoopbackAddress('::ffff:192.168.31.20'), false);
-    assert.equal(keyMatches('abc', 'abc'), true);
-    assert.equal(keyMatches('abd', 'abc'), false);
-    assert.equal(keyMatches('abc', ''), false);
-    assert.equal(keyMatches(null, 'abc'), false);
-});
-
-import { presentedKey } from '../src/proxy/api/guards.js';
-
-test('access key: X-Claude-Max-Key is trimmed; a blank one does not hide a valid Bearer', () => {
-    assert.equal(presentedKey({ headers: { 'x-claude-max-key': ' k1 ' } }), 'k1');
-    assert.equal(presentedKey({ headers: { 'x-claude-max-key': '', authorization: 'Bearer k2' } }), 'k2');
-    assert.equal(presentedKey({ headers: { 'x-claude-max-key': '   ', authorization: 'Bearer  k3 ' } }), 'k3');
-    assert.equal(presentedKey({ headers: { 'x-claude-max-key': 'k4', authorization: 'Bearer k5' } }), 'k4');
-    assert.equal(presentedKey({ headers: {} }), null);
 });
 
 test('ALLOWED_ORIGINS adds exact origins (trailing slash / case ignored), nothing broader', () => {
@@ -70,16 +55,14 @@ test('ALLOWED_ORIGINS adds exact origins (trailing slash / case ignored), nothin
     assert.equal(isAllowedOrigin('https://st.example.com', ''), false);
 });
 
-test('isLocalCaller: loopback without proxy headers is local; forwarded or REQUIRE_KEY is not', () => {
+test('isLocalCaller: loopback without proxy headers is local; forwarded is not', () => {
     const lo = (headers = {}) => ({ socket: { remoteAddress: '127.0.0.1' }, headers });
-    assert.equal(isLocalCaller(lo(), {}), true);
-    assert.equal(isLocalCaller({ socket: { remoteAddress: '10.0.0.5' }, headers: {} }, {}), false);
+    assert.equal(isLocalCaller(lo()), true);
+    assert.equal(isLocalCaller({ socket: { remoteAddress: '10.0.0.5' }, headers: {} }), false);
     for (const h of ['x-forwarded-for', 'forwarded', 'x-real-ip', 'cf-connecting-ip']) {
-        assert.equal(isLocalCaller(lo({ [h]: '1.2.3.4' }), {}), false, h);
+        assert.equal(isLocalCaller(lo({ [h]: '1.2.3.4' })), false, h);
     }
-    assert.equal(isLocalCaller(lo({ origin: 'http://localhost:8000', host: 'localhost:8901' }), {}), true);
-    assert.equal(isLocalCaller(lo(), { CLAUDE_SUBSCRIPTION_REQUIRE_KEY: '1' }), false);
-    assert.equal(isLocalCaller(lo(), { CLAUDE_SUBSCRIPTION_REQUIRE_KEY: '0' }), true);
+    assert.equal(isLocalCaller(lo({ origin: 'http://localhost:8000', host: 'localhost:8901' })), true);
 });
 
 // ── Trust given to a browser page (spending the subscription costs real money) ──
@@ -104,24 +87,17 @@ test('POST: only the TauriTavern WebView and listed origins are trusted, loopbac
     assert.equal(isTrustedPostOrigin(undefined), false, 'no Origin header at all is not an origin');
 });
 
-test('guardPostOrigin: a local web page must bring the access key, Tauri and SillyTavern need none', () => {
-    process.env.CLAUDE_SUBSCRIPTION_LAN_KEY = 'secretKey123';
-    try {
-        const verdict = (headers) => {
-            const res = postRes();
-            let nexted = false;
-            guardPostOrigin({ headers }, res, () => { nexted = true; });
-            return nexted ? 'next' : res.out.status;
-        };
-        assert.equal(verdict({}), 'next', 'SillyTavern forwards chat server-side: no Origin');
-        assert.equal(verdict({ origin: 'tauri://localhost' }), 'next', 'TauriTavern WebView');
-        assert.equal(verdict({ origin: 'http://localhost:5173', 'x-claude-max-key': 'secretKey123' }), 'next', 'the key makes a local page a known caller');
-        assert.equal(verdict({ origin: 'http://localhost:5173' }), 401, 'a loopback page without the key is asked for it');
-        assert.equal(verdict({ origin: 'http://localhost:5173', 'x-claude-max-key': 'wrong' }), 401);
-        assert.equal(verdict({ origin: 'https://evil.com' }), 403, 'any other site is refused outright');
-    } finally {
-        delete process.env.CLAUDE_SUBSCRIPTION_LAN_KEY;
-    }
+test('guardPostOrigin: a local web page may not spend the subscription; Tauri and SillyTavern can', () => {
+    const verdict = (headers) => {
+        const res = postRes();
+        let nexted = false;
+        guardPostOrigin({ headers }, res, () => { nexted = true; });
+        return nexted ? 'next' : res.out.status;
+    };
+    assert.equal(verdict({}), 'next', 'SillyTavern forwards chat server-side: no Origin');
+    assert.equal(verdict({ origin: 'tauri://localhost' }), 'next', 'TauriTavern WebView');
+    assert.equal(verdict({ origin: 'http://localhost:5173' }), 403, 'a loopback page is refused');
+    assert.equal(verdict({ origin: 'https://evil.com' }), 403, 'any other site is refused outright');
 });
 
 test('the chat-text dump reflects CORS only for trusted origins', async () => {

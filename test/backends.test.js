@@ -1,12 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { estimateCostUsd, priceFor, isApiBilled, BACKENDS } from '../src/shared/backends.js';
+import { priceFor, BACKENDS } from '../src/shared/backends.js';
 import { buildSubprocessEnv } from '../src/proxy/core/env.js';
 
 test('the proxy runs on the subscription only', () => {
     assert.deepEqual(BACKENDS, ['subscription']);
-    assert.equal(isApiBilled('subscription'), false);
 });
 
 test('buildSubprocessEnv: a stray shell provider switch or API key never reaches the CLI; the login token stays', () => {
@@ -22,8 +21,6 @@ test('buildSubprocessEnv: a stray shell provider switch or API key never reaches
     }
 });
 
-test('no cost estimate on the subscription; price rows still known', () => {
-    const e = { model: 'claude-opus-5', inputTokens: 1000, outputTokens: 1000, cacheReadTokens: 0, cacheCreationTokens: 0 };
-    assert.equal(estimateCostUsd(e, 'subscription'), null);
+test('price rows are known (for 「按 API 价」)', () => {
     assert.equal(priceFor('claude-opus-5-5').cacheRead, 0.2);
 });

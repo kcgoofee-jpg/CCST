@@ -8,7 +8,6 @@ import { join } from 'node:path';
 // Everything this file writes goes to a temp dir.
 const TMP = mkdtempSync(join(tmpdir(), 'cm-chat-'));
 process.env.CLAUDE_SUBSCRIPTION_STATS_FILE = join(TMP, 'usage.jsonl');
-process.env.CLAUDE_SUBSCRIPTION_DEBUG_DIR = join(TMP, 'debug');
 process.env.CLAUDE_SUBSCRIPTION_SCRATCH_CWD = join(TMP, 'scratch');
 process.env.CLAUDE_SUBSCRIPTION_CONTEXT_PIN_FILE = 'off';
 
@@ -18,6 +17,7 @@ const { __setSdkForTesting } = await import('../src/proxy/core/sdk-loader.js');
 const { startStandaloneListener, stopStandaloneListener } = await import('../src/proxy/api/listener.js');
 const { busyCount } = await import('../src/proxy/platform/control.js');
 const { __resetTurnCaptures } = await import('../src/proxy/features/turn-capture.js');
+const { __lastEntries } = await import('../src/proxy/features/last-request.js');
 
 const SLOT = 'abcdef0123456789';
 const quiet = (fn) => async (...a) => {
@@ -180,19 +180,12 @@ test('POST /v1/replies/:slot/cancel stops the kept-going reply and nothing is ke
     __resetKeptReplies();
     queries = [];
     await startAndLeave({ reply_slot: SLOT });
-    // A local web page must bring the access key for writes (guardPostOrigin);
-    // the panel does, and its origin still gets the CORS echo.
-    const savedKey = process.env.CLAUDE_SUBSCRIPTION_LAN_KEY;
-    process.env.CLAUDE_SUBSCRIPTION_LAN_KEY = 'cancel-key';
-    let r, body;
-    try {
-        r = await fetch(`${base}/v1/replies/${SLOT}/cancel`, { method: 'POST', headers: { Origin: 'http://127.0.0.1:8000', 'X-Claude-Max-Key': 'cancel-key' } });
-        body = await r.json();
-    } finally {
-        if (savedKey === undefined) delete process.env.CLAUDE_SUBSCRIPTION_LAN_KEY; else process.env.CLAUDE_SUBSCRIPTION_LAN_KEY = savedKey;
-    }
-    assert.deepEqual(body, { ok: true, cancelled: true });
-    assert.equal(r.headers.get('access-control-allow-origin'), 'http://127.0.0.1:8000');
+    // A local web page may not write (guardPostOrigin): the panel falls back to SillyTavern's plugin
+    // route, which calls the same handler without an Origin.
+    const page = await fetch(`${base}/v1/replies/${SLOT}/cancel`, { method: 'POST', headers: { Origin: 'http://127.0.0.1:8000' } });
+    assert.equal(page.status, 403);
+    const r = await fetch(`${base}/v1/replies/${SLOT}/cancel`, { method: 'POST' });
+    assert.deepEqual(await r.json(), { ok: true, cancelled: true });
     await until(() => busyCount() === 0);
     assert.equal(queries[0].aborted, true);
     assert.equal(keptReply(SLOT), null);
@@ -201,11 +194,11 @@ test('POST /v1/replies/:slot/cancel stops the kept-going reply and nothing is ke
 }));
 
 test('cancel route: CORS preflight for the panel, bad slot, foreign origin', async () => {
-    const pre = await fetch(`${base}/v1/replies/${SLOT}/cancel`, { method: 'OPTIONS', headers: { Origin: 'http://localhost:8000', 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'x-claude-max-key' } });
+    const pre = await fetch(`${base}/v1/replies/${SLOT}/cancel`, { method: 'OPTIONS', headers: { Origin: 'http://localhost:8000', 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'content-type' } });
     assert.equal(pre.status, 204);
     assert.equal(pre.headers.get('access-control-allow-origin'), 'http://localhost:8000');
     assert.match(pre.headers.get('access-control-allow-methods'), /POST/);
-    assert.match(pre.headers.get('access-control-allow-headers'), /X-Claude-Max-Key/);
+    assert.match(pre.headers.get('access-control-allow-headers'), /Content-Type/);
     assert.equal((await fetch(`${base}/v1/replies/zz/cancel`, { method: 'POST' })).status, 400);
     assert.equal((await fetch(`${base}/v1/replies/${SLOT}/cancel`, { method: 'POST', headers: { Origin: 'https://evil.example' } })).status, 403);
 });
@@ -222,10 +215,10 @@ test('dry run: the stand-in capture chains, and is found by text + the reply it 
     const turn = async (messages) => {
         const r = await fetch(`${base}/v1/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
             model: 'claude-opus-5', stream: false, messages,
-            claude_subscription: { effort: 'low', debug_dump: true, dry_run: true, lore_tail: false, fold_tail: false },
+            claude_subscription: { effort: 'low', dry_run: true, lore_tail: false },
         }) });
         assert.equal(r.status, 200);
-        return JSON.parse(readFileSync(join(process.env.CLAUDE_SUBSCRIPTION_DEBUG_DIR, 'last-entries.json'), 'utf8'));
+        return __lastEntries();
     };
     const sys = { role: 'system', content: '规则' };
     await turn([sys, { role: 'assistant', content: '开场' }, { role: 'user', content: '继续' }]);
@@ -247,7 +240,7 @@ test('dry run: a turn with the preset\'s post-history entries merged in is found
     const r = await fetch(`${base}/v1/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
         model: 'claude-opus-5', stream: false,
         messages: [{ role: 'system', content: '规则' }, { role: 'assistant', content: '开场' }, { role: 'user', content: '问她试拍要准备什么' }, tail],
-        claude_subscription: { effort: 'low', debug_dump: true, dry_run: true },
+        claude_subscription: { effort: 'low', dry_run: true },
     }) });
     assert.equal(r.status, 200);
     const { sentTextFor } = await import('../src/proxy/features/turn-capture.js');
@@ -265,7 +258,7 @@ test('dry run: preset entries around the chat (Kemini layout) — the turn is fo
     ];
     const r = await fetch(`${base}/v1/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
         model: 'claude-opus-5', stream: false, messages: msgs,
-        claude_subscription: { effort: 'low', debug_dump: true, dry_run: true, hist: { start: ['开场白：木屋里很冷'], end: ['我先清点物资'] }, gen_type: 'normal', lore_text: ['【柴火】木屋后面的柴堆只够烧两天，湿柴要先烘干。'] },
+        claude_subscription: { effort: 'low', dry_run: true, hist: { start: ['开场白：木屋里很冷'], end: ['我先清点物资'] }, gen_type: 'normal', lore_text: ['【柴火】木屋后面的柴堆只够烧两天，湿柴要先烘干。'] },
     }) });
     assert.equal(r.status, 200);
     const { sentTextFor } = await import('../src/proxy/features/turn-capture.js');

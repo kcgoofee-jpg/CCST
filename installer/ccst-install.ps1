@@ -207,8 +207,8 @@ function Install-Zip {
         $top = Get-ChildItem -LiteralPath (Join-Path $tmp 'x') -Directory | Select-Object -First 1
         if (-not $top -or -not (Test-Path -LiteralPath (Join-Path $top.FullName 'package.json'))) { return $false }
         New-Item -ItemType Directory -Force -Path $Dest | Out-Null
-        # 更新：先清掉旧代码（新版删掉的文件不能留着），只留 data（聊天统计、设置）、node_modules 和 launcher（里面有 config.local.ps1）
-        Get-ChildItem -LiteralPath $Dest -Force | Where-Object { @('data', 'node_modules', 'launcher') -notcontains $_.Name } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+        # 更新：先清掉旧代码（新版删掉的文件不能留着），只留 data（聊天统计、设置）和 node_modules
+        Get-ChildItem -LiteralPath $Dest -Force | Where-Object { @('data', 'node_modules') -notcontains $_.Name } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
         Copy-Item -Path (Join-Path $top.FullName '*') -Destination $Dest -Recurse -Force
         return $true
     } catch { return $false } finally { Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue }

@@ -3,20 +3,20 @@ import assert from 'node:assert/strict';
 
 const ext = {};
 globalThis.SillyTavern = { getContext: () => ({ extensionSettings: ext, saveSettingsDebounced() {} }) };
-const { getSettings, MODULE, defaultSettings } = await import('../src/panel/core/settings.js');
+const { getSettings, MODULE, defaultSettings, REMOVED_KEYS } = await import('../src/panel/core/settings.js');
 
-test('diagnostics capture: on for a fresh install', () => {
+test('a fresh install gets the defaults: world info moving on, 1-hour cache', () => {
     delete ext[MODULE];
     const s = getSettings();
-    assert.equal(s.diagCapture, true);
-    assert.equal(s.diagCaptureDefaulted, true);
-    assert.equal(defaultSettings.diagCapture, true);
+    assert.equal(s.loreTail, true);
+    assert.equal(s.cacheTtl, '1h');
+    assert.equal(s.freshInstall, true);
 });
 
-test('settings saved before 5.3 (no flag): turned on once; a later choice is kept', () => {
-    ext[MODULE] = { diagCapture: false, onboarded: true, freshInstall: false };
-    assert.equal(getSettings().diagCapture, true);
-    getSettings().diagCapture = false; // the user turns it off
-    assert.equal(getSettings().diagCapture, false, 'not flipped back');
-    assert.equal(getSettings().diagCaptureDefaulted, true);
+test('keys of removed settings are deleted on start-up; kept ones stay', () => {
+    ext[MODULE] = { onboarded: true, freshInstall: false, loreTail: false, effort: 'high', identityMode: true, accessKey: 'x', debugDump: true, diagCapture: false, panelTab: 'chat', heuristicChecks: true };
+    const s = getSettings();
+    for (const k of REMOVED_KEYS) assert.equal(k in s, false, k);
+    assert.equal(s.loreTail, false, 'the user\'s choice is kept');
+    for (const k of Object.keys(s)) assert.ok(k in defaultSettings, `${k} is a current setting`);
 });

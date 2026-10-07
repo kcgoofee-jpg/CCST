@@ -5,7 +5,7 @@
 // Two mounts serve the same handlers:
 //   standalone  the separate listener (default 127.0.0.1:8901), paths under /v1
 //               (plus /status); CORS for loopback / TauriTavern origins, and
-//               the listener's global guards (Host, LAN key) in front.
+//               the listener's global guards (Host, this machine only) in front.
 //   plugin      SillyTavern's own router at /api/plugins/claude-subscription;
 //               SillyTavern supplies CSRF and same-origin, so no CORS here.
 //               Only the endpoints the panel reads same-origin are mounted.
@@ -29,7 +29,7 @@ import { listModelsHandler } from '../core/models.js';
 import { handleStatus } from './status.js';
 import { handleQuota } from '../features/oauth.js';
 import { handleStats } from '../features/usage-stats.js';
-import { handleDebugLast } from '../features/debug-dump.js';
+import { handleDebugLast } from '../features/last-request.js';
 import { handleDiagFull, handleDiagReport } from '../features/diag-report.js';
 import { handleCancelReply, handleKeptReply } from '../features/reply-keeper.js';
 import { countInFlight } from '../platform/control.js';

@@ -1,5 +1,5 @@
 // ──────────────────────────────────────────────
-// 查看发给模型的内容: the last full request the proxy saved (设置 → 高级 → 查看)
+// 查看发给模型的内容: the last chat request as the proxy handed it to Claude (设置 → 查看), kept in the proxy's memory
 // ──────────────────────────────────────────────
 
 import { fetchProxy } from '../core/proxy.js';
@@ -16,14 +16,12 @@ export async function showDebugRequest() {
         return;
     }
     if (!data?.ok) {
-        notify('info', '没有可看的请求', String(data?.error ?? '还没有保存的请求。'), { ms: 8000 });
+        notify('info', '没有可看的请求', String(data?.error ?? '还没有聊天请求。'), { ms: 8000 });
         return;
     }
     const wrap = el('div', 'cm-debug-view');
-    const s = data.settings ?? {};
-    wrap.append(el('div', 'cm-note-title',
-        `${new Date(data.at).toLocaleString('zh-CN')} · ${data.model} · 思考深度 ${s.effort ?? '默认'} · 深度注入${s.systemPlacement === 'hoist' ? '提到系统提示词' : '保持原位'}`));
-    wrap.append(el('small', 'cm-hint', `系统提示词 ${data.systemMarked.length.toLocaleString()} 字${s.systemSplitAt ? `，缓存分界在第 ${s.systemSplitAt.toLocaleString()} 字（文中有标记）` : ''}；聊天记录 ${data.messages.length} 条。`));
+    wrap.append(el('div', 'cm-note-title', `${new Date(data.at).toLocaleString('zh-CN')} · ${data.model}`));
+    wrap.append(el('small', 'cm-hint', `系统提示词 ${data.systemMarked.length.toLocaleString()} 字；聊天记录 ${data.messages.length} 条。`));
     const sys = el('details', 'cm-details');
     sys.append(el('summary', null, '系统提示词'), el('pre', 'cm-debug-pre', data.systemMarked));
     wrap.append(sys);

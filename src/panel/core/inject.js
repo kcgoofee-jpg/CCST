@@ -7,7 +7,6 @@
 import { getSettings } from './settings.js';
 import { classifyRequest } from './capabilities.js';
 import { libs } from './libs.js';
-import { store } from './store.js';
 import { notify } from './notify.js';
 import { F } from './registry.js';
 import { chatKeyOf } from './chat-key.js';
@@ -204,33 +203,34 @@ export function stFingerprint(data, ctx = SillyTavern.getContext()) {
     };
 }
 
-// One-shot effort for the next reply (M2): kept in memory only (store.nextEffort), used by
-// every request until a chat message arrives, then cleared.
-export function effectiveEffort(settings) {
-    return store.get().nextEffort ?? settings.effort;
+// SillyTavern's own 「推理强度」 (Reasoning Effort, saved with the preset) decides thinking. Read from the
+// settings, not the request: ST downgrades 「Maximum」 to high client-side and drops the field for Claude
+// model ids server-side. 'auto' = the model's default; 'min' = no thinking (a model that always thinks
+// gets the lowest depth instead).
+export function stEffort(cs = SillyTavern.getContext().chatCompletionSettings) {
+    const v = String(cs?.reasoning_effort ?? 'auto');
+    return ['min', 'low', 'medium', 'high', 'max'].includes(v) ? v : 'auto';
 }
 
-export function buildIncludeBodyYaml(settings, quiet = false, slot = null, model = '') {
+export function buildIncludeBodyYaml(settings, quiet = false, slot = null) {
     const lines = ['claude_subscription:'];
-    // Background calls never take the one-shot effort meant for the next reply.
-    const effort = quiet ? (settings.quietEffort === 'follow' ? settings.effort : settings.quietEffort) : effectiveEffort(settings);
-    if (quiet) lines.push('  purpose: quiet');
-    // 「不思考」 means no thinking at all: no effort level goes out with it.
-    // 「不思考」 drops the depth, except on a model that always thinks (the proxy ignores off there).
-    const thinksAnyway = !!(model && libs.sources?.isAdaptiveOnly?.(model));
-    if (effort !== 'auto' && (settings.thinking !== 'off' || thinksAnyway)) lines.push(`  effort: ${effort}`);
-    lines.push(`  thinking: ${settings.thinking}`);
-    // Follows ST's「显示模型思维」; a preset can still turn it off.
-    const stShows = SillyTavern.getContext().chatCompletionSettings?.show_thoughts !== false;
-    lines.push(`  show_reasoning: ${settings.showReasoning && stShows}`);
-    lines.push(`  identity_mode: ${settings.identityMode}`);
-    lines.push(`  use_resume: ${settings.useResume}`);
-    lines.push(`  system_placement: ${settings.inlineSystem ? 'inline' : 'hoist'}`);
-    lines.push(`  lore_tail: ${settings.loreTail}`);
-    lines.push(`  fold_tail: ${settings.foldTail}`);
+    const cs = SillyTavern.getContext().chatCompletionSettings;
+    if (quiet) {
+        // Background calls (summaries, image tags, variable updates): no thinking (the proxy gives a
+        // model that always thinks the lowest depth instead).
+        lines.push('  purpose: quiet', '  thinking: off');
+    } else {
+        const effort = stEffort(cs);
+        if (effort === 'min') lines.push('  thinking: off');
+        else {
+            lines.push('  thinking: adaptive');
+            if (effort !== 'auto') lines.push(`  effort: ${effort}`);
+        }
+    }
+    // Follows ST's「显示模型思维」.
+    lines.push(`  show_reasoning: ${cs?.show_thoughts !== false}`);
+    lines.push(`  lore_tail: ${settings.loreTail !== false}`);
     if (settings.cacheTtl === '5m') lines.push('  cache_ttl: 5m');
-    if (settings.debugDump) lines.push('  debug_dump: true');
-    if (settings.diagCapture) lines.push('  diag_capture: true');
     if (slot && !quiet) lines.push(`  reply_slot: ${slot}`);
     // Which chat this is (a hash): the proxy files the usage record under it, so 状态 shows this chat's last turn.
     const chatKey = quiet ? null : chatKeyOf(SillyTavern.getContext());
@@ -241,7 +241,6 @@ export function buildIncludeBodyYaml(settings, quiet = false, slot = null, model
 export function onSettingsReady(data) {
     try {
         const settings = getSettings();
-        if (!settings.enabled) return;
         if (!data) return;
         const { ours } = classifyRequest(data, settings);
         if (!ours) return;
@@ -255,7 +254,7 @@ export function onSettingsReady(data) {
         const slot = F.keeper.openSlot(data) ?? null;
 
         const quiet = data.type === 'quiet';
-        let yaml = buildIncludeBodyYaml(settings, quiet, slot, data.model ?? '');
+        let yaml = buildIncludeBodyYaml(settings, quiet, slot);
         // JSON is valid YAML: the snippets carry quotes, colons and newlines safely.
         if (!quiet) {
             yaml += `\n  late: ${JSON.stringify(injectedOpenings())}\n  st_fp: ${JSON.stringify(stFingerprint(data))}`;

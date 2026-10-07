@@ -20,12 +20,7 @@ export function normalizeEndpoint(url) {
 /** ST's Custom URL is this proxy's address. */
 export function isOurEndpoint(customUrl, settings) {
     const a = normalizeEndpoint(customUrl);
-    return a !== '' && (a === normalizeEndpoint(settings.endpoint) || a === normalizeEndpoint(settings.stEndpoint));
-}
-
-/** The address SillyTavern's server uses for the proxy: differs from the browser's only when they are deployed apart. */
-export function stSideEndpoint(settings) {
-    return normalizeEndpoint(settings.stEndpoint) || normalizeEndpoint(settings.endpoint);
+    return a !== '' && a === normalizeEndpoint(settings.endpoint);
 }
 
 /** The proxy's own base URL: the endpoint without its /v1. */
@@ -62,13 +57,6 @@ export function cloudHosted(hostCheck, { hostname, endpoint, tauri }) {
     return !!hostCheck?.cloudNeedsNote({ hostname, endpoint, tauri });
 }
 
-/** 查看发给模型的内容 needs 保存最近一次完整请求 to be on; otherwise the button is greyed with this hint. */
-export function debugViewState(settings) {
-    return settings?.debugDump
-        ? { enabled: true, hint: '' }
-        : { enabled: false, hint: '先打开上面的开关，再聊一轮。' };
-}
-
 /**
  * Where SillyTavern sends chat requests, from its settings.
  *   connected: this proxy (everything works); anything else is not ours.
@@ -93,14 +81,4 @@ export function genLine(gen) {
     if (gen.kind === 'thinking') return `思考中 ${Math.max(0, Math.round((Date.now() - gen.startedAt) / 1000))} 秒`;
     if (gen.kind === 'writing') return `写作中 ${n(gen.chars ?? 0)} 字`;
     return ['完成', gen.chars != null ? `${n(gen.chars)} 字` : null, gen.seconds != null ? `${gen.seconds} 秒` : null, gen.cache != null ? `缓存 ${Math.round(gen.cache)}%` : null, gen.flag || null].filter(Boolean).join(' · ');
-}
-
-/**
- * The id the 「模型」 cards need as an extra option: the current model's canonical Claude id when it is a
- * Claude model that is not one of `picks`; '' otherwise (a leftover Gemini / GPT id never gets a card).
- * `canonical(id)` is shared/sources.js canonicalModel (null for non-Claude).
- */
-export function extraModelId(model, picks, canonical) {
-    const key = canonical(model);
-    return key && !picks.some((o) => o.value === key) ? key : '';
 }
