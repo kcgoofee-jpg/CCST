@@ -15,6 +15,7 @@ import { notify, clearNotice } from './notify.js';
 import { F } from './registry.js';
 import { chatKeyOf } from './chat-key.js';
 import { quotaGate, QUOTA_MIN_GAP_MS } from './quota-gate.js';
+import { usagePace } from '../tabs/status.js';
 
 // ── Version: panel and proxy update through different channels ──
 // (SillyTavern's extension manager for the panel; git pull / ZIP + a restart for the proxy),
@@ -165,7 +166,8 @@ export async function refreshQuota({ force = false } = {}) {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         const five = data.windows?.find((w) => w.type === 'five_hour');
-        glancePatch({ quota: five?.utilization != null ? Math.round(five.utilization * 100) : null });
+        const q5 = five?.utilization != null ? Math.round(five.utilization * 100) : null;
+        glancePatch({ quota: q5, quotaPace: usagePace(q5, five?.resetsAt, 5 * 3600_000)?.level ?? null });
         clearTimeout(quotaTimer);
         quotaNotBefore = 0;
         if (data.retryAt) {

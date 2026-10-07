@@ -794,3 +794,8 @@
 .claude-max .cm-cost-output { background: var(--cm-accent); }
 .claude-max .cm-cost-read { background: var(--cm-ok); }
 .claude-max .cm-cost-input { background: var(--cm-info); }
+
+/* 额度：照现在的速度会不会在重置前用完；上一轮：上下文快满 */
+.claude-max .cm-pace { font-size: var(--cm-fs-caption); margin-top: -4px; }
+.claude-max .cm-pace.warning, .claude-max .cm-ctx.warning { color: var(--cm-warn); }
+.claude-max .cm-pace.critical, .claude-max .cm-ctx.critical { color: var(--cm-bad); }

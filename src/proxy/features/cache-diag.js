@@ -22,7 +22,7 @@ import { dirname, join } from 'node:path';
 import { extractVolatileBlocks } from './lore-tail.js';
 import { contentToText } from '../core/system-prompt.js';
 import { DATA_DIR } from '../paths.js';
-import { cacheWriteMultiplier } from '../../shared/backends.js';
+import { cacheWriteMultiplier, priceFor } from '../../shared/backends.js';
 
 const MAX_CHATS = 6;
 // Below this the static part isn't worth a cache breakpoint (Opus 5.5's
@@ -336,14 +336,27 @@ export function equivalentTokens(e) {
     return Math.round(p.write + p.output + p.read + p.input);
 }
 
-/** equivalentTokens split by what it paid for (the panel's 「花在」). Output includes thinking. */
+/** equivalentTokens split by what it paid for (the panel's 「花在」), using the model's own price row
+ *  where there is one (Opus 5.5 reads at 0.05×, Fable 5.1 at 0.025×); otherwise read 0.1×, output 5×.
+ *  Output includes thinking. */
 export function costParts(e) {
+    const p = priceFor(e.model);
+    const readX = p ? p.cacheRead / p.input : 0.1;
+    const outX = p ? p.output / p.input : 5;
     return {
         write: Math.round(cacheWriteMultiplier(e.cacheTtl) * (e.cacheCreationTokens ?? 0)),
-        output: 5 * (e.outputTokens ?? 0),
-        read: Math.round(0.1 * (e.cacheReadTokens ?? 0)),
+        output: Math.round(outX * (e.outputTokens ?? 0)),
+        read: Math.round(readX * (e.cacheReadTokens ?? 0)),
         input: e.inputTokens ?? 0,
     };
+}
+
+/** What the request would cost at API list prices (USD), like a status line's session cost; null without a price row. */
+export function apiValueUsd(e) {
+    const p = priceFor(e.model);
+    if (!p) return null;
+    const c = costParts(e);
+    return ((c.write + c.output + c.read + c.input) * p.input) / 1e6;
 }
 
 /**
@@ -471,9 +484,9 @@ export function explainCache(entry, prevEntry = null) {
         }
     }
     const equiv = equivalentTokens(entry);
-    const noCache = equivalentTokens({ inputTokens: total, outputTokens: entry.outputTokens });
-    reasons.push(`「花在」按 API 价格比例折算成等效输入 token：读缓存 0.1 倍、写缓存 ${entry.cacheTtl === '5m' ? '1.25' : '2'} 倍、输出（含思考）5 倍；完全不用缓存约 ${k(noCache)}。订阅额度怎么扣官方未公开，适合前后对比。`);
-    return { read, wrote, hitPct, equiv, cost: costParts(entry), firstTurn: !d || !!d.firstTurn, headline: `读取缓存 ${k(read)} · 重新写入 ${k(wrote)} · 命中 ${hitPct}% · 约 ${k(equiv)} 等效`, reasons };
+    const noCache = equivalentTokens({ model: entry.model, inputTokens: total, outputTokens: entry.outputTokens });
+    reasons.push(`「花在」按这个模型的 API 价格折算，输出含思考；完全不用缓存约 ${k(noCache)} 等效 token。订阅额度不按美元扣，金额只用来比较；实测订阅里读缓存比 API 价更便宜、输出更贵。`);
+    return { read, wrote, hitPct, equiv, cost: costParts(entry), usd: apiValueUsd(entry), firstTurn: !d || !!d.firstTurn, headline: `读取缓存 ${k(read)} · 重新写入 ${k(wrote)} · 命中 ${hitPct}% · 约 ${k(equiv)} 等效`, reasons };
 }
 
 /** Test seam. */

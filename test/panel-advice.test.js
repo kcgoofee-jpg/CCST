@@ -60,3 +60,37 @@ test('cost shares: an 87% hit can still be mostly writes and output', async () =
     assert.deepEqual(costShares(null), []);
     assert.deepEqual(costShares({ write: 0, output: 0, read: 0, input: 0 }), []);
 });
+
+test('usage pace: projected to the reset; quiet under 10% or without a reset', async () => {
+    const { usagePace } = await import('../src/panel/tabs/status.js');
+    const H = 3600_000, W = 5 * H, now = 1_000_000_000_000;
+    // 2 h into the 5 h window at 50%: ends at 125% → runs out in 2 h more
+    const p = usagePace(50, now + 3 * H, W, now);
+    assert.equal(p.level, 'critical');
+    assert.equal(p.endPct, 125);
+    assert.equal(p.runOutMs, 2 * H);
+    assert.equal(usagePace(35, now + 3 * H, W, now).level, 'normal'); // ends at 88%
+    assert.equal(usagePace(36, now + 3 * H, W, now).level, 'warning'); // ends at 90%
+    assert.equal(usagePace(8, now + 4.9 * H, W, now).level, 'normal');
+    assert.equal(usagePace(50, null, W, now), null);
+    assert.equal(usagePace(50, now - 1, W, now), null);
+});
+
+test('context use and output speed for the last turn', async () => {
+    const { contextUse, outputSpeed } = await import('../src/panel/tabs/status.js');
+    assert.deepEqual(contextUse({ model: 'claude-opus-4-6', inputTokens: 3, cacheReadTokens: 150_000, cacheCreationTokens: 20_000 }), { tokens: 170_003, size: 200_000, pct: 85, level: 'critical' });
+    assert.equal(contextUse({ model: 'claude-opus-4-6[1m]', cacheReadTokens: 170_000 }).level, '');
+    assert.equal(contextUse({}), null);
+    assert.equal(outputSpeed({ outputTokens: 4000, durationMs: 102_000, ttftMs: 2_000 }), 40);
+    assert.equal(outputSpeed({ outputTokens: 10, durationMs: 300 }), null);
+});
+
+test('cost parts follow the model price row; API value in USD', async () => {
+    const { costParts, apiValueUsd } = await import('../src/proxy/features/cache-diag.js');
+    // Opus 5.5 reads at $0.20 of $4 input = 0.05×
+    assert.equal(costParts({ model: 'claude-opus-5-5', cacheReadTokens: 100_000 }).read, 5000);
+    assert.equal(costParts({ cacheReadTokens: 100_000 }).read, 10_000);
+    // Opus 4.6: 9127 write ×2 + 2798 out ×5 + 60238 read ×0.1 + 3 = 38273 eq × $5/M
+    assert.equal(apiValueUsd({ model: 'claude-opus-4-6', inputTokens: 3, cacheReadTokens: 60238, cacheCreationTokens: 9127, outputTokens: 2798 }).toFixed(4), '0.1914');
+    assert.equal(apiValueUsd({ model: 'mystery' }), null);
+});

@@ -14,7 +14,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSy
 import { dirname, join } from 'node:path';
 
 import { explainError } from './errors-zh.js';
-import { cacheAnomaly, costParts, explainCache } from './cache-diag.js';
+import { apiValueUsd, cacheAnomaly, costParts, explainCache } from './cache-diag.js';
 import { resetReplayState } from './turn-capture.js';
 import { SDK_VERSION } from './sdk-version.js';
 import { DATA_DIR } from '../paths.js';
@@ -249,6 +249,8 @@ function aggregate(list, resent = resentAfterFailure(list)) {
         cacheHitRate: promptTotal > 0 ? freshRead / promptTotal : null,
         // Where the equivalent cost went (rerolls included: they cost too).
         cost: ok.reduce((c, e) => { const p = costParts(e); for (const key in c) c[key] += p[key]; return c; }, { write: 0, output: 0, read: 0, input: 0 }),
+        // The same requests at API list prices (like a status line's Today $ / Week $); models without a price row are left out.
+        apiUsd: ok.reduce((n, e) => n + (apiValueUsd(e) ?? 0), 0),
         rerolls: ok.length - fresh.length,
         avgDurationMs: timed.length ? Math.round(timed.reduce((n, e) => n + e.durationMs, 0) / timed.length) : null,
         avgTtftMs: ttft.length ? Math.round(ttft.reduce((n, e) => n + e.ttftMs, 0) / ttft.length) : null,

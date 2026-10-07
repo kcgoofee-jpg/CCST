@@ -82,6 +82,33 @@ function formatReset(ts) {
 }
 
 /** The 5h / 7d windows: label + reset time on the left, percent on the right, the bar under them. */
+const WINDOW_MS = { five_hour: 5 * 3600_000 };
+const SEVEN_DAYS = 7 * 24 * 3600_000;
+
+/**
+ * How fast a window is being used up: the used share projected linearly to the reset.
+ * warning when it would end at 90% or more, critical when it would run out first; nothing
+ * under 10% used (a projection that early is noise). Same rule as claude-hud's usage pace.
+ * @returns {{ level: 'normal'|'warning'|'critical', endPct: number, runOutMs: number|null } | null}
+ */
+export function usagePace(pct, resetsAt, windowMs, now = Date.now()) {
+    if (pct == null || !resetsAt) return null;
+    const left = resetsAt - now;
+    if (!(left > 0) || left >= windowMs) return null;
+    if (pct < 10) return { level: 'normal', endPct: pct, runOutMs: null };
+    const elapsed = windowMs - left;
+    const endPct = Math.round(pct * (windowMs / elapsed));
+    const runOutMs = endPct > 100 ? Math.round(((100 - pct) / pct) * elapsed) : null;
+    return { level: endPct > 100 ? 'critical' : endPct >= 90 ? 'warning' : 'normal', endPct, runOutMs };
+}
+
+const fmtDur = (ms) => {
+    const m = Math.max(1, Math.round(ms / 60000));
+    if (m < 60) return `${m} 分钟`;
+    const h = Math.floor(m / 60);
+    return h >= 24 ? `${Math.round(h / 24)} 天` : `${h} 小时${m % 60 ? ` ${m % 60} 分` : ''}`;
+};
+
 function renderQuota(quota) {
     const box = document.getElementById('claude_max_quota');
     if (!box) return;
@@ -127,14 +154,21 @@ function renderQuota(quota) {
         const bar = el('div', 'cm-quota-bar');
         const fill = el('div', 'cm-quota-fill');
         fill.style.width = `${Math.min(100, pct ?? 0)}%`;
-        if ((pct ?? 0) >= 90) fill.classList.add('critical');
-        else if ((pct ?? 0) >= 70) fill.classList.add('warning');
+        // Colour: the worse of how much is used and how fast it is going.
+        const pace = usagePace(pct, w.resetsAt, WINDOW_MS[w.type] ?? SEVEN_DAYS);
+        const level = (pct ?? 0) >= 90 || pace?.level === 'critical' ? 'critical' : (pct ?? 0) >= 75 || pace?.level === 'warning' ? 'warning' : '';
+        if (level) fill.classList.add(level);
         bar.append(fill);
         const label = el('span', 'cm-qline-label', WINDOW_LABELS[w.type] ?? w.type);
         const reset = formatReset(w.resetsAt);
         if (reset) label.append(' ', el('small', 'cm-hint', reset));
         row.append(label, el('b', 'cm-qline-pct', pct !== null ? `${pct}%` : '–'), bar);
         box.append(row);
+        if (pace?.level === 'critical' && pace.runOutMs != null) {
+            box.append(el('small', 'cm-pace critical', `▲ 照这个速度，约 ${fmtDur(pace.runOutMs)}后用完（重置前）`));
+        } else if (pace?.level === 'warning') {
+            box.append(el('small', 'cm-pace warning', `▲ 照这个速度，重置时会用到约 ${pace.endPct}%`));
+        }
     }
     if (data.stale && data.fetchedAt) {
         const mins = Math.max(1, Math.round((Date.now() - data.fetchedAt) / 60000));
@@ -172,6 +206,7 @@ function usageTable(today, week) {
         ['首字等待', (a) => fmtSec(a.avgTtftMs)],
         ['缓存命中', (a) => fmtPct(a.cacheHitRate)],
         ['花在', (a) => costShares(a.cost).slice(0, 2).map((p) => `${p.label.replace('缓存', '')}${p.pct}%`).join(' ') || '–'],
+        ['按 API 价', (a) => (a.apiUsd ? fmtUsd(a.apiUsd) : '–')],
     ];
     for (const [label, fn] of rows) {
         const tr = el('tr');
@@ -203,11 +238,14 @@ export function costShares(cost) {
         .sort((x, y) => y.pct - x.pct);
 }
 
-/** One bar plus 「约 21.9k 等效 · 写缓存 39% · 输出 61%」. */
-function costLine(cost) {
+const fmtUsd = (x) => (x == null ? '' : x >= 1 ? `$${x.toFixed(2)}` : `$${x.toFixed(3)}`);
+
+/** One bar plus 「花在 · 按 API 价约 $0.21：写缓存 39% · 输出 61%」. */
+function costLine(cost, usd = null) {
     const shares = costShares(cost);
     if (!shares.length) return null;
     const total = Object.values(cost).reduce((n, v) => n + (v || 0), 0);
+    const size = usd != null ? `按 API 价约 ${fmtUsd(usd)}` : `约 ${fmtK(total)} 等效`;
     const box = el('div', 'cm-cost');
     const bar = el('div', 'cm-cost-bar');
     for (const p of shares) {
@@ -215,9 +253,26 @@ function costLine(cost) {
         seg.style.width = `${p.pct}%`;
         bar.append(seg);
     }
-    const text = el('small', 'cm-hint', `花在 · 约 ${fmtK(total)} 等效：${shares.map((p) => `${p.label} ${p.pct}%`).join(' · ')}`);
+    const text = el('small', 'cm-hint', `花在 · ${size}：${shares.map((p) => `${p.label} ${p.pct}%`).join(' · ')}`);
     box.append(bar, text);
     return box;
+}
+
+/** Output tokens per second while writing (after the first token), like claude-hud's speed; null when too short to mean anything. */
+export function outputSpeed(e) {
+    const ms = (e?.durationMs ?? 0) - (e?.ttftMs ?? 0);
+    if (!e?.outputTokens || ms < 500) return null;
+    return Math.round(e.outputTokens / (ms / 1000));
+}
+
+/** How full the model's context window was: everything sent (input + cache read + write) against
+ *  1M for a 1M-context model, else 200k. Colours at 70% / 85% (claude-hud's thresholds). */
+export function contextUse(e) {
+    const tokens = (e?.inputTokens ?? 0) + (e?.cacheReadTokens ?? 0) + (e?.cacheCreationTokens ?? 0);
+    if (!tokens) return null;
+    const size = /1m/i.test(String(e.model ?? '')) ? 1_000_000 : 200_000;
+    const pct = Math.min(100, Math.round((tokens / size) * 100));
+    return { tokens, size, pct, level: pct >= 85 ? 'critical' : pct >= 70 ? 'warning' : '' };
 }
 
 /** The last turn: cache in plain words first, then time / output (the model is in the header), then why. */
@@ -227,8 +282,11 @@ function lastTurnCard(data) {
     const v = cacheVerdict(c.hitPct, c.firstTurn);
     const card = note(v.tone, v.text);
     if (last) {
-        card.append(el('small', 'cm-hint', `用时 ${fmtSec(last.durationMs)} · 输出 ${fmtK(last.outputTokens)} token`));
-        const cost = costLine(c.cost);
+        const speed = outputSpeed(last);
+        card.append(el('small', 'cm-hint', `用时 ${fmtSec(last.durationMs)} · 输出 ${fmtK(last.outputTokens)} token${speed ? `（每秒 ${speed}）` : ''}`));
+        const ctx = contextUse(last);
+        if (ctx) card.append(el('small', `cm-hint cm-ctx ${ctx.level}`, `上下文 ${fmtK(ctx.tokens)} / ${fmtK(ctx.size)}（${ctx.pct}%）${ctx.level === 'critical' ? '：快满了，早期内容会被挤掉或报错' : ''}`));
+        const cost = costLine(c.cost, c.usd);
         if (cost) card.append(cost);
     }
     // The first reason is the conclusion; everything else is detail.

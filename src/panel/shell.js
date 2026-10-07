@@ -188,7 +188,11 @@ export function renderGlance() {
             if (connected && nextEffort) bar.append(el('span', 'cm-bar-effort', `下一轮${EFFORT_LABEL[effort]}`));
             if (q != null) {
                 const quota = el('span', 'cm-bar-quota', `5h ${q}%`);
-                if (q >= 70) quota.dataset.tone = q >= 90 ? 'error' : 'warn';
+                // The worse of how much is used and how fast (pace, see tabs/status.js usagePace); ▲ = on track to run out.
+                const pace = store.get().glance?.quotaPace;
+                if (q >= 90 || pace === 'critical') quota.dataset.tone = 'error';
+                else if (q >= 75 || pace === 'warning') quota.dataset.tone = 'warn';
+                if (pace === 'critical' || pace === 'warning') quota.textContent += ' ▲';
                 bar.append(quota);
             }
         }
