@@ -41,7 +41,7 @@ export function updateHelp({ latest, host = 'desktop' }) {
     if (host !== 'desktop') return null;
     return {
         title: `有新版本 v${latest}`,
-        sub: 'Windows：双击之前下载的「CCST安装」，找不到就点下面重新下载。Mac：在「终端」粘贴下面这行。',
+        sub: '再运行一次一键安装就是更新：面板一起更新，装完自动重开酒馆。',
         downloads: desktopDownloads(),
     };
 }
