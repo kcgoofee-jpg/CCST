@@ -153,6 +153,7 @@ test('cutExactLore lifts triggered entries out of the system prompt by their tex
     const one = cutExactLore(sys(a, b), [a, b]);
     const two = cutExactLore(sys(b), [b]);
     assert.equal(one.system, two.system, 'the system prompt is the same whichever entries fired');
+    assert.equal(two.system, sys(), '… and as if none had fired');
     assert.equal(one.text, `${a}\n\n${b}`);
     assert.deepEqual(cutExactLore('无关', [a]), { system: '无关', text: '' });
 });

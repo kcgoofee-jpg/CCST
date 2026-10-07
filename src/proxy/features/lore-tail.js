@@ -177,14 +177,16 @@ export function cutExactLore(system, texts) {
     const found = [];
     for (const t of texts ?? []) {
         if (typeof t !== 'string' || t.length < 20) continue;
-        const i = out.indexOf(t);
+        // SillyTavern joins entries with one newline: take the entry with one
+        // of its joins, so the rest reads as if it had never fired.
+        const piece = out.includes(`${t}\n`) ? `${t}\n` : out.includes(`\n${t}`) ? `\n${t}` : t;
+        const i = out.indexOf(piece);
         if (i < 0) continue;
-        out = out.slice(0, i) + out.slice(i + t.length);
+        out = out.slice(0, i) + out.slice(i + piece.length);
         found.push(t);
     }
     if (!found.length) return { system: system ?? '', text: '' };
-    // The joins around a lifted entry differ with how many were triggered.
-    return { system: out.replace(/\n{3,}/g, '\n\n'), text: found.join('\n\n') };
+    return { system: out, text: found.join('\n\n') };
 }
 export const TRIGGERED_TAG = 'triggered_lore';
 
