@@ -129,3 +129,16 @@ test('history bounds: preset user/assistant entries before the chat join the sys
     assert.equal(applyHistoryBounds(msgs, { start: [], end: [] }), msgs);
     assert.equal(applyHistoryBounds(msgs, { start: ['不存在的开头'], end: [] }), msgs);
 });
+
+test('a deep injection already given verbatim in an earlier turn becomes a one-line note', async () => {
+    const { REPEAT_NOTE } = await import('../src/proxy/features/lore-tail.js');
+    const block = '<WorldFrame>' + '世界书内容'.repeat(60) + '</WorldFrame>';
+    let n = 0;
+    const out = inlineLateSystemMessages([S('preset'), A('greeting'), U('u1'), S(block), A('a1'), U('u2'), S('tail')],
+        { seen: (t) => t === block, onRepeat: () => { n++; } });
+    assert.equal(out.at(-1).content, `${REPEAT_NOTE}\n\nu2\n\ntail`);
+    assert.equal(n, 1);
+    // Not seen before: kept in full.
+    const fresh = inlineLateSystemMessages([S('preset'), A('greeting'), U('u1'), S(block), A('a1'), U('u2')], { seen: () => false });
+    assert.equal(fresh.at(-1).content, `${block}\n\nu2`);
+});

@@ -569,11 +569,24 @@ async function completeChat(req, res, body, settings, conn) {
     // Preset entries before / after the chat history (system-placement.js applyHistoryBounds).
     if (settings.systemPlacement === 'inline') messages = applyHistoryBounds(messages, settings.hist, settings.genType);
     if (!settings.auxiliary) try {
-        const placed = settings.systemPlacement === 'inline' ? inlineLateSystemMessages(messages, { late: settings.lateSnippets }) : messages;
+        // Earlier player messages as they were sent (turn captures): an injection
+        // already given verbatim there is not repeated (system-placement.js).
+        const rawHist = messages.filter((m) => m?.role !== 'system');
+        const rawReplies = repliesBefore(rawHist);
+        const lastRawUser = rawHist.findLastIndex((m) => m?.role === 'user');
+        const earlierSent = rawHist.slice(0, Math.max(0, lastRawUser))
+            .map((m, i) => (m?.role === 'user' && typeof m.content === 'string' ? sentTextFor(m.content, rawReplies[i]) ?? '' : ''))
+            .join('\n');
+        let repeats = 0;
+        const seen = (t) => t.length >= 200 && earlierSent.includes(t);
+        const placed = settings.systemPlacement === 'inline'
+            ? inlineLateSystemMessages(messages, { late: settings.lateSnippets, seen, onRepeat: () => { repeats++; } })
+            : messages;
+        if (repeats) console.log(`${PLUGIN_TAG} ${repeats} 段深度注入和之前某轮给过的一字不差，本轮改为一句说明`);
         const history = placed.filter((m) => m?.role !== 'system');
         // Keyword-triggered world info inside the system prompt, by its exact text (lore-tail.js).
         const exact = settings.loreTail && settings.loreText.length ? cutExactLore(extractSystemText(placed) ?? '', settings.loreText) : null;
-        cacheDiag = diagnoseCache(exact ? exact.system : extractSystemText(placed), history, { moveVolatile: settings.loreTail });
+        cacheDiag = diagnoseCache(exact ? exact.system : extractSystemText(placed), history, { moveVolatile: settings.loreTail, chatKey: settings.chatKey });
         console.log(`${PLUGIN_TAG} ${describeDiag(cacheDiag)}`);
         // The CLI sends the system prompt as one block whatever it is given,
         // so a split never got its own cache entry (wire capture, 2.1.285).
@@ -633,7 +646,7 @@ async function completeChat(req, res, body, settings, conn) {
             // found again (history re-written every turn; measured 2026-10-07,
             // 衡 + 军训14天, a chat with no lore moved).
             if (typeof plain === 'string') settings.captureKey = plain;
-            if (blocks.length || fold.folded || restored.some((m, i) => m !== history[i])) {
+            if (repeats || blocks.length || fold.folded || restored.some((m, i) => m !== history[i])) {
                 sent = [{ role: 'system', content: system }, ...withLore];
                 messages = sent;
                 // Next turn these messages come back as ST has them (no lore,

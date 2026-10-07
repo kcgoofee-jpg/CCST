@@ -23,6 +23,7 @@
 // deeper than the last reply are moved up to the current turn (see below).
 
 import { contentToText } from '../core/system-prompt.js';
+import { REPEAT_NOTE } from './lore-tail.js';
 
 function asParts(content) {
     if (Array.isArray(content)) return content;
@@ -93,13 +94,15 @@ export function applyHistoryBounds(messages, hist, genType = null) {
  * @returns {Array} new array: leading system block, then history with
  *   later system messages folded into user turns
  */
-export function inlineLateSystemMessages(messages, { late = [] } = {}) {
+export function inlineLateSystemMessages(messages, { late = [], seen = null, onRepeat = null } = {}) {
     const isLate = (m) => m?.role === 'system' && late.length > 0 && late.some((s) => contentToText(m.content).trimStart().startsWith(s));
     const firstUser = messages.findIndex((m) => m?.role === 'user' && contentToText(m.content).trim());
     const lead = firstUser < 0 ? messages.length : firstUser;
     const preamble = messages.slice(0, lead);
     const head = preamble.filter((m) => m?.role === 'system' && !isLate(m));
+    const moved = new WeakSet(); // injections that go with the current turn (see `seen` below)
     const early = preamble.filter((m) => (m?.role !== 'system' && contentToText(m.content).trim()) || isLate(m));
+    for (const m of early) if (m?.role === 'system') moved.add(m);
     const rest = [...early, ...messages.slice(lead)];
     if (head.length === preamble.length && !rest.some((m) => m?.role === 'system')) return messages;
 
@@ -127,6 +130,7 @@ export function inlineLateSystemMessages(messages, { late = [] } = {}) {
             if (ordered[i]?.role === 'system') deep.unshift(...ordered.splice(i, 1));
         }
         if (deep.length) {
+            for (const m of deep) moved.add(m);
             // Right after the last reply: deeper ones stay ahead of shallower ones.
             const u = ordered.findLastIndex((m) => m?.role === 'user');
             const r = ordered.slice(0, u).findLastIndex((m) => m?.role === 'assistant');
@@ -134,10 +138,19 @@ export function inlineLateSystemMessages(messages, { late = [] } = {}) {
         }
     }
 
+    // An injection that goes with the current turn every turn is repeated in
+    // every turn's message (earlier turns are re-sent as they went out): a
+    // 17k-character world info block at depth 3 cost ~17k tokens of cache
+    // writes per turn and grew the history by as much (衡 × 军训14天,
+    // 2026-10-07). When `seen` says the exact text was already given in an
+    // earlier turn, a one-line note stands in for it.
     const out = [];
     for (const m of ordered) {
+        const text = m?.role === 'system' ? contentToText(m.content) : '';
+        const repeat = m?.role === 'system' && moved.has(m) && typeof seen === 'function' && seen(text);
+        if (repeat) onRepeat?.(text);
         const converted = m?.role === 'system'
-            ? { role: 'user', content: contentToText(m.content) }
+            ? { role: 'user', content: repeat ? REPEAT_NOTE : text }
             : m;
         if (converted.role === 'system') continue;
         const prev = out[out.length - 1];

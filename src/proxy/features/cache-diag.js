@@ -175,10 +175,12 @@ export function nearestLabel(text, offset) {
  *        the prompt as sent, not as received
  * @returns {object|null} diagnosis, or null on the first turn of a chat
  */
-export function diagnoseCache(systemText, history, { moveVolatile = false } = {}) {
+export function diagnoseCache(systemText, history, { moveVolatile = false, chatKey = null } = {}) {
     const system = systemText ?? '';
     const texts = history.map((m) => `${m.role}:${contentToText(m.content)}`);
-    const key = chatKeyOf(texts);
+    // The panel's chat id when it sent one: the opening of the first user
+    // message changes while injections are merged onto it.
+    const key = chatKey ? `p${chatKey}`.slice(0, 13) : chatKeyOf(texts);
     const prev = previous.get(key);
     const learned = prev ? null : loadMemory().get(key);
 
