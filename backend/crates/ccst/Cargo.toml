@@ -1,0 +1,17 @@
+[package]
+name = "ccst"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "CCST 下一代后端：酒馆订阅反代（CLI 入口：login / status / probe / serve）"
+
+[dependencies]
+anyhow.workspace = true
+tokio.workspace = true
+serde_json.workspace = true
+ccst-auth = { path = "../ccst-auth" }
+ccst-wire = { path = "../ccst-wire" }
+
+[[bin]]
+name = "ccst"
+path = "src/main.rs"
