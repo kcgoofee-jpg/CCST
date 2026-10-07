@@ -7,16 +7,15 @@
 // ──────────────────────────────────────────────
 
 export const libs = {
-    chatCheck: null,     // 体检 (shared/chat-check.js)
+    chatCheck: null,     // 最新回复检查 (shared/chat-check.js)
     loreConst: null,     // 世界书常驻 (shared/lore-constant.js)
-    cardAudit: null,     // 角色卡检查 (shared/card-audit.js)
     presetReco: null,    // 预设推荐 (shared/preset-reco.js)
     hostCheck: null,     // 云端酒馆检测 (shared/host.js)
     sources: null,       // 哪些来源连 Claude、模型名、缓存 (shared/sources.js)
 };
 
 const FILES = {
-    chatCheck: 'chat-check.js', loreConst: 'lore-constant.js', cardAudit: 'card-audit.js', presetReco: 'preset-reco.js',
+    chatCheck: 'chat-check.js', loreConst: 'lore-constant.js', presetReco: 'preset-reco.js',
     hostCheck: 'host.js', sources: 'sources.js',
 };
 

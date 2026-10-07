@@ -19,23 +19,6 @@ test('体检 tab is gone: no badge, no glance.issues, no tab switch to check', (
     assert.ok(!src('style.css').includes('cm-badge'));
 });
 
-test('heuristic checks: master switch exists, default off for new and existing users, gates run/toast/card audit', async () => {
-    const { defaultSettings } = await import('../src/panel/core/settings.js');
-    assert.equal(defaultSettings.heuristicChecks, false);
-    // existing users' saved settings lack the key; the fill-in loop in getSettings uses the default (false)
-    assert.ok(src('core/settings.js').includes('extensionSettings[MODULE][key] === undefined'));
-    const checkup = src('features/checkup.js');
-    assert.match(checkup, /!settings\.heuristicChecks && !force\) \{[\s\S]*?return;/);   // off: returns before checkReply
-    assert.ok(checkup.indexOf('heuristicChecks') < checkup.indexOf('checkReply('));
-    assert.match(checkup, /toast && settings\.heuristicChecks/);
-    assert.match(src('features/card-audit.js'), /heuristicChecks && getSettings\(\)\.cardAudit/);
-    // the group lives in 其他, collapsed, with the false-alarm note
-    const other = src('tabs/other.js'), check = src('tabs/check.js');
-    assert.ok(other.includes('buildCheckupSection'));
-    assert.ok(check.includes("'体检（实验）'") && check.includes('受预设和其他扩展影响，可能误报'));
-    assert.ok(check.includes('claudeMaxHeuristicChecks'));
-});
-
 test('状态 has the 最新回复 card; the turn notice carries the flag into the done line', () => {
     assert.ok(src('tabs/status.js').includes('claude_max_latest'));
     assert.ok(src('features/checkup.js').includes('renderLatestFlags'));
@@ -54,8 +37,8 @@ test('saved tab keys: current ones stay, old ones map to their successors, junk 
 });
 
 test('其他 holds the moved sections; 设置 keeps 连接 / 代理后端 / 思考 / 高级 only', () => {
-    const other = src('tabs/other.js') + src('tabs/check.js');
-    for (const title of ['查看发给模型的请求', '体检（实验）']) {
+    const other = src('tabs/other.js');
+    for (const title of ['查看发给模型的请求']) {
         assert.ok(other.includes(`'${title}'`), `其他 lacks ${title}`);
     }
     const settings = src('tabs/settings.js');
@@ -64,5 +47,4 @@ test('其他 holds the moved sections; 设置 keeps 连接 / 代理后端 / 思�
     assert.match(settings, /collapsible\('高级'/);
     // cache & context switches sit inside 高级, the moved ones are gone from 设置 and 体检
     for (const gone of ['claudeMaxCompactButtons', 'claudeMaxDebugDump', 'quietRender', 'showPerfDiag']) assert.ok(!settings.includes(gone), gone);
-    assert.ok(!src('tabs/check.js').includes('F.perf'));
 });

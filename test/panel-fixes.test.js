@@ -90,12 +90,6 @@ test('不思考: no effort is sent', async () => {
     assert.match(off, /thinking: off/);
 });
 
-test('体检: sub-toggles are greyed while the master switch is off', () => {
-    const check = src('panel/tabs/check.js');
-    assert.match(check, /input\.disabled = !settings\.heuristicChecks/);
-    assert.match(check, /claudeMaxCheckupToast', 'claude_max_card_audit_on/);
-});
-
 test('explainCache flags a first turn so the panel can show a neutral note', async () => {
     const { explainCache } = await import('../src/proxy/features/cache-diag.js');
     const base = { ok: true, cacheReadTokens: 0, cacheCreationTokens: 1000, inputTokens: 3, outputTokens: 10, model: 'm' };

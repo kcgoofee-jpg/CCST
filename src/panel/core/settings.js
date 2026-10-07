@@ -27,9 +27,6 @@ export const defaultSettings = {
     inlineSystem: true,
     debugDump: false,
     diagCapture: false,      // 诊断：让 Claude Code 经过代理内部的转发口，记录原始请求（状态 → 诊断）
-    heuristicChecks: false,  // 5.0：体检（实验）总开关（字数/段落/禁词/重复/隐藏设定/角色卡自动检查）；新老用户都默认关
-    checkupToast: true,      // 本轮体检发现问题时弹提示
-    leakWords: {},           // 角色卡 → 隐藏设定关键词（逗号分隔）
     presetRecoRecord: null,  // 上一个预设的推荐改了什么（切走时恢复）
     tailBlockFront: false,   // 实验：预设后置条目提前（省缓存）
     loreTail: true,          // 每轮变化的世界书移到本轮消息开头（省缓存）
@@ -38,12 +35,10 @@ export const defaultSettings = {
     accessKey: '',           // 代理的访问密码（CLAUDE_SUBSCRIPTION_LAN_KEY，旧版设置里可能有）；空 = 不带
     quietEffort: 'low',      // 后台请求（其他插件的生图 tag、总结等）的思考深度；'follow' = 跟随面板
     panelTab: 'reason',      // 3.1 前记的分页；现在记在 localStorage，只用来迁移
-    checkupMuted: {},        // 体检提示被点掉的次数（按问题类型）；两次后不再弹
     onboarded: false,        // 首次引导：走完、跳过、或打开时已经连上了
     guideSource: '',         // 引导里选的来源：'' 没开始 | 'choose' 还没选 | proxy / claude / openrouter / relay
     everConnected: false,    // 成功连接过一次就记下：之后断线只显示连接卡片，不再出现首次引导
     freshInstall: false,     // 面板第一次启动时设置还不存在（全新安装）才是 true，只有这时才自动出现引导
-    cardAudit: false,        // 切卡时检查角色卡（未成年相关内容）；默认关，其他页「体检（实验）」里可开
 };
 
 export function getSettings() {

@@ -195,15 +195,6 @@
 .claude-max small.cm-warn { color: color-mix(in srgb, var(--cm-warn) 75%, var(--cm-text)); opacity: 1; }
 .claude-max .cm-raw { word-break: break-all; opacity: 0.5; }
 
-.claude-max .cm-issues {
-    margin: 4px 0 0;
-    padding-left: 1.2em;
-    font-size: var(--cm-fs-caption);
-    line-height: 1.5;
-}
-
-.claude-max .cm-issues li + li { margin-top: 4px; }
-
 /* the connect card: the only thing on screen until SillyTavern is on Claude */
 .claude-max .cm-setup { gap: 4px; padding: 12px; }
 .claude-max .cm-setup-head { display: flex; align-items: center; gap: 8px; }
@@ -817,5 +808,4 @@
 .claude-max .cm-card-fold { margin-top: 8px; }
 .claude-max .cm-card-fold .cm-fold-body { display: flex; flex-direction: column; gap: 6px; }
 
-.claude-max .cm-toggle.cm-disabled { opacity: 0.5; }
 .claude-max .cm-seg-btn:disabled { opacity: 0.45; cursor: not-allowed; }

@@ -1,9 +1,8 @@
 import { test, } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { makeCheckupGate } from '../src/panel/core/checkup-gate.js';
 import { extractSettings } from '../src/proxy/features/settings.js';
-import { refusalNotice, checkReply } from '../src/shared/chat-check.js';
+import { refusalNotice, replyFlags } from '../src/shared/chat-check.js';
 
 
 test('proxy: purpose quiet is auxiliary and carries no chat key, so it can never be 上一轮', () => {
@@ -13,24 +12,6 @@ test('proxy: purpose quiet is auxiliary and carries no chat key, so it can never
     assert.equal(s.chatKey, null);
     // a bare call (no panel settings) is auxiliary too
     assert.equal(extractSettings({}).auxiliary, true);
-});
-
-test('check-up waits for the generation to end, then runs once (toast request is kept)', () => {
-    let generating = true;
-    const runs = [];
-    const gate = makeCheckupGate({ isGenerating: () => generating, run: (o) => runs.push(o) });
-    assert.equal(gate.request({}), false);
-    assert.equal(gate.request({ toast: true }), false);
-    assert.equal(gate.request({}), false);
-    assert.deepEqual(runs, [], 'nothing while streaming: no badge flash');
-    assert.equal(gate.flush(), false, 'still generating');
-    generating = false;
-    assert.equal(gate.flush(), true);
-    assert.equal(runs.length, 1);
-    assert.equal(runs[0].toast, true);
-    assert.equal(gate.flush(), false, 'nothing left');
-    assert.equal(gate.request({ toast: false }), true, 'idle: runs right away');
-    assert.equal(runs.length, 2);
 });
 
 test('proxy refusal signal: an empty refused turn is a decline, partial text is a cut-off', () => {
@@ -43,7 +24,7 @@ test('proxy refusal signal: an empty refused turn is a decline, partial text is 
     assert.equal(cut.declined, false);
     assert.equal(refusalNotice({ notices: [], finish: 'stop', textChars: 10 }), null);
     assert.equal(refusalNotice(null), null);
-    assert.ok(checkReply({ mes: '我不能继续这个故事。' }).issues.some((i) => i.code === 'refusal'));
+    assert.ok(replyFlags('我不能继续这个故事。', null).some((i) => i.code === 'refusal'));
 });
 
 test('stats: a background call after the reply never becomes the chat\'s last turn', async () => {

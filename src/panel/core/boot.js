@@ -15,9 +15,8 @@ import { init as initSettingsTab } from '../tabs/settings.js';
 
 /** What to do when each optional shared helper (src/shared/) has finished loading. */
 export const libHooks = {
-    chatCheck: () => F.checkup.runCheckup(),
+    chatCheck: () => F.checkup.renderLatestFlags(),
     loreConst: () => F.lore.refreshLoreBox(),
-    cardAudit: () => F.audit.runCardAudit({ toast: true }),
     presetReco: () => F.presets.adoptUnrecordedReco(),
     hostCheck: () => renderConnect(),
     sources: () => {

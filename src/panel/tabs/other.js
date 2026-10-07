@@ -1,6 +1,6 @@
 // ──────────────────────────────────────────────
 // Tab 其他: everything that is not core for vanilla SillyTavern, as collapsible sections.
-//   查看发给模型的请求 / 调试选项 · 体检（实验） · 重新引导 · 使用说明
+//   查看发给模型的请求 / 调试选项 · 重新引导 · 使用说明
 // The work itself is in features/ (debug-request).
 // ──────────────────────────────────────────────
 
@@ -8,7 +8,6 @@ import { IS_TAURI, debugViewState } from '../core/capabilities.js';
 import { el, toggleRow, collapsible, button } from '../core/dom.js';
 import { F } from '../core/registry.js';
 import { restartGuide } from '../guide.js';
-import { buildCheckupSection } from './check.js';
 
 export const USAGE_NOTES = (tauri = IS_TAURI) => [
     tauri ? '代理要在一台电脑上一直开着（电脑上的「酒馆工具」启动，或 npm start）。TauriTavern 里装不了酒馆插件。' : '代理要一直开着（「酒馆工具」启动，或 npm start）。',
@@ -49,8 +48,6 @@ export function buildOtherTab(pane, settings, save) {
     dbg.body.querySelector('#claudeMaxDebugDump')?.addEventListener('change', syncView);
     dbg.body.append(viewBtn, viewHint);
     pane.append(dbg.root);
-
-    pane.append(buildCheckupSection(settings, save));
 
     pane.append(button('重新引导（选来源 → 连接 → 完成）', () => restartGuide(), { icon: 'fa-compass', id: 'claude_max_guide_again', text: true }));
 
