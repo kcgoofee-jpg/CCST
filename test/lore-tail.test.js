@@ -147,3 +147,19 @@ test('cutExactLore: a lore message that was the whole block leaves the prompt as
     // inside a block joined by single newlines: just the entry and one join
     assert.equal(cutExactLore(`A line here\n${lore}\nB line here`, [lore]).system, 'A line here\nB line here');
 });
+
+test('cutExactLore: the world-info wrapper left empty goes too, so the prompt equals a turn with nothing triggered', async () => {
+    const { cutExactLore } = await import('../src/proxy/features/lore-tail.js');
+    const fmt = '[Details of the fictional world the RP is set in:\n{0}]';
+    const entry = 'Eldoria is a magical forest, home to the Shadowfang beasts.';
+    const card = '<components>\n[Scenario: you wake in her glade.]';
+    const end = '</components>\n<timeline>';
+    const fired = `${card}\n\n[Details of the fictional world the RP is set in:\n${entry}]\n\n${end}`;
+    const quiet = `${card}\n\n${end}`;
+    assert.equal(cutExactLore(fired, [entry], fmt).system, quiet);
+    assert.equal(cutExactLore(fired, [entry]).system.includes('[Details'), true, 'without the format the wrapper stays (old panels)');
+    // A constant entry keeps the wrapper in every turn: nothing to remove.
+    const constant = 'The glade is protected by old wards that no beast can cross.';
+    const both = `${card}\n\n[Details of the fictional world the RP is set in:\n${constant}\n${entry}]\n\n${end}`;
+    assert.equal(cutExactLore(both, [entry], fmt).system, `${card}\n\n[Details of the fictional world the RP is set in:\n${constant}]\n\n${end}`);
+});

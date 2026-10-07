@@ -127,7 +127,7 @@ export function injectedTextFor(raw, context = '') {
  * @param {string[]} texts
  * @returns {{ system: string, text: string }}  text: what was lifted ('' if none)
  */
-export function cutExactLore(system, texts) {
+export function cutExactLore(system, texts, wiFormat = '') {
     let out = system ?? '';
     const found = [];
     for (const t of texts ?? []) {
@@ -137,19 +137,33 @@ export function cutExactLore(system, texts) {
         const piece = out.includes(`${t}\n`) ? `${t}\n` : out.includes(`\n${t}`) ? `\n${t}` : t;
         const i = out.indexOf(piece);
         if (i < 0) continue;
-        let before = out.slice(0, i);
-        let after = out.slice(i + piece.length);
-        // The entry was a whole system message (joined to its neighbours by a blank line): drop that
-        // join too, so the prompt reads as on a turn where nothing fired (measured: one stray newline
-        // made every such turn miss the whole cache).
-        const lead = before.length - before.replace(/\n+$/, '').length;
-        const trail = after.length - after.replace(/^\n+/, '').length;
-        if (lead + trail > 2) after = after.slice(Math.min(trail, lead + trail - 2));
-        out = before + after;
+        out = cutAt(out, i, piece.length);
         found.push(t);
     }
     if (!found.length) return { system: system ?? '', text: '' };
+    // SillyTavern wraps the entries in its world-info format (「[Details of the fictional world the RP
+    // is set in:\n{0}]」). With every entry moved the wrapper is left empty, where a turn with nothing
+    // triggered has no wrapper at all (measured: 52 characters that made every such turn miss).
+    const [pre, post] = String(wiFormat ?? '').split('{0}');
+    if (post !== undefined && (pre.trim() || post.trim())) {
+        for (const empty of new Set([pre + post, pre.replace(/\n+$/, '') + post, pre + post.replace(/^\n+/, ''), pre.replace(/\n+$/, '') + post.replace(/^\n+/, '')])) {
+            if (!empty.trim() || (system ?? '').includes(empty)) continue;
+            for (let i = out.indexOf(empty); i >= 0; i = out.indexOf(empty)) out = cutAt(out, i, empty.length);
+        }
+    }
     return { system: out, text: found.join('\n\n') };
+}
+
+/** Remove `len` characters at `i`. When the piece was a whole system message (joined to its
+ *  neighbours by a blank line), drop that join too, so the prompt reads as on a turn where nothing
+ *  fired (measured: one stray newline made every such turn miss the whole cache). */
+function cutAt(text, i, len) {
+    const before = text.slice(0, i);
+    let after = text.slice(i + len);
+    const lead = before.length - before.replace(/\n+$/, '').length;
+    const trail = after.length - after.replace(/^\n+/, '').length;
+    if (lead + trail > 2) after = after.slice(Math.min(trail, lead + trail - 2));
+    return before + after;
 }
 export const TRIGGERED_TAG = 'triggered_lore';
 

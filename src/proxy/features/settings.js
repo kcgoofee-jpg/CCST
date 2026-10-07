@@ -141,6 +141,8 @@ export function extractSettings(body) {
         genType: typeof ns.gen_type === 'string' ? ns.gen_type.slice(0, 20) : null,
         // Text of the keyword-triggered entries inside the system prompt (lore-tail.js cutExactLore).
         loreText: strList(ns.lore_text, 120, 20_000),
+        // SillyTavern's world-info wrapper (「[Details …:\n{0}]」): removed too when every entry in it moved.
+        wiFormat: typeof ns.wi_format === 'string' ? ns.wi_format.slice(0, 400) : '',
         auxiliary,
         purpose: fromPanel ? purpose : (auxiliary ? 'aux' : 'chat'),
         maxTokens,

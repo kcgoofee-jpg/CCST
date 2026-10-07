@@ -582,7 +582,7 @@ async function completeChat(req, res, body, settings, conn) {
         if (repeats) console.log(`${PLUGIN_TAG} ${repeats} 段深度注入和之前某轮给过的一字不差，本轮改为一句说明`);
         const history = placed.filter((m) => m?.role !== 'system');
         // Keyword-triggered world info inside the system prompt, by its exact text (lore-tail.js).
-        const exact = settings.loreTail && settings.loreText.length ? cutExactLore(extractSystemText(placed) ?? '', settings.loreText) : null;
+        const exact = settings.loreTail && settings.loreText.length ? cutExactLore(extractSystemText(placed) ?? '', settings.loreText, settings.wiFormat) : null;
         cacheDiag = diagnoseCache(exact ? exact.system : extractSystemText(placed), history, { chatKey: settings.chatKey });
         console.log(`${PLUGIN_TAG} ${describeDiag(cacheDiag)}`);
         // Post-history entries changed (one switched off, edited): earlier

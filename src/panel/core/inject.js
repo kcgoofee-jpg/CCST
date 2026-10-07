@@ -259,7 +259,7 @@ export function onSettingsReady(data) {
         if (!quiet) {
             yaml += `\n  late: ${JSON.stringify(injectedOpenings())}\n  st_fp: ${JSON.stringify(stFingerprint(data))}`;
             yaml += `\n  hist: ${JSON.stringify(historyMarks())}\n  gen_type: ${JSON.stringify(String(data.type ?? 'normal'))}`;
-            if (triggeredLore.length) yaml += `\n  lore_text: ${JSON.stringify(triggeredLore)}`;
+            if (triggeredLore.length) yaml += `\n  lore_text: ${JSON.stringify(triggeredLore)}\n  wi_format: ${JSON.stringify(String(data.wi_format ?? SillyTavern.getContext().chatCompletionSettings?.wi_format ?? ''))}`;
         }
         data.custom_include_body = (cleaned ? cleaned + '\n' : '') + yaml;
         preflightCheck(data);
