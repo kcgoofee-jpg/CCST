@@ -376,7 +376,7 @@ export function explainCache(entry, prevEntry = null) {
         }
         if (d.historyDiffAt !== null && d.historyDiffAt !== undefined) {
             reasons.push(d.replyChanged
-                ? `第 ${d.historyDiffAt + 1} 条回复和上一轮发的不同：切换了回复分支（swipe）或编辑了这条回复，从这里往后重写一次，属正常现象。`
+                ? `第 ${d.historyDiffAt + 1} 条回复和上一轮发的不同：切换了回复分支（swipe）或编辑了这条回复，从这里往后重写一次，属正常现象。${entry.st?.mut?.length ? `你没切换也没编辑的话，就是预设或角色卡里的脚本改了它（这一轮启用着：${entry.st.mut.join('、')}）。` : ''}`
                 : `聊天记录从第 ${d.historyDiffAt + 1} / ${d.historyLen} 条起和上一轮不同，之后全部重写。常见原因：预设正则按楼层改写旧消息（如「5 楼外只发摘要」）；「深度注入保持原位」打开时，深度注入每轮往后挪一格；或删改了消息。`);
         }
         // The prompt changed but nothing was changed in SillyTavern (same preset, entries,
