@@ -19,7 +19,6 @@ import { networkInterfaces } from 'node:os';
 
 import { credentialSummary } from './features/oauth.js';
 import { noteSdkVersionRun } from './features/sdk-version.js';
-import { markStandalone } from './platform/control.js';
 import { flushSweeps, sweepLeftovers } from './features/session-store.js';
 
 const TAG = '[claude-subscription]';
@@ -32,8 +31,6 @@ process.on('unhandledRejection', (reason) => {
     console.error(`${TAG} 未处理的异步错误（代理继续运行）：`, reason instanceof Error ? reason.stack ?? reason.message : reason);
 });
 
-// This process owns the port: the phone's「重启代理」may stop and restart it.
-markStandalone();
 noteSdkVersionRun();
 
 try {
@@ -43,7 +40,7 @@ try {
     // this copy while the phone talks to the other one (possibly older code).
     if (await probeExistingProxy({ port, host: host === '0.0.0.0' || host === '::' ? '127.0.0.1' : host })) {
         console.error(`${TAG} 端口 ${port} 上已经有一个 CCST 代理在运行，本次启动退出，免得两个代理共用一个端口。` +
-            `先停掉在跑的那个（「酒馆工具」首页按 2，或到它的终端窗口按 Ctrl+C），再重新运行 npm start。`);
+            `先停掉在跑的那个（「酒馆工具」里选「重启代理」，或到它的终端窗口按 Ctrl+C），再重新运行 npm start。`);
         process.exit(1);
     }
     await startStandaloneListener({ port, host });

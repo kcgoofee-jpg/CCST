@@ -39,7 +39,7 @@ export function wireEvents({ eventSource, eventTypes }) {
     eventSource.on(eventTypes.MESSAGE_RECEIVED, onOwnReply(clearOneShotEffort));
     eventSource.on(eventTypes.MESSAGE_RECEIVED, (id, type) => F.keeper.onReplyReceived(id, type));
     eventSource.on(eventTypes.CHARACTER_MESSAGE_RENDERED ?? eventTypes.MESSAGE_RECEIVED, onReply(() => setTimeout(() => F.checkup.runCheckup({ toast: true }), 200)));
-    eventSource.on(eventTypes.CHAT_CHANGED, () => { F.quiet.pruneQuieted(); setTimeout(() => F.keeper.recoverKeptReply(), 1500); });
+    eventSource.on(eventTypes.CHAT_CHANGED, () => { setTimeout(() => F.keeper.recoverKeptReply(), 1500); });
     if (eventTypes.STREAM_TOKEN_RECEIVED) eventSource.on(eventTypes.STREAM_TOKEN_RECEIVED, (...a) => F.keeper.markPendingFloor(...a));
     if (eventTypes.GENERATION_STOPPED) eventSource.on(eventTypes.GENERATION_STOPPED, (...a) => F.keeper.onGenerationStopped(...a));
     if (eventTypes.GENERATION_ENDED) eventSource.on(eventTypes.GENERATION_ENDED, () => F.keeper.onGenerationEnded());

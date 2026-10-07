@@ -41,9 +41,6 @@ export function boot() {
     const settings = getSettings();
     // v2.10 dropped the「附加到请求」switch; nobody should be stuck with it off.
     settings.enabled = true;
-    // v2.23: 省电显示 decides itself; the old on/off switch becomes「自动」.
-    if (typeof settings.quietRender === 'boolean') settings.quietRender = 'auto';
-    F.compact.applyCompactButtons();
     // ST fills #extensions_settings during its own start-up: wait for it
     // rather than dumping the panel into <body>.
     if (!addExtensionSettings(settings)) {
@@ -62,7 +59,5 @@ export function boot() {
     // Phone app back from the background: check right away, not up to 20 s later.
     document.addEventListener('visibilitychange', () => { if (!document.hidden) { heartbeat(); setTimeout(() => F.keeper.recoverKeptReply(), 1500); } });
     wireEvents({ eventSource, eventTypes });
-    F.score.registerImageScore();
-    F.quiet.applyQuietRender();
     console.log(`[claude-max] UI extension loaded${IS_TAURI ? ' (TauriTavern mode)' : ''}`);
 }

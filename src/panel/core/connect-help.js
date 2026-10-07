@@ -3,9 +3,6 @@
 // 猜错比不说更糟。只写连的是哪个地址，和该逐项检查什么。
 // ──────────────────────────────────────────────
 
-import { DEFAULT_ENDPOINT, normalizeEndpoint } from './capabilities.js';
-import { makeConnectCode } from './connect-code.js';
-
 export const REPO_URL = 'https://github.com/kcgoofee-jpg/CCST';
 
 // 一键安装程序（装成酒馆服务器插件）只给「本机浏览器里的原版酒馆」：Windows 的 .bat 在扩展自己的文件夹里（installer/），
@@ -20,10 +17,6 @@ export const RAW_BASE = `${REPO_URL}/raw/main/installer/`;
 export const REPO_ZIP_URL = `${REPO_URL}/archive/refs/heads/main.zip`;
 export const DOCS_URL = `${REPO_URL}/blob/main/docs/%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97.md`;
 export const MAC_PLUGIN_CMD = 'zsh -c "$(curl -fsSL https://raw.githubusercontent.com/kcgoofee-jpg/CCST/main/install-plugin-mac.sh)"';
-export const MAC_INSTALL_CMD = 'zsh -c "$(curl -fsSL https://raw.githubusercontent.com/kcgoofee-jpg/CCST/main/install-mac.sh)"';
-// 电脑上装代理（Mac）：不给 zip，下载的 .command 会被系统拦住；给一行终端命令，按钮打开安装说明。
-const macInstallItem = (label) => ({ key: 'mac-cmd', label, file: '', href: DOCS_URL, copy: MAC_INSTALL_CMD, copyLabel: '复制命令', download: false });
-export const SERVER_INSTALL_CMD = 'curl -fsSL https://raw.githubusercontent.com/kcgoofee-jpg/CCST/main/deploy/install.sh | sh';
 
 /**
  * 面板在哪儿运行，只用已知的事实（不探测）：
@@ -43,42 +36,20 @@ const desktopDownloads = () => [
     ...INSTALLERS.map((d) => ({ ...d, href: new URL(d.file, INSTALLER_BASE).href, download: true, copy: REPO_URL + '/tree/main/installer' })),
 ];
 
-const LOOPBACK = /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])([:/]|$)/i;
-export const CODE_PLACEHOLDER = 'http://192.168.x.x:8901/v1#k=…';
-
-/** What the card's box starts with: the saved connection as a 连接码, but on a phone / TauriTavern a loopback address points at the phone itself, so start empty. */
-export function formPrefill(endpoint, accessKey, host) {
-    const ep = normalizeEndpoint(endpoint) || '';
-    if (!ep || (host !== 'desktop' && LOOPBACK.test(ep))) return '';
-    return makeConnectCode(ep, accessKey);
-}
-
-/** The possible outcomes of 「连接」, from the proxy's own answer (the status after a re-check). */
-export function connectOutcome(status) {
-    const phase = status?.phase;
-    if (phase === 'online' || phase === 'nologin') return { kind: 'ok', text: '连上了' };
-    if (phase === 'denied') {
-        return { kind: 'denied', text: status.code === 401 ? '连接码里的密码不对' : (status.message || '代理拒绝了连接') };
-    }
-    return { kind: 'offline', text: '连不上：电脑开着酒馆工具且在同一 Wi-Fi？' };
-}
-
 /**
  * 「连不上代理」卡片。host 见 hostKind。
- *   tauri / elsewhere：一句话 + 连接码输入框（form）+ 一行可见的下载（downloads）。
+ *   tauri / elsewhere：一句话 + 一行可见的安装说明链接（downloads）。
  *   desktop：一句话 + 一键安装的下载按钮 + 一行 Mac 提示。
  * 没有折叠、没有步骤列表。
- * @returns {{ key: string, host: string, title: string, sub: string, steps: [], downloads: object[], hint: string, form?: { value: string, placeholder: string } }}
+ * @returns {{ key: string, host: string, title: string, sub: string, steps: [], downloads: object[], hint: string }}
  */
-export function connectHelp({ endpoint = DEFAULT_ENDPOINT, accessKey = '', host = 'desktop' } = {}) {
+export function connectHelp({ host = 'desktop' } = {}) {
     const base = { key: 'offline', host, title: '连不上 CCST 代理', steps: [] };
     if (host === 'tauri' || host === 'elsewhere') {
-        const tt = host === 'tauri';
         return {
             ...base,
-            sub: '把电脑上酒馆工具「手机」页显示的「手机连接码」粘贴到这里',
-            form: { value: formPrefill(endpoint, accessKey, host), placeholder: CODE_PLACEHOLDER },
-            downloads: [tt ? macInstallItem('电脑上还没装？（目前只支持 Mac）打开「终端」粘贴下面这行') : remoteItem('docs', '电脑上还没装？看安装说明', DOCS_URL)],
+            sub: '代理没在运行：到运行代理的那台电脑上启动它（npm start）。',
+            downloads: [remoteItem('docs', '还没装？看安装说明', DOCS_URL)],
             hint: '',
         };
     }
@@ -120,10 +91,8 @@ ${impact}
 ${impact}
 怎么办：`;
     const standaloneSteps = [
-        { text: isTT
-            ? '更新代理代码：Mac 打开「终端」，粘贴下面这行，回车（会保留登录和数据）。'
-            : '在 CCST 文件夹里运行下面这行命令，更新代码：', cmd: isTT ? MAC_INSTALL_CMD : 'git pull && npm install' },
-        { text: '重启代理：用「酒馆工具」的，首页按 2「重启代理」；用 npm start 的，关掉那个窗口再运行 npm start。' },
+        { text: '在 CCST 文件夹里运行下面这行命令，更新代码：', cmd: 'git pull && npm install' },
+        { text: '重启代理：用「酒馆工具」的，选「重启代理」；用 npm start 的，关掉那个窗口再运行 npm start。' },
     ];
     if (isTT || host === 'elsewhere') {
         // No plugin installer on these hosts: the proxy is the standalone one on another machine.

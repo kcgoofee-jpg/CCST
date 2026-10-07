@@ -32,8 +32,8 @@ test('plugin mount serves the panel same-origin endpoints, each backed by a stan
 
 test('standalone keeps every documented URL', () => {
     for (const k of ['GET /status', 'GET /v1/models', 'GET /v1/usage/quota', 'GET /v1/usage/stats', 'GET /v1/debug/last', 'GET /v1/diag/report', 'GET /v1/diag/full',
-        'POST /v1/chat/completions', 'GET /v1/replies/:slot', 'POST /v1/replies/:slot/cancel', 'GET /v1/control/status',
-        'GET /v1/control/log', 'POST /v1/control/action', 'GET /v1/backend', 'POST /v1/backend', 'POST /v1/embeddings']) {
+        'POST /v1/chat/completions', 'GET /v1/replies/:slot', 'POST /v1/replies/:slot/cancel',
+        'GET /v1/backend', 'POST /v1/backend', 'POST /v1/embeddings']) {
         assert.ok(routeKeys('standalone').includes(k), k);
     }
 });

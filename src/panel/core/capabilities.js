@@ -2,7 +2,7 @@
 // Platform capabilities: every "what am I running on / talking to" check in
 // one place (they used to be scattered through the panel).
 //
-//   • TauriTavern (no server plugins), a touch device (COARSE), phone-like
+//   • TauriTavern (no server plugins), a touch device (COARSE)
 //   • which chat-completion source SillyTavern is on: this proxy ("ours"),
 //     Claude without the proxy ("direct"), or something else
 //   • whether the proxy can be reached only directly (no ST plugin route)
@@ -52,23 +52,8 @@ export const COARSE = platform.coarse;
 export const appName = (tauri = IS_TAURI) => (tauri ? 'TauriTavern' : '酒馆');
 export const APP_NAME = appName();
 
-/** A phone or TauriTavern: the devices that get the lighter display and phone wording. */
-export function isPhoneLike(p = platform) {
-    return !!(p.tauri || p.coarse);
-}
-
-/** The 省电显示 setting normalised to 'auto' | 'on' | 'off'. */
-export function quietRenderMode(setting) {
-    return ['on', 'off'].includes(setting) ? setting : 'auto';
-}
-
-/** 省电显示 is in effect: on for phones and TauriTavern unless the debug switch says otherwise. */
-export function quietRenderOn(setting, p = platform) {
-    return setting === 'on' || (setting !== 'off' && isPhoneLike(p));
-}
-
 /** The plugin route speaks for the proxy on the default port only: with another endpoint
- *  (phone → Mac, another port) or in TauriTavern, calls go to the proxy itself and nothing else. */
+ *  (another machine, another port) or in TauriTavern, calls go to the proxy itself and nothing else. */
 export function proxyDirectOnly({ tauri, endpoint }) {
     return !!tauri || normalizeEndpoint(endpoint) !== normalizeEndpoint(DEFAULT_ENDPOINT);
 }
@@ -77,15 +62,6 @@ export function proxyDirectOnly({ tauri, endpoint }) {
 export function cloudHosted(hostCheck, { hostname, endpoint, tauri }) {
     return !!hostCheck?.cloudNeedsNote({ hostname, endpoint, tauri });
 }
-
-/** Phone → Mac sync only makes sense from inside TauriTavern on a proxy in phone mode. */
-export function canSyncPhone(macStatus, p = platform) {
-    return !!(macStatus?.phoneMode && p.tauri);
-}
-
-/** 同步手机 inside TauriTavern: TT has its own sync / backup; Mac-to-TT sync is untested. */
-export const PHONE_SYNC_WARNING = 'TauriTavern 自带同步和备份，建议用它；电脑酒馆和 TT 之间的同步还没测试过，可能有问题。';
-export const PHONE_SYNC_LABEL = '仍要同步（未测试）';
 
 /** 查看发给模型的内容 needs 保存最近一次完整请求 to be on; otherwise the button is greyed with this hint. */
 export function debugViewState(settings) {

@@ -82,17 +82,6 @@ test('isLocalCaller: loopback without proxy headers is local; forwarded or REQUI
     assert.equal(isLocalCaller(lo(), { CLAUDE_SUBSCRIPTION_REQUIRE_KEY: '0' }), true);
 });
 
-test('a phone browser opening the scanned 连接码 gets a readable page, never JSON or the key', async () => {
-    const { guardRemote } = await import('../src/proxy/api/guards.js');
-    let sent = null; let status = 0; let type = '';
-    const res = { setHeader() {}, status(n) { status = n; return this; }, type(t) { type = t; return this; }, send(b) { sent = b; return this; }, json(b) { sent = b; return this; } };
-    process.env.CLAUDE_SUBSCRIPTION_LAN_KEY = 'secretKey123';
-    guardRemote({ method: 'GET', headers: { accept: 'text/html,*/*' }, socket: { remoteAddress: '192.168.1.5' } }, res, () => assert.fail('must not pass'));
-    delete process.env.CLAUDE_SUBSCRIPTION_LAN_KEY;
-    assert.equal(status, 200); assert.equal(type, 'html');
-    assert.match(sent, /复制连接码/); assert.ok(!sent.includes('secretKey123'));
-});
-
 // ── Trust given to a browser page (spending the subscription costs real money) ──
 
 const postRes = () => {

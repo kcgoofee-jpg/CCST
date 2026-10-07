@@ -4,7 +4,7 @@
 // SillyTavern's extension settings — never rename them.
 // ──────────────────────────────────────────────
 
-import { DEFAULT_ENDPOINT, quietRenderOn } from './capabilities.js';
+import { DEFAULT_ENDPOINT } from './capabilities.js';
 
 export { DEFAULT_ENDPOINT };
 export const MODULE = 'claude_max';
@@ -34,12 +34,10 @@ export const defaultSettings = {
     tailBlockFront: false,   // 实验：预设后置条目提前（省缓存）
     loreTail: true,          // 每轮变化的世界书移到本轮消息开头（省缓存）
     foldTail: true,          // 发言后面的深度 0 注入并进发言（省缓存）
-    stEndpoint: '',          // 酒馆和代理分开部署（Docker 两个容器）时，酒馆服务器访问代理用的地址；空 = 同「代理地址」
-    accessKey: '',           // 局域网访问密码（手机连 Mac 上的代理时用）
+    stEndpoint: '',          // 酒馆服务器访问代理用的地址（旧版设置里可能有）；空 = 同「代理地址」
+    accessKey: '',           // 代理的访问密码（CLAUDE_SUBSCRIPTION_LAN_KEY，旧版设置里可能有）；空 = 不带
     quietEffort: 'low',      // 后台请求（其他插件的生图 tag、总结等）的思考深度；'follow' = 跟随面板
     panelTab: 'reason',      // 3.1 前记的分页；现在记在 localStorage，只用来迁移
-    compactScriptButtons: true, // 输入栏上方的脚本按钮并排显示
-    quietRender: 'auto',     // 省电显示：'auto'（手机 / TauriTavern 上开）| 'on' | 'off'
     checkupMuted: {},        // 体检提示被点掉的次数（按问题类型）；两次后不再弹
     onboarded: false,        // 首次引导：走完、跳过、或打开时已经连上了
     guideSource: '',         // 引导里选的来源：'' 没开始 | 'choose' 还没选 | proxy / claude / openrouter / relay
@@ -82,6 +80,3 @@ export const THINKING_OPTIONS = [
     { value: 'on', label: '始终思考', hint: '每次都先思考。Sonnet 5 按自适应处理。' },
     { value: 'off', label: '关闭', hint: '不思考。Fable、Opus 5.5、Sonnet 5.5 总会思考。' },
 ];
-
-/** 省电显示: on for phones and TauriTavern unless the debug switch says otherwise. */
-export const quietOn = () => quietRenderOn(getSettings().quietRender);

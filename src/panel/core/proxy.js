@@ -26,7 +26,7 @@ export async function fetchProxy(pluginPath, directPath, { method = 'GET', body 
     // device 127.0.0.1 is unreachable, so that fails fast and the
     // same-origin plugin route takes over.
     // The plugin route speaks for the proxy on the default port only: with
-    // another endpoint (phone → Mac, another port) falling back to it
+    // another endpoint (another machine, another port) falling back to it
     // would report a different proxy as healthy while this one is down.
     const settings = getSettings();
     const directOnly = proxyDirectOnly({ tauri: IS_TAURI, endpoint: settings.endpoint });
@@ -42,16 +42,6 @@ export async function fetchProxy(pluginPath, directPath, { method = 'GET', body 
     const headers = method === 'GET' ? {} : { ...(SillyTavern.getContext().getRequestHeaders?.() ?? {}) };
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     return fetch(`/api/plugins/claude-subscription${pluginPath}`, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined, signal: timeoutSignal(12000) });
-}
-
-export async function controlFetch(path, body) {
-    const settings = getSettings();
-    const headers = settings.accessKey ? { 'X-Claude-Max-Key': settings.accessKey } : {};
-    if (body) headers['Content-Type'] = 'application/json';
-    return fetch(`${proxyBase(settings)}${path}`, {
-        method: body ? 'POST' : 'GET', headers, body: body ? JSON.stringify(body) : undefined,
-        signal: timeoutSignal(20000),
-    });
 }
 
 /** 没装 / 没连本代理时（酒馆里没有插件路由 → 404，或连不上）说人话，别只给 HTTP 码。 */
