@@ -19,13 +19,18 @@ async fn main() -> anyhow::Result<()> {
         "probe" => probe().await,
         "serve" => bail!("serve 尚未实现：P1 落地（当前处于 P0 协议尖兵阶段）"),
         _ => {
-            println!("用法: ccst <login|auth-status|probe|serve>");
+            println!("用法: ccst <login [--import-cli]|auth-status|probe|serve>");
+            println!("  login --import-cli  从本机已登录的 Claude CLI 导入凭据（免浏览器授权）");
             Ok(())
         }
     }
 }
 
 async fn login() -> anyhow::Result<()> {
+    let import = std::env::args().any(|a| a == "--import-cli");
+    if import {
+        return import_cli().await;
+    }
     let session = ccst_auth::begin_login();
     println!("即将打开浏览器完成 Claude 订阅授权；若没有自动打开，请手动访问：\n\n  {}\n", session.authorize_url);
     open_browser(&session.authorize_url);
@@ -36,6 +41,23 @@ async fn login() -> anyhow::Result<()> {
     let creds = ccst_auth::Credentials::from_response(&resp, None);
     ccst_auth::save_credentials(&creds)?;
     println!("登录成功，凭据已保存到 {}。", ccst_auth::credentials_path().display());
+    Ok(())
+}
+
+/// 从本机已有的 Claude CLI 安装导入凭据（钥匙串 / 凭据文件），免浏览器登录。
+async fn import_cli() -> anyhow::Result<()> {
+    let creds = ccst_auth::import_from_cli().context(
+        "没找到本机 Claude CLI 的凭据（macOS 钥匙串服务 \"Claude Code-credentials\" 或 ~/.claude/.credentials.json）。请改用 `ccst login` 走浏览器授权。",
+    )?;
+    let left = creds.expires_at.saturating_sub(now_ms()) / 1000;
+    ccst_auth::save_credentials(&creds)?;
+    println!(
+        "已从本机 Claude CLI 导入凭据（access token 剩余约 {} 分{}秒，{}）。保存到 {}。",
+        left / 60,
+        left % 60,
+        if creds.refresh_token.is_some() { "可自动刷新" } else { "无 refresh token" },
+        ccst_auth::credentials_path().display(),
+    );
     Ok(())
 }
 

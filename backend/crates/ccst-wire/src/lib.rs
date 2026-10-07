@@ -24,7 +24,7 @@ pub struct SubscriptionClient {
 impl SubscriptionClient {
     pub fn new(access_token: impl Into<String>, client_version: impl Into<String>) -> anyhow::Result<Self> {
         let client_version = client_version.into();
-        let http = reqwest::Client::builder()
+        let http = ccst_auth::apply_outbound_proxy(reqwest::Client::builder())
             .user_agent(format!("claude-cli/{}", client_version))
             .build()?;
         Ok(Self { http, access_token: access_token.into(), client_version })

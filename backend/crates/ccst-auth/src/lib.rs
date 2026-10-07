@@ -10,6 +10,9 @@ use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+mod outbound;
+pub use outbound::apply as apply_outbound_proxy;
+
 pub const AUTHORIZE_URL: &str = "https://claude.ai/oauth/authorize";
 pub const TOKEN_URL: &str = "https://api.anthropic.com/v1/oauth/token";
 /// Claude Code CLI 的公开 OAuth client id（无 client secret，公开值）。
@@ -191,8 +194,10 @@ pub async fn refresh(refresh_token: &str) -> Result<TokenResponse, AuthError> {
 }
 
 async fn post_token(form: &str) -> Result<TokenResponse, AuthError> {
-    // 令牌端点固定，不复用 wire crate，保持本 crate 无重依赖。
-    let client = reqwest::Client::new();
+    // 令牌端点固定，不复用 wire crate，保持本 crate 轻依赖。
+    let client = apply_outbound_proxy(reqwest::Client::builder())
+        .build()
+        .map_err(|e| AuthError::Upstream { status: 0, body: e.to_string() })?;
     let resp = client
         .post(TOKEN_URL)
         .header("Accept", "application/json")
@@ -254,6 +259,77 @@ pub async fn ensure_fresh() -> Result<Credentials, AuthError> {
     Ok(fresh)
 }
 
+// ── 从已有 Claude CLI 安装导入 ──
+
+/// Claude Code CLI 的钥匙串服务名（macOS）。
+pub const CLI_KEYCHAIN_SERVICE: &str = "Claude Code-credentials";
+/// Linux/Windows 下 CLI 的凭据文件。
+pub fn cli_credentials_file() -> Option<PathBuf> {
+    let home = dirs::home_dir()?;
+    let base = std::env::var_os("CLAUDE_CONFIG_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| home.join(".claude"));
+    Some(base.join(".credentials.json"))
+}
+
+/// 从本机已有的 Claude CLI 安装导入凭据（钥匙串 / 凭据文件）。
+/// CLI 用的 OAuth client 与本工具相同，token 可直接复用，免去浏览器登录。
+pub fn import_from_cli() -> Result<Credentials, AuthError> {
+    let raw = read_cli_credentials_raw().ok_or(AuthError::NoCredentials)?;
+    import_json(&raw)
+}
+
+fn read_cli_credentials_raw() -> Option<String> {
+    // 1. 文件（Linux/Windows，或配置了 CLAUDE_CONFIG_DIR 的 macOS）
+    if let Some(path) = cli_credentials_file() {
+        if let Ok(raw) = std::fs::read_to_string(&path) {
+            return Some(raw);
+        }
+    }
+    // 2. macOS 钥匙串
+    if cfg!(target_os = "macos") {
+        let out = std::process::Command::new("security")
+            .args(["find-generic-password", "-s", CLI_KEYCHAIN_SERVICE, "-w"])
+            .output()
+            .ok()?;
+        if out.status.success() {
+            return Some(String::from_utf8_lossy(&out.stdout).trim().to_string());
+        }
+    }
+    None
+}
+
+/// 解析 CLI 凭据 JSON：`{claudeAiOauth: {accessToken, refreshToken, expiresAt}}`
+/// 或平铺的同名字段。
+fn import_json(raw: &str) -> Result<Credentials, AuthError> {
+    #[derive(Deserialize)]
+    struct CliOauth {
+        #[serde(rename = "accessToken")]
+        access_token: String,
+        #[serde(rename = "refreshToken")]
+        refresh_token: Option<String>,
+        #[serde(rename = "expiresAt")]
+        expires_at: Option<u64>,
+    }
+    #[derive(Deserialize)]
+    struct CliEnvelope {
+        #[serde(rename = "claudeAiOauth")]
+        claude_ai_oauth: Option<CliOauth>,
+        #[serde(flatten)]
+        flat: Option<CliOauth>,
+    }
+    let env: CliEnvelope = serde_json::from_str(raw)?;
+    let oauth = env.claude_ai_oauth.or(env.flat).ok_or(AuthError::NoCredentials)?;
+    if oauth.access_token.is_empty() {
+        return Err(AuthError::NoCredentials);
+    }
+    Ok(Credentials {
+        access_token: oauth.access_token,
+        refresh_token: oauth.refresh_token,
+        expires_at: oauth.expires_at.unwrap_or(0),
+    })
+}
+
 // ── 内部 ──
 
 pub fn code_challenge(verifier: &str) -> String {
@@ -300,6 +376,22 @@ fn write_private(path: &Path, content: &str) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cli_credentials_json_both_shapes() {
+        // 钥匙串形态：包在 claudeAiOauth 里
+        let wrapped = r#"{"claudeAiOauth":{"accessToken":"sk-ant-oat01-x","refreshToken":"rt","expiresAt":1791500000000,"scopes":["user:inference"],"subscriptionType":"max"}}"#;
+        let c = import_json(wrapped).unwrap();
+        assert_eq!(c.access_token, "sk-ant-oat01-x");
+        assert_eq!(c.refresh_token.as_deref(), Some("rt"));
+        assert_eq!(c.expires_at, 1791500000000);
+
+        // 平铺形态（部分版本）
+        let flat = r#"{"accessToken":"a","refreshToken":null,"expiresAt":1}"#;
+        let c2 = import_json(flat).unwrap();
+        assert_eq!(c2.access_token, "a");
+        assert_eq!(c2.refresh_token, None);
+    }
 
     /// RFC 7636 附录 B 的官方测试向量。
     #[test]
