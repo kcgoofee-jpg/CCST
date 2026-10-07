@@ -33,6 +33,7 @@ import { dirname, join, resolve } from 'node:path';
 
 import { registerRoutes } from './api/routes.js';
 import { startStandaloneListener, stopStandaloneListener, probeExistingProxy, portInUseMessage } from './api/listener.js';
+import { startSharing, stopSharing } from './api/shared-proxy.js';
 import { noteSdkVersionRun } from './features/sdk-version.js';
 import { ROOT } from './paths.js';
 
@@ -160,10 +161,7 @@ export async function init(router) {
     // us binding 127.0.0.1 on the same port, and then local requests would go
     // to this copy while the phone talks to the other (seen live: two proxies
     // on 8901, the one inside SillyTavern running older code).
-    if (await probeExistingProxy({ port, host })) {
-        console.log(`[${info.id}] reusing the standalone proxy already running at http://${host}:${port}/v1 (npm start / launcher)`);
-        return;
-    }
+    if (await probeExistingProxy({ port, host })) return share(port, host);
     try {
         await startStandaloneListener({ port, host });
         console.log(
@@ -171,10 +169,7 @@ export async function init(router) {
             '(use the "CCST" panel in the Extensions drawer to connect)',
         );
     } catch (err) {
-        if (err?.code === 'EADDRINUSE' && await probeExistingProxy({ port, host })) {
-            console.log(`[${info.id}] reusing the standalone proxy already running at http://${host}:${port}/v1 (npm start)`);
-            return;
-        }
+        if (err?.code === 'EADDRINUSE' && await probeExistingProxy({ port, host })) return share(port, host);
         if (err?.code === 'EADDRINUSE') console.error(portInUseMessage(port));
         console.error(
             `[${info.id}] failed to start standalone listener — chat completions will not work. ` +
@@ -184,7 +179,18 @@ export async function init(router) {
     }
 }
 
+/** 端口上已经有一个 CCST（另一个酒馆的，或单独运行的）：共用它，它关了就接管。 */
+function share(port, host) {
+    console.log(`[${info.id}] 端口 ${port} 上已经有一个 CCST 代理（另一个酒馆的，或单独运行的），这个酒馆共用它；它关掉后这里会自动接管。`);
+    startSharing({
+        port, host,
+        alive: () => probeExistingProxy({ port, host }),
+        takeOver: async () => { await startStandaloneListener({ port, host }); return true; },
+    });
+}
+
 export async function exit() {
+    stopSharing();
     await stopStandaloneListener();
     console.log(`[${info.id}] shut down`);
 }

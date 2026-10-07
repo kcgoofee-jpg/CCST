@@ -52,8 +52,21 @@ test('Mac installer end to end on a fake tavern: config edited once (backed up),
         git('init', '-q'); git('add', '.'); git('commit', '-q', '-m', 'x');
         const env = { PATH: process.env.PATH, HOME: `${root}/home`, CCST_NO_PROCESS_SCAN: '1', CCST_SKIP_LOGIN: '1', CCST_YES: '1', CCST_REPO_URL: repo };
         const run = () => execFileSync('zsh', [`${dir}CCST安装.command`], { env, encoding: 'utf8' });
+        // 旧版本留下的：别的文件夹里的旧插件、旧面板、旧 Mac 启动器的开机自启
+        mkdirSync(`${st}/plugins/SillyTavern-ClaudeMax`, { recursive: true });
+        writeFileSync(`${st}/plugins/SillyTavern-ClaudeMax/index.js`, "export const info = { id: 'claude-subscription' };");
+        mkdirSync(`${st}/plugins/other`, { recursive: true });
+        writeFileSync(`${st}/plugins/other/index.js`, "export const info = { id: 'other' };");
+        mkdirSync(`${st}/public/scripts/extensions/third-party/SillyTavern-ClaudeSubscription`, { recursive: true });
+        mkdirSync(`${root}/home/Library/LaunchAgents`, { recursive: true });
+        writeFileSync(`${root}/home/Library/LaunchAgents/com.claudemax.autostart.plist`, '<plist/>');
+        mkdirSync(`${root}/home/Desktop`);
         const out = run();
         assert.ok(out.includes('装好了。关掉酒馆再打开，面板会自动连上。'));
+        assert.ok(readFileSync(`${root}/home/Desktop/CCST安装日志.txt`, 'utf8').includes('装好了。'), 'log on the Desktop');
+        const bak = readdirSync(st).find((f) => f.startsWith('CCST旧版备份-'));
+        assert.deepEqual(readdirSync(`${st}/${bak}`).sort(), ['LaunchAgents-com.claudemax.autostart.plist', 'plugins-SillyTavern-ClaudeMax', 'third-party-SillyTavern-ClaudeSubscription']);
+        assert.ok(existsSync(`${st}/plugins/other/index.js`), 'unrelated plugins stay');
         assert.equal(readFileSync(`${st}/config.yaml`, 'utf8'), cfg.replace('enableServerPlugins: false', 'enableServerPlugins: true'));
         const backups = readdirSync(st).filter((f) => f.startsWith('config.yaml.ccst-backup-'));
         assert.equal(backups.length, 1);

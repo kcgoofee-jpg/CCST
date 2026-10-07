@@ -34,6 +34,8 @@ function stFingerprint(fp) {
         order: short(fp.order, 16),
         wi: Array.isArray(fp.wi) ? fp.wi.filter((s) => typeof s === 'string').map((s) => s.slice(0, 40)).slice(0, 80) : [],
         mut: Array.isArray(fp.mut) ? fp.mut.filter((s) => typeof s === 'string').map((s) => s.slice(0, 40)).slice(0, 12) : [],
+        // SillyTavern too old to report triggered world info: wi is always empty, not "unchanged".
+        ...(fp.wiOff === true ? { wiOff: true } : {}),
     };
 }
 

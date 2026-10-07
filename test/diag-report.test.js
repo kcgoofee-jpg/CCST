@@ -68,10 +68,14 @@ test('stChanges names what changed in SillyTavern between two turns of a chat', 
     assert.equal(stChanges({ chatKey: 'other', st: st({ pp: 'strict' }) }, a), '', 'another chat is not compared');
 });
 
-test('report line names the scripts when the prompt changed with no SillyTavern change', async () => {
+test('report line names the scripts under the same rule as the status card', async () => {
     const { stChanges } = await import('../src/proxy/features/diag-report.js');
     const st = { preset: 'Izumi', pp: 'none', order: 'aa', wi: [], mut: ['脚本「泉此方悬浮窗」'] };
-    const line = stChanges({ chatKey: 'k', st, cacheDiag: { systemChanged: true } }, { chatKey: 'k', st });
-    assert.match(line, /酒馆没改设置，可能是: 脚本「泉此方悬浮窗」/);
+    const line = stChanges({ chatKey: 'k', st, cacheDiag: { systemChanged: true, historyDiffAt: null } }, { chatKey: 'k', st });
+    assert.match(line, /酒馆没改设置，可能是: 脚本「泉此方悬浮窗」（或改了角色卡/);
     assert.equal(stChanges({ chatKey: 'k', st, cacheDiag: { reroll: true } }, { chatKey: 'k', st }), '');
+    // A swipe / edited reply, lore moved, post-history entries: not blamed on scripts.
+    assert.equal(stChanges({ chatKey: 'k', st, cacheDiag: { replyChanged: true, historyDiffAt: 2 } }, { chatKey: 'k', st }), '');
+    assert.equal(stChanges({ chatKey: 'k', st, cacheDiag: { systemChanged: true, loreMoved: ['Lore'] } }, { chatKey: 'k', st }), '');
+    assert.equal(stChanges({ chatKey: 'k', st, cacheDiag: { systemChanged: true, tailRewritten: 1 } }, { chatKey: 'k', st }), '');
 });

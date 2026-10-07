@@ -43,3 +43,10 @@ test('the status tab draws the advisories at its top, and the store feeds it (#3
     assert.match(src('core/live.js'), /compat: data\.compat \?\? null, foldStreak: data\.foldStreak \?\? null, endpoint: data\.endpoint \?\? null/);
     assert.match(src('core/live.js'), /api\/plugins\/claude-subscription/);
 });
+
+test('another CCST answering for this SillyTavern: warn only when it is a different version', () => {
+    const shared = (version) => online({ root: '/old/CCST', version, sharedBy: { root: '/st/plugins/CCST', version: '6.0.2' } });
+    assert.match(statusAdvisories(shared('5.2.0'), 'http://127.0.0.1:8901/v1')[0].text, /另一份 CCST v5\.2\.0/);
+    assert.deepEqual(statusAdvisories(shared('6.0.2'), 'http://127.0.0.1:8901/v1'), []);
+    assert.deepEqual(statusAdvisories(online({ root: '/st/plugins/CCST', version: '6.0.2' }), 'http://127.0.0.1:8901/v1'), []);
+});

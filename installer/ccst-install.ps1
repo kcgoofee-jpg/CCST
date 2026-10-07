@@ -21,6 +21,7 @@ function Warn($m) { Write-Host "  [!] $m" -ForegroundColor Yellow }
 function Step($m) { Write-Host ''; Write-Host "【$m】" -ForegroundColor Cyan }
 function Finish($code) {
     Write-Host ''
+    if ($Log) { try { Stop-Transcript | Out-Null } catch { } }
     if (-not $AssumeYes) { Read-Host '按回车键关闭这个窗口' | Out-Null }
     exit $code
 }
@@ -28,6 +29,7 @@ function Stop-With($msg, [string[]]$lines) {
     Write-Host ''
     Write-Host "[失败] $msg" -ForegroundColor Red
     foreach ($l in $lines) { Write-Host "  $l" }
+    if ($Log) { Write-Host "  还不行就把桌面上的「CCST安装日志.txt」发给作者。" }
     Finish 1
 }
 # 运行外部程序（npm、git 等）；它们往 stderr 写警告不算失败，只看退出码
@@ -36,6 +38,9 @@ function Run-Native([scriptblock]$block) {
     try { & $block | Out-Host; return $LASTEXITCODE } finally { $ErrorActionPreference = $old }
 }
 
+# 日志：屏幕上的每一行同时写进桌面的「CCST安装日志.txt」（每次覆盖），出问题时发这个文件
+$Log = Join-Path ([Environment]::GetFolderPath('Desktop')) 'CCST安装日志.txt'
+try { Start-Transcript -Path $Log -Force | Out-Null; Write-Host ("{0}  Windows {1}  PowerShell {2}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), [Environment]::OSVersion.Version, $PSVersionTable.PSVersion) } catch { $Log = $null }
 Write-Host '════════ CCST 一键安装 ════════'
 Say '这个程序会帮你把 CCST 装进酒馆。中间可能要等几分钟，请不要关窗口。'
 
@@ -178,7 +183,9 @@ function Install-Zip {
         $top = Get-ChildItem -LiteralPath (Join-Path $tmp 'x') -Directory | Select-Object -First 1
         if (-not $top -or -not (Test-Path -LiteralPath (Join-Path $top.FullName 'package.json'))) { return $false }
         New-Item -ItemType Directory -Force -Path $Dest | Out-Null
-        Copy-Item -Path (Join-Path $top.FullName '*') -Destination $Dest -Recurse -Force  # 只覆盖同名文件，从不删除 Dest 里已有的东西
+        # 更新：先清掉旧代码（新版删掉的文件不能留着），只留 data（聊天统计、设置）、node_modules 和 launcher（里面有 config.local.ps1）
+        Get-ChildItem -LiteralPath $Dest -Force | Where-Object { @('data', 'node_modules', 'launcher') -notcontains $_.Name } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+        Copy-Item -Path (Join-Path $top.FullName '*') -Destination $Dest -Recurse -Force
         return $true
     } catch { return $false } finally { Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue }
 }
@@ -203,7 +210,59 @@ if (Test-Path -LiteralPath (Join-Path $Dest '.git')) {
     Ok "已下载到 $Dest"
 }
 if (-not (Test-Path -LiteralPath (Join-Path $Dest 'package.json'))) {
-    Stop-With 'CCST 没装完整（缺少 package.json）。' @('再双击一次「CCST安装.bat」试试；还不行请把这个窗口的内容截图发给作者。')
+    Stop-With 'CCST 没装完整（缺少 package.json）。' @('再双击一次「CCST安装.bat」试试。')
+}
+# 面板：在酒馆里「安装扩展」装的是 git 版，酒馆不会自己更新它
+$panels = @(Join-Path $St 'public\scripts\extensions\third-party\CCST') + @(Get-ChildItem -Path (Join-Path $St 'data\*\extensions\CCST') -Directory -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
+foreach ($p in $panels) {
+    if (-not (Test-Path -LiteralPath (Join-Path $p '.git'))) { continue }
+    if ($haveGit -and ((Run-Native { git -C $p pull --ff-only --quiet }) -eq 0)) { Ok '面板已更新' }
+    else { Warn '面板没能自动更新：在酒馆 扩展 → 管理扩展 里点 CCST 的「更新」。' }
+}
+# 旧版本留下的东西：别的文件夹里的旧插件 / 旧面板（会抢 8901 端口，聊天还是走旧代码）、指向别处的旧开机自启
+$old = New-Object System.Collections.Generic.List[string]
+foreach ($d in @(Get-ChildItem -LiteralPath (Join-Path $St 'plugins') -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne 'CCST' } | ForEach-Object { $_.FullName })) {
+    $files = @(Get-ChildItem -LiteralPath $d -File -Filter '*.js' -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
+    $files += @((Join-Path $d 'package.json'), (Join-Path $d 'src\proxy\plugin.js')) | Where-Object { Test-Path -LiteralPath $_ }
+    if ($files.Count -and (Select-String -LiteralPath $files -Pattern 'claude-subscription' -SimpleMatch -Quiet)) { $old.Add($d) }
+}
+foreach ($n in @('SillyTavern-ClaudeMax', 'SillyTavern-ClaudeSubscription')) {
+    $x = Join-Path $St "public\scripts\extensions\third-party\$n"; if (Test-Path -LiteralPath $x) { $old.Add($x) }
+    Get-ChildItem -Path (Join-Path $St "data\*\extensions\$n") -Directory -ErrorAction SilentlyContinue | ForEach-Object { $old.Add($_.FullName) }
+}
+$startup = [Environment]::GetFolderPath('Startup')
+try {
+    $sh = New-Object -ComObject WScript.Shell
+    Get-ChildItem -LiteralPath $startup -Filter '*.lnk' -ErrorAction SilentlyContinue | ForEach-Object {
+        $a = $sh.CreateShortcut($_.FullName).Arguments
+        if ($a -match 'claude-max\.ps1' -and -not $a.Contains($Dest)) { $old.Add($_.FullName) }
+    }
+} catch { }
+if ($old.Count) {
+    Say '  找到旧版本留下的东西：'
+    foreach ($o in $old) { Say "    $o" }
+    $yes = $AssumeYes -or ((Read-Host '  移到备份文件夹（不删除）？[Y/n]') -notmatch '^[nN]')
+    if (-not $yes) { Warn '没动它们。它们还在的话，聊天可能还是走旧版本。' }
+    else {
+        $bak = Join-Path $St "CCST旧版备份-$Stamp"
+        New-Item -ItemType Directory -Force -Path $bak | Out-Null
+        foreach ($o in $old) {
+            $name = "{0}-{1}" -f (Split-Path (Split-Path $o -Parent) -Leaf), (Split-Path $o -Leaf)
+            try { Move-Item -LiteralPath $o -Destination (Join-Path $bak $name) -ErrorAction Stop; Ok "已移走 $(Split-Path $o -Leaf)" }
+            catch { Warn "移不走 $o（可能正在运行）：关掉酒馆后再运行一次安装。" }
+        }
+        Ok "备份在 $bak（用了几天没问题就可以删）"
+    }
+}
+# 正在运行的代理不是这一份（旧版本、别的文件夹）：装完要先关掉它
+if ($env:CCST_NO_PROCESS_SCAN -ne '1') {
+    try {
+        $r = Invoke-RestMethod -UseBasicParsing -Uri 'http://127.0.0.1:8901/status' -TimeoutSec 3
+        if ($r.plugin -eq 'claude-subscription' -and $r.root -ne $Dest) {
+            $where = if ($r.root) { "（$($r.root)）" } else { '' }
+            Warn "现在 8901 上在跑 CCST v$($r.version)$where。下面装完后，先关掉所有酒馆窗口，再启动酒馆。"
+        }
+    } catch { }
 }
 
 # ── 5. 依赖 ──

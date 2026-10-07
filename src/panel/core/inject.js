@@ -134,20 +134,58 @@ function fnv(text) {
     return h.toString(16).padStart(8, '0');
 }
 
-/** What could rewrite the prompt on its own at send time: enabled 酒馆助手 scripts of the preset and
- *  the card, and prompt-only regexes that act by depth (they rewrite older messages as they age).
- *  Named in the cache explanation when the prompt changed but no setting did (Izumi's 悬浮窗). */
+/** What could rewrite the prompt on its own at send time: 酒馆助手 scripts that actually run (global ones
+ *  while global scripts are on; the preset's / card's only when allowed for that preset / card; a folder's
+ *  enabled scripts when the folder is on), and prompt-only regexes that act by depth (preset / card ones
+ *  only when allowed) — they rewrite older messages as they age. Named in the cache explanation when the
+ *  prompt changed but no setting did (Izumi's 悬浮窗). Unknown shapes are skipped, never thrown on. */
 export function promptMutators(ctx = SillyTavern.getContext()) {
     const out = [];
-    const oai = ctx.chatCompletionSettings ?? {};
-    const char = ctx.characters?.[ctx.characterId]?.data?.extensions ?? {};
-    for (const s of [...(oai.extensions?.tavern_helper?.scripts ?? []), ...(char.tavern_helper?.scripts ?? [])]) {
-        if (s?.enabled && s?.name) out.push(`脚本「${String(s.name).slice(0, 24)}」`);
-    }
-    const deep = (v) => Number.isFinite(Number(v)) && v !== null && v !== '' && Number(v) >= 2;
-    for (const r of [...(oai.extensions?.regex_scripts ?? []), ...(char.regex_scripts ?? []), ...(ctx.extensionSettings?.regex ?? [])]) {
-        if (r && !r.disabled && r.promptOnly && (deep(r.minDepth) || deep(r.maxDepth))) out.push(`正则「${String(r.scriptName ?? '').slice(0, 24)}」`);
-    }
+    const arr = (v) => (Array.isArray(v) ? v : []);
+    const obj = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
+    const safe = (fn) => { try { fn(); } catch { /* unexpected shape: skip */ } };
+    const ext = obj(ctx?.extensionSettings);
+    const off = arr(ext.disabledExtensions).map(String);
+    const oai = obj(ctx?.chatCompletionSettings);
+    const preset = String(oai.preset_settings_openai ?? '');
+    let card = {};
+    safe(() => { card = obj(ctx.characters?.[ctx.characterId]); });
+    const avatar = typeof card.avatar === 'string' ? card.avatar : null;
+    const cardExt = obj(card.data?.extensions);
+
+    safe(() => {
+        if (off.some((x) => /JS-Slash-Runner|tavern.?helper/i.test(x))) return;
+        const th = obj(obj(ext.tavern_helper).script);
+        const allow = obj(th.enabled);
+        // Older 酒馆助手 kept a card's settings as [key, value] pairs.
+        let cardTh = cardExt.tavern_helper;
+        if (Array.isArray(cardTh)) { try { cardTh = Object.fromEntries(cardTh); } catch { cardTh = {}; } }
+        const lists = [];
+        if (allow.global !== false) lists.push(th.scripts);
+        if (preset && arr(allow.presets).includes(preset)) lists.push(obj(obj(oai.extensions).tavern_helper).scripts);
+        if (avatar && arr(allow.characters).includes(avatar)) lists.push(obj(cardTh).scripts);
+        const add = (list, inFolder) => {
+            for (const s of arr(list)) {
+                if (!s || typeof s !== 'object' || s.enabled !== true) continue;
+                if (s.type === 'folder') { if (!inFolder) add(s.scripts, true); continue; }
+                if (s.name) out.push(`脚本「${String(s.name).slice(0, 24)}」`);
+            }
+        };
+        for (const list of lists) safe(() => add(list, false));
+    });
+
+    safe(() => {
+        if (off.includes('regex')) return;
+        const deep = (v) => v !== null && v !== '' && Number.isFinite(Number(v)) && Number(v) >= 2;
+        const lists = [ext.regex];
+        if (preset && arr(obj(ext.preset_allowed_regex).openai).includes(preset)) lists.push(obj(oai.extensions).regex_scripts);
+        if (avatar && arr(ext.character_allowed_regex).includes(avatar)) lists.push(cardExt.regex_scripts);
+        for (const list of lists) {
+            for (const r of arr(list)) {
+                if (r && typeof r === 'object' && !r.disabled && r.promptOnly && (deep(r.minDepth) || deep(r.maxDepth))) out.push(`正则「${String(r.scriptName ?? '').slice(0, 24)}」`);
+            }
+        }
+    });
     return [...new Set(out)].slice(0, 12);
 }
 
@@ -160,6 +198,8 @@ export function stFingerprint(data, ctx = SillyTavern.getContext()) {
         order: fnv(JSON.stringify([oai.prompt_order ?? [], prompts])),
         wi: activatedLore,
         mut: promptMutators(ctx),
+        // No WORLD_INFO_ACTIVATED (old SillyTavern): wi stays empty whatever fired.
+        ...(ctx.eventTypes?.WORLD_INFO_ACTIVATED ? {} : { wiOff: true }),
     };
 }
 

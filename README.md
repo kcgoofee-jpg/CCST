@@ -1,154 +1,46 @@
-<div align="center">
+# CCST
 
-<img src="docs/assets/cover.png" alt="CCST：在 SillyTavern 里用你自己的 Claude 订阅聊天" width="100%">
-
-**简体中文** · [English](README.en.md)
-
-[![版本](https://img.shields.io/github/package-json/v/kcgoofee-jpg/CCST?label=%E7%89%88%E6%9C%AC&color=c08a55)](https://github.com/kcgoofee-jpg/CCST/releases)
-[![最新发布](https://img.shields.io/github/v/release/kcgoofee-jpg/CCST?label=%E6%9C%80%E6%96%B0%E5%8F%91%E5%B8%83&color=c08a55)](https://github.com/kcgoofee-jpg/CCST/releases/latest)
-[![测试](https://github.com/kcgoofee-jpg/CCST/actions/workflows/test.yml/badge.svg)](https://github.com/kcgoofee-jpg/CCST/actions/workflows/test.yml)
-![平台](https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-Mac%20%7C%20Windows-555)
-![Node](https://img.shields.io/badge/node-%E2%89%A518-339933)
-[![许可证](https://img.shields.io/badge/%E8%AE%B8%E5%8F%AF%E8%AF%81-AGPL--3.0-blue)](LICENSE)
-
-[安装](#安装5-分钟) · [常见问题](#常见问题) · [使用指南](docs/使用指南.md) · [路线图](docs/路线图.md) · [更新记录](CHANGELOG.md) · [参与开发](CONTRIBUTING.md) · [安全](SECURITY.md)
-
-<sub>非 Anthropic 官方产品，与 Anthropic 无关。Claude 是 Anthropic 的商标。</sub>
-
-<img src="docs/assets/panel-reason.png" width="200" alt="推理页">
-<img src="docs/assets/panel-status.png" width="200" alt="状态页">
-
-</div>
-
-> [!IMPORTANT]
-> **本分支（main）是维护版**：5.2.x 起只修关键 bug，不再加功能，现有用户放心继续用。下一代（Rust 写的直连代理，不再依赖 Claude Code CLI，彻底没有"SDK 一升级就出问题"这类事）在 [`dev`](https://github.com/kcgoofee-jpg/CCST/tree/dev) 分支开发。
-
-## 这是什么
-
-酒馆本身只能接按量付费的 API。CCST 是一个酒馆插件，装上以后：
-
-| | |
-| --- | --- |
-| 🎟️ **用订阅聊天**<br>Claude Pro / Max，不用另买 API 额度；也支持 Anthropic API 密钥 | 💰 **长聊更省额度**<br>聊天记录走提示词缓存，每轮通常只重算最新一段；状态页显示每轮实测命中率 |
-| 🛟 **断线回复不丢**<br>浏览器关了、断网了，回复照样写完，回来自动补上 | 🩺 **拒绝 / 截断提示**<br>模型拒绝、回复被截断或为空时直接告诉你 |
-
-省多少取决于预设、世界书和其他扩展的组合；面板「状态」页每轮都会写清楚这一轮读了多少缓存、为什么没读到。
+在 SillyTavern（酒馆）里用你自己的 Claude Pro / Max 订阅聊天。只支持 Windows 和 macOS。
 
 > [!CAUTION]
-> 用订阅跑第三方程序**不在** Anthropic 允许的范围内，账号可能被限制或封禁。不能接受就用 API 密钥走酒馆自带的 Claude 来源（见[其他用法](#其他用法)）。详见[风险提示](#风险提示)。
+> 非 Anthropic 官方产品。用订阅跑第三方程序不在 Anthropic 允许的范围内，账号可能被限制。内容受 Anthropic [使用政策](https://www.anthropic.com/legal/aup)约束。
 
-## 你需要
+## 安装
 
-- 一台装好 [SillyTavern](https://github.com/SillyTavern/SillyTavern) 的电脑，[Node.js](https://nodejs.org) 18 以上（没有的话安装程序会提示）。
-- Claude Pro 或 Max 订阅（或 API 密钥）。
-- Chrome 或 Edge 浏览器。
+需要：装好的酒馆、[Node.js](https://nodejs.org) 18 以上、Claude Pro 或 Max。
 
-## 安装（5 分钟）
-
-**1. 在酒馆里装面板。** 顶部「扩展」（积木图标）→「安装扩展」，粘贴下面的链接，点安装：
+**1. 装面板。** 酒馆顶部「扩展」（积木图标）→「安装扩展」，粘贴下面这行，点安装：
 
 ```
 https://github.com/kcgoofee-jpg/CCST
 ```
 
-**2. 拿到一键安装。** 打开 **CCST** 面板，会看到一张「连不上 CCST 代理」的卡片：Mac 点「复制命令」，Windows 点 **下载一键安装（Windows）**。
+**2. 运行一键安装。**
 
-**3. 运行它，登录 Claude。** Mac 打开「终端」，粘贴下面这行回车；Windows 双击下载的文件。它会找到酒馆、装好依赖，中间打开一次浏览器让你登录 Claude。窗口里写「装好了」就完成了。
+- **Windows**：在 CCST 面板点「下载一键安装（Windows）」，双击下载的 `CCST安装.bat`。弹出「Windows 已保护你的电脑」就点「更多信息」→「仍要运行」。
+- **Mac**：打开「终端」（`Cmd+空格` 搜「终端」），粘贴下面这行，回车：
 
-```
-zsh -c "$(curl -fsSL https://raw.githubusercontent.com/kcgoofee-jpg/CCST/main/install-plugin-mac.sh)"
-```
+  ```
+  zsh -c "$(curl -fsSL https://raw.githubusercontent.com/kcgoofee-jpg/CCST/main/install-plugin-mac.sh)"
+  ```
 
-- Mac 不要双击下载来的 `.command`：macOS 15 起会提示「无法验证开发者」。用上面这行就不会。
-- Windows 弹出「Windows 已保护你的电脑」：点「更多信息」→「仍要运行」。
-- 没有 Node.js：它会打开下载页，装好后再运行一次。
+中间会打开一次浏览器让你登录 Claude。窗口里出现「装好了」就完成了。
 
-**4. 重启酒馆。** 关掉再打开，浏览器强制刷新（`Ctrl+F5`，Mac `Cmd+Shift+R`）。面板会自动连上。
+**3. 重启酒馆。** 关掉酒馆的黑窗口（Mac 是终端窗口）再启动，浏览器强制刷新（Windows `Ctrl+F5`，Mac `Cmd+Shift+R`）。
 
-之后 CCST 跟着酒馆一起启动。**更新**：再运行一次同一个安装（Mac 粘贴同一行，Windows 再双击），然后重启酒馆。
+**4. 连接。** 打开 CCST 面板，点「一键连接」。
 
-<details>
-<summary>装不上？手动安装</summary>
+## 更新
 
-一键安装只做了这几件事：
+再运行一次第 2 步（Windows 双击同一个 `.bat`，Mac 粘贴同一行），然后重启酒馆。
 
-1. **打开服务端插件。** 酒馆文件夹里的 `config.yaml`，把这一行改成 `true`：
+它会下载最新的安装程序，把插件和面板都更新到最新版本。以前装过旧版本的，它也会找出来，移到酒馆文件夹里的 `CCST旧版备份-日期` 里。旧版本包括别的文件夹里的旧插件、旧面板、旧的开机自启。这些东西不删除，用几天没问题再自己删掉。
 
-   ```yaml
-   enableServerPlugins: true
-   ```
+## 出问题
 
-2. **下载 CCST。** 在酒馆文件夹（有 `server.js` 的那一层）打开终端：
+- **安装失败**：把桌面上的 `CCST安装日志.txt` 发给作者。
+- **聊天报错、缓存命中低**：CCST 面板 →「状态」→「复制诊断报告」，聊两三轮后整段发给作者。报告里没有聊天内容。
 
-   ```bash
-   node plugins.js install https://github.com/kcgoofee-jpg/CCST
-   ```
+---
 
-3. **装依赖并登录 Claude**（会打开一次浏览器）：
-
-   ```bash
-   cd plugins/CCST
-   npm install
-   npm run login
-   ```
-
-4. 重启酒馆，在 **CCST** 面板点 **一键连接**。
-
-- **面板连不上代理**：确认 `config.yaml` 是 `true` 且重启过；酒馆控制台应该有 `[claude-subscription] initialised`。
-- **安装程序找不到酒馆**：把酒馆文件夹拖进安装窗口，回车。
-- **`npm install` 失败**：不要加 `--omit=optional`；`node -v` 要 18 以上。
-- **面板说没登录**：再运行一次安装，或在 `plugins/CCST` 里 `npm run login`。
-
-</details>
-
-## 使用
-
-第一次打开面板会出现引导：**装代理 → 登录 → 连接**，每步做完自动进入下一步；最后一步「一键连接」会新建并选中一个叫「CCST」的连接配置（沿用你已选的 Claude 模型，没有就用 Opus 4.6），你原来的连接配置不会被改。面板 3 页，平时只用第一页：
-
-| 页 | 干什么 |
-| --- | --- |
-| **聊天** | 选模型、调思考（不思考 / 自动 / 低 … 最大，越深越慢越费额度） |
-| **状态** | 这一轮用时、缓存命中和原因；回复被拒绝 / 截断 / 为空时的提示；额度；7 天用量；诊断报告 |
-| **设置** | 代理地址、显示思考过程、身份模式；「高级」里是缓存与上下文开关、始终思考、查看发给模型的请求；最下面「重新引导」 |
-
-## 常见问题
-
-**缓存命中一直 0%，只有重 roll 有命中。**
-先升级到 **6.0.0** 并重启酒馆。主要原因是 Claude Code 9 月起会沿用记录下来的旧系统提示词（部分账号开启），6.0.0 已关掉；还修了几处会让聊天记录每轮整段重写的情况（Kemini、Izumi 这类在聊天记录前放 user 条目的预设，只给最新发言套标签的正则，系统区的关键词世界书）。提示词后处理选「无」。
-
-**状态页说「系统提示词 / 聊天记录从第 N 条起和上一轮不同」。**
-有东西每轮在改提示词：按关键词触发的世界书、随机宏、每轮变的变量、按楼层改写旧消息的正则，或预设自带的脚本（比如 Izumi 悬浮窗的 Advice 和关键词替换，连 Claude 时建议关掉）。状态页「详情」会写具体位置；诊断报告里还会列出你这一轮在酒馆里改了什么。
-
-**还是解释不了。**
-状态 → 诊断 → 「复制诊断报告」，聊两三轮后整段发给维护者（不含聊天内容）。维护者向的完整记录见[缓存命中排查](docs/缓存命中排查.md)。
-
-## 其他用法
-
-- **用 Anthropic API 密钥**：不需要 CCST，直接用酒馆自带的 Claude 来源。
-- **TauriTavern / 不装成酒馆插件**：在同一台电脑上单独运行代理（`npm install`、`npm run login`、`npm start`），见[使用指南](docs/使用指南.md#只跑代理命令行)。
-
-更多细节（缓存原理、环境变量、所有设置项）在 **[使用指南](docs/使用指南.md)**。
-
-## 限制
-
-- 没有温度、Top-P、Top-K。
-- 额度和 Claude.ai 共用，受 5 小时与 7 天窗口限制。
-- 首字比直连 API 慢几秒（要先启动 CLI）。
-
-## 风险提示
-
-- **不是官方认可的用法。** 官方文档写明，未经批准不允许第三方产品使用 claude.ai 登录或订阅额度。Anthropic 随时可能限制这种用法，或对账号采取措施。
-- **内容受 Anthropic [使用政策](https://www.anthropic.com/legal/aup)约束。** 政策禁止露骨色情内容；任何涉及未成年人的性内容都绝对禁止并会被上报。
-- **不要把代理开放给别人，不要共享账号。**
-
-作者不对账号被限制、封禁或其他损失负责。
-
-> 基于 [LukaTheHero/SillyTavern-ClaudeSubscription](https://github.com/LukaTheHero/SillyTavern-ClaudeSubscription)（AGPL-3.0）独立维护，感谢原作者。
-
-## 相关项目
-
-- [tt-root-module](https://github.com/kcgoofee-jpg/tt-root-module)：root 安卓手机上的 KernelSU 模块，自动备份、校验、同步 TauriTavern 的数据，一键恢复。
-
-## 许可证
-
-[GNU AGPL v3.0 或更高版本](LICENSE)
+旧版说明（功能介绍、常见问题、手动安装等）在 [docs/归档](docs/归档/README-6.0.1.md)。许可证 [AGPL-3.0](LICENSE)，基于 [LukaTheHero/SillyTavern-ClaudeSubscription](https://github.com/LukaTheHero/SillyTavern-ClaudeSubscription)。

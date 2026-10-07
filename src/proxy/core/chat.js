@@ -48,7 +48,7 @@ import { isExpiredTokenError, isRateLimitError, isExtraUsageRequiredError, isSta
 import { explainError, formatErrorForUser } from '../features/errors-zh.js';
 import { recordRequest, promptShape } from '../features/usage-stats.js';
 import { applyHistoryBounds, inlineLateSystemMessages } from '../features/system-placement.js';
-import { diagnoseCache, describeDiag } from '../features/cache-diag.js';
+import { diagnoseCache, describeDiag, discardDiag } from '../features/cache-diag.js';
 import { extractVolatileBlocks, foldTrailingInjections, injectBlocks, injectedTextFor, loreTarget, newLoreOnly, noteTail, rememberInjected, rewriteInjected, cutExactLore, TRIGGERED_TAG } from '../features/lore-tail.js';
 import { dumpEntries, dumpRequest, noteDebugSetting } from '../features/debug-dump.js';
 import { keepReply, trackGeneration } from '../features/reply-keeper.js';
@@ -901,6 +901,8 @@ async function completeChat(req, res, body, settings, conn) {
         const raw = err instanceof Error ? err.message : String(err);
         const described = err?.sdkErrorText === 'served-model-guard' ? `served-model guard: ${raw}` : raw;
         noteFoldOutcome(lastPath, settings);
+        // Nothing was cached: the resend is compared with the last request that went through.
+        discardDiag(cacheDiag);
         recordRequest({
             backend: billedAs, model: modelInfo.requested, effort: settings.effort ?? null, placement: settings.systemPlacement, auxiliary: settings.auxiliary, purpose: settings.purpose, chatKey: settings.chatKey, timing, path: lastPath, stream: wantStream, startedAt, firstTokenAt, shape, cacheDiag, st: settings.stFingerprint,
             usage: usage ?? partialUsage, textChars: collectedText.length,

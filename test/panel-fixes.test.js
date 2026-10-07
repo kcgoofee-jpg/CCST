@@ -91,3 +91,45 @@ test('explainCache flags a first turn so the panel can show a neutral note', asy
     assert.equal(explainCache({ ...base }).firstTurn, true);
     assert.equal(explainCache({ ...base, cacheDiag: { firstTurn: false, chat: 'a', systemChanged: false, historyDiffAt: null } }, { ...base, model: 'm', cacheDiag: { chat: 'a' } }).firstTurn, false);
 });
+
+test('promptMutators lists only scripts / regexes that actually run, and never throws on odd shapes', async () => {
+    globalThis.SillyTavern = { getContext: () => ({ chatCompletionSettings: {} }) };
+    const { promptMutators, stFingerprint } = await import('../src/panel/core/inject.js');
+    const script = (name, enabled = true) => ({ type: 'script', name, enabled });
+    const deepRegex = (scriptName) => ({ scriptName, promptOnly: true, minDepth: 5, disabled: false });
+    const ctx = (over = {}) => ({
+        chatCompletionSettings: { preset_settings_openai: 'Izumi', extensions: { tavern_helper: { scripts: [script('悬浮窗'), script('关着', false)] }, regex_scripts: [deepRegex('预设摘要')] } },
+        characterId: 0,
+        characters: [{ avatar: 'a.png', data: { extensions: {
+            tavern_helper: [['scripts', [{ type: 'folder', name: '文件夹', enabled: true, scripts: [script('卡内'), script('卡内关', false)] }, { type: 'folder', name: '关的夹', enabled: false, scripts: [script('不跑')] }]]],
+            regex_scripts: [deepRegex('卡摘要')],
+        } } }],
+        extensionSettings: {
+            tavern_helper: { script: { enabled: { global: false, presets: ['Izumi'], characters: ['a.png'] }, scripts: [script('全局')] } },
+            preset_allowed_regex: { openai: ['Izumi'] }, character_allowed_regex: ['a.png'], regex: [deepRegex('全局摘要')],
+            disabledExtensions: [],
+        },
+        ...over,
+    });
+    assert.deepEqual(promptMutators(ctx()), ['脚本「悬浮窗」', '脚本「卡内」', '正则「全局摘要」', '正则「预设摘要」', '正则「卡摘要」']);
+    // Not allowed for this preset / card: their scripts and regexes don't run.
+    const c = ctx();
+    c.extensionSettings.tavern_helper.script.enabled = { global: true, presets: [], characters: [] };
+    c.extensionSettings.preset_allowed_regex = {};
+    c.extensionSettings.character_allowed_regex = [];
+    assert.deepEqual(promptMutators(c), ['脚本「全局」', '正则「全局摘要」']);
+    // 酒馆助手 / regex switched off, or 酒馆助手 not installed.
+    const d = ctx();
+    d.extensionSettings.disabledExtensions = ['third-party/JS-Slash-Runner', 'regex'];
+    assert.deepEqual(promptMutators(d), []);
+    const e = ctx();
+    delete e.extensionSettings.tavern_helper;
+    assert.ok(!promptMutators(e).some((x) => x.startsWith('脚本')));
+    // Odd shapes are skipped.
+    for (const odd of [{}, { extensionSettings: null, characters: 'x' }, { chatCompletionSettings: { extensions: { tavern_helper: { scripts: 'x' } } }, extensionSettings: { tavern_helper: { script: { enabled: 5, scripts: {} } }, regex: {} } }]) {
+        assert.deepEqual(promptMutators(odd), []);
+    }
+    // Old SillyTavern without WORLD_INFO_ACTIVATED: the fingerprint says the world info list is unknown.
+    assert.equal(stFingerprint({}, { chatCompletionSettings: {}, eventTypes: {} }).wiOff, true);
+    assert.equal(stFingerprint({}, { chatCompletionSettings: {}, eventTypes: { WORLD_INFO_ACTIVATED: 'world_info_activated' } }).wiOff, undefined);
+});

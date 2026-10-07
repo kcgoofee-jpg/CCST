@@ -22,6 +22,7 @@ import { dirname, join } from 'node:path';
 import { extractVolatileBlocks } from './lore-tail.js';
 import { contentToText } from '../core/system-prompt.js';
 import { DATA_DIR } from '../paths.js';
+import { cacheWriteMultiplier } from '../../shared/backends.js';
 
 const MAX_CHATS = 6;
 // Below this the static part isn't worth a cache breakpoint (Opus 5.5's
@@ -30,6 +31,7 @@ const MIN_STATIC_CHARS = 1500;
 // How many recent turns decide the split point (see diagnoseCache).
 const SPLIT_WINDOW = 3;
 const previous = new Map(); // chatKey → { system, history: string[], splitAt: number|null, cuts: (number|null)[], changes: {tag: count} }
+const undo = new WeakMap(); // diagnosis → the chat's state before it (discardDiag)
 // Blocks that look like world info count as volatile after one change; any
 // other tag after two (a one-off preset toggle shouldn't move a block for good).
 const LORE_TAG = /world|lore|世界|设定集|worldinfo/i;
@@ -239,14 +241,19 @@ export function diagnoseCache(systemText, history, { moveVolatile = false, chatK
     let splitAt = cutPoints.length ? Math.min(...cutPoints) : rewrite ? null : (prev?.splitAt ?? learned?.splitAt ?? null);
     if (splitAt !== null && (splitAt < MIN_STATIC_CHARS || splitAt > sentSystem.length)) splitAt = null;
 
+    const state = { system, history: texts, splitAt, cuts: recent, changes };
     previous.delete(key);
-    previous.set(key, { system, history: texts, splitAt, cuts: recent, changes });
+    previous.set(key, state);
     while (previous.size > MAX_CHATS) previous.delete(previous.keys().next().value);
     remember(key, changes, splitAt);
 
     // First turn since the proxy started: nothing to compare with, but what
     // was learned about this chat before the restart still applies.
-    if (!prev) return { chat: key, firstTurn: true, systemChars: system.length, splitAt: learned ? splitAt : null, volatileTags: learned || moved.length ? volatileTags(changes) : [], ...(learned ? { remembered: true } : {}) };
+    if (!prev) {
+        const first = { chat: key, firstTurn: true, systemChars: system.length, splitAt: learned ? splitAt : null, volatileTags: learned || moved.length ? volatileTags(changes) : [], ...(learned ? { remembered: true } : {}) };
+        undo.set(first, { key, prev, learned, state });
+        return first;
+    }
 
     // History that existed last turn (minus the previous current message,
     // which is normally replaced by the reply + new input) should be stable.
@@ -262,7 +269,7 @@ export function diagnoseCache(systemText, history, { moveVolatile = false, chatK
     // A reply that differs from the one sent last turn: the player picked
     // another swipe (or edited the reply). Everything after it is re-written.
     const replyChanged = historyDiffAt >= 0 && texts[historyDiffAt]?.startsWith('assistant:');
-    return {
+    const diag = {
         chat: key, // hash of the chat's opening two messages — groups turns per chat in reports, carries no text
         firstTurn: false,
         systemChars: system.length,
@@ -277,6 +284,21 @@ export function diagnoseCache(systemText, history, { moveVolatile = false, chatK
         splitAt,
         volatileTags: volatileTags(changes),
     };
+    undo.set(diag, { key, prev, learned, state });
+    return diag;
+}
+
+/** The request failed: nothing reached the cache, so the next one (a resend) is compared with the
+ *  last request that went through, not with this one — else a resend reads as a reroll. */
+export function discardDiag(diag) {
+    const u = diag && undo.get(diag);
+    if (!u) return;
+    undo.delete(diag);
+    if (previous.get(u.key) !== u.state) return; // a newer request of this chat came in meanwhile
+    previous.delete(u.key);
+    if (u.prev) previous.set(u.key, u.prev);
+    const back = u.prev ?? u.learned;
+    if (back) remember(u.key, back.changes, back.splitAt);
 }
 
 /** One human-readable line for the proxy log. */
@@ -306,12 +328,11 @@ const k = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
 /**
  * One request's cost in "equivalent input tokens" at Anthropic's list-price
  * ratios (same for every current Claude model): cache read 0.1×, cache
- * write 1.25× (5-minute rate), output 5×. Subscription quota accounting is
- * not public; this is for comparing turns, presets and settings.
+ * write by TTL (shared/backends.js cacheWriteMultiplier), output 5×. Subscription
+ * quota accounting is not public; this is for comparing turns, presets and settings.
  */
 export function equivalentTokens(e) {
-    // Cache writes: 2× input for the 1-hour cache CCST asks for, 1.25× for 5 minutes.
-    const write = e.cacheTtl === '5m' ? 1.25 : 2;
+    const write = cacheWriteMultiplier(e.cacheTtl);
     return Math.round((e.inputTokens ?? 0) + 0.1 * (e.cacheReadTokens ?? 0) + write * (e.cacheCreationTokens ?? 0) + 5 * (e.outputTokens ?? 0));
 }
 
@@ -351,6 +372,26 @@ export function cacheAnomaly(entry, prevEntry) {
 }
 
 /**
+ * The system prompt changed while SillyTavern's setup (preset, entries, post-processing, triggered
+ * world info) stayed the same and the panel saw scripts / regexes running that rewrite prompts:
+ * those scripts, as suspects. Null when something else explains the change (lore moved, post-history
+ * entries, another preset, an edited message), when nothing such runs, or when the world info list
+ * can't be trusted (old SillyTavern without WORLD_INFO_ACTIVATED). The status card and the report share it.
+ */
+export function scriptSuspects(entry, prevEntry) {
+    const d = entry?.cacheDiag;
+    const a = prevEntry?.st;
+    const b = entry?.st;
+    if (!d || d.firstTurn || d.reroll || d.rewrite || d.loreMoved?.length || d.tailRewritten || !d.systemChanged) return null;
+    if (d.historyDiffAt !== null && d.historyDiffAt !== undefined) return null;
+    if (!a || !b || !Array.isArray(b.mut) || !b.mut.length || a.wiOff || b.wiOff) return null;
+    const chat = (e) => e.chatKey ?? e.cacheDiag?.chat;
+    if (!chat(entry) || chat(entry) !== chat(prevEntry)) return null;
+    const same = a.preset === b.preset && a.order === b.order && a.pp === b.pp && JSON.stringify(a.wi ?? []) === JSON.stringify(b.wi ?? []);
+    return same ? b.mut : null;
+}
+
+/**
  * Plain-Chinese explanation of one recorded request's cache outcome, for the
  * panel. `entry` / `prevEntry` are usage-stats records (prevEntry: the
  * request before it, if any).
@@ -378,19 +419,13 @@ export function explainCache(entry, prevEntry = null) {
         }
         if (d.historyDiffAt !== null && d.historyDiffAt !== undefined) {
             reasons.push(d.replyChanged
-                ? `第 ${d.historyDiffAt + 1} 条回复和上一轮发的不同：切换了回复分支（swipe）或编辑了这条回复，从这里往后重写一次，属正常现象。${entry.st?.mut?.length ? `你没切换也没编辑的话，就是预设或角色卡里的脚本改了它（这一轮启用着：${entry.st.mut.join('、')}）。` : ''}`
+                ? `第 ${d.historyDiffAt + 1} 条回复和上一轮发的不同：切换了回复分支（swipe）或编辑了这条回复，从这里往后重写一次，属正常现象。${entry.st?.mut?.length ? `你没切换也没编辑的话，可能是预设或角色卡里的脚本改了它（这一轮启用着：${entry.st.mut.join('、')}）。` : ''}`
                 : `聊天记录从第 ${d.historyDiffAt + 1} / ${d.historyLen} 条起和上一轮不同，之后全部重写。常见原因：预设正则按楼层改写旧消息（如「5 楼外只发摘要」）；「深度注入保持原位」打开时，深度注入每轮往后挪一格；或删改了消息。`);
         }
-        // The prompt changed but nothing was changed in SillyTavern (same preset, entries,
-        // post-processing and triggered world info): a script or regex of the preset / card
-        // rewrites it at send time (Izumi's 悬浮窗: Advice, 关键词替换). Only the user can turn that off.
-        const a = prevEntry?.st;
-        const b = entry.st;
-        const sameSetup = a && b && a.preset === b.preset && a.order === b.order && a.pp === b.pp
-            && JSON.stringify(a.wi ?? []) === JSON.stringify(b.wi ?? []);
-        const changed = d.systemChanged || (d.historyDiffAt !== null && d.historyDiffAt !== undefined && !d.replyChanged);
-        if (changed && sameSetup && !d.tailRewritten) {
-            reasons.unshift(`你没在酒馆里改任何设置，提示词却变了：多半是预设或角色卡里的脚本、正则或随机宏在发送时改写内容${b.mut?.length ? `（这一轮启用着：${b.mut.join('、')}）` : ''}。这类改动只能在预设或角色卡里关掉，CCST 没法替你缓存。`);
+        // Nothing changed in SillyTavern yet the system prompt did: maybe a script of the preset / card (Izumi's 悬浮窗).
+        const suspects = scriptSuspects(entry, prevEntry);
+        if (suspects) {
+            reasons.unshift(`酒馆里的设置没变，提示词却变了：可能是预设或角色卡里的脚本 / 正则在发送时改写了内容（这一轮启用着：${suspects.join('、')}）。刚改过角色卡、用户设定或作者注释的话，就是那次改动。`);
         }
         if (d.tailRewritten) {
             reasons.push(`预设放在聊天记录后面的条目变了（开关或编辑）：之前 ${d.tailRewritten} 轮里带的旧版本已换成新版本，聊天记录重写这一次，下一轮恢复。`);

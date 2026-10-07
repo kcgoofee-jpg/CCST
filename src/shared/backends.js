@@ -54,6 +54,12 @@ export function priceFor(model) {
     return { input: p.input, output: p.output, cacheRead: p.cacheRead ?? p.input * 0.1 };
 }
 
+/** Cache-write price as a multiple of input: 1.25× for 5 minutes, 2× for 1 hour. Unknown (nothing
+ *  written, older records) counts as 1 hour, the TTL CCST asks for. */
+export function cacheWriteMultiplier(ttl) {
+    return ttl === '5m' ? 1.25 : 2;
+}
+
 /**
  * Estimated USD for one request's token counts; null when the model has no
  * price row or the backend is the subscription (no per-token bill).
@@ -66,7 +72,7 @@ export function estimateCostUsd(e, backend, opts = {}) {
     if (!isApiBilled(backend)) return null;
     const p = priceFor(e?.model);
     if (!p) return null;
-    const writeMult = opts.cacheTtl === '1h' ? 2 : 1.25;
+    const writeMult = cacheWriteMultiplier(opts.cacheTtl);
     const usd = ((e.inputTokens ?? 0) * p.input
         + (e.outputTokens ?? 0) * p.output
         + (e.cacheReadTokens ?? 0) * p.cacheRead

@@ -33,6 +33,7 @@ import { handleDebugLast } from '../features/debug-dump.js';
 import { handleDiagFull, handleDiagReport } from '../features/diag-report.js';
 import { handleCancelReply, handleKeptReply } from '../features/reply-keeper.js';
 import { countInFlight } from '../platform/control.js';
+import { forwardToShared, sharingWith } from './shared-proxy.js';
 import { asyncRoute, allowCors, allowCorsGet, allowCorsGetTrusted, guardPostOrigin } from './guards.js';
 
 export const ROUTES = [
@@ -69,6 +70,8 @@ export function registerRoutes(router, mount) {
         const chain = [];
         if (standalone && r.cors) chain.push(CORS[r.cors]);
         if (standalone && r.origin) chain.push(guardPostOrigin);
+        // 和另一个酒馆共用代理时，面板要的数据在那边（shared-proxy.js）
+        if (!standalone && r.standalone) chain.push((req, res, next) => (sharingWith() ? forwardToShared(req, res, r.standalone).catch(next) : next()));
         chain.push(r.async ? asyncRoute(r.handler) : r.handler);
         router[r.method](path, ...chain);
         if (standalone && r.cors && !preflight.has(path)) preflight.set(path, CORS[r.cors]);

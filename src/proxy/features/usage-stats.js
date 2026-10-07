@@ -151,7 +151,7 @@ export function recordRequest(r) {
     };
     // Estimated, from token counts × list prices (shared/backends.js); null on
     // the subscription or for a model without a price row.
-    const cost = estimateCostUsd(entry, entry.backend, { cacheTtl: r.cacheTtl });
+    const cost = estimateCostUsd(entry, entry.backend, { cacheTtl: entry.cacheTtl });
     if (cost != null) entry.costUsd = cost;
     if (failure) {
         entry.errorCode = failure.code;
@@ -195,7 +195,23 @@ function noteCacheAnomaly(entry, prevEntry) {
     entry.notices = [...(entry.notices ?? []), 'replay-reset'];
 }
 
-function aggregate(list) {
+/** Requests that follow a failed request of the same chat: a resend, the turn itself — not a reroll even
+ *  where the record says so (until 6.0.2 the resend was compared with the failed request). No chat key,
+ *  no chat to tell. */
+function resentAfterFailure(list) {
+    const out = new Set();
+    const lastOk = new Map(); // chatKey → whether its latest request went through
+    for (const e of list) {
+        if (!e.chatKey) continue;
+        if (e.ok && lastOk.get(e.chatKey) === false) out.add(e);
+        lastOk.set(e.chatKey, !!e.ok);
+    }
+    return out;
+}
+
+const isReroll = (e, resent) => !!e?.cacheDiag?.reroll && !resent.has(e);
+
+function aggregate(list, resent = resentAfterFailure(list)) {
     const ok = list.filter((e) => e.ok);
     const sum = (key, from = ok) => from.reduce((n, e) => n + (e[key] ?? 0), 0);
     const input = sum('inputTokens');
@@ -203,10 +219,7 @@ function aggregate(list) {
     const cacheWrite = sum('cacheCreationTokens');
     // The hit rate describes new turns: rerolls read back everything and
     // would flatter it.
-    // A resend right after a failed request is the turn itself, not a reroll.
-    const failedBefore = new Set();
-    for (let i = 1; i < list.length; i++) if (!list[i - 1].ok && list[i - 1].chatKey === list[i].chatKey) failedBefore.add(list[i]);
-    const fresh = ok.filter((e) => !e.cacheDiag?.reroll || failedBefore.has(e));
+    const fresh = ok.filter((e) => !isReroll(e, resent));
     const freshRead = sum('cacheReadTokens', fresh);
     const promptTotal = sum('inputTokens', fresh) + freshRead + sum('cacheCreationTokens', fresh);
     const timed = ok.filter((e) => e.durationMs > 0);
@@ -265,10 +278,14 @@ export function summarizeStats(now = Date.now(), { chat = null } = {}) {
     }
     // Compared with the previous request that went through (a failed one wrote nothing).
     const prevRequest = mine.slice(0, -1).reverse().find((e) => e.ok) ?? null;
-    const lastCache = explainCache(lastRequest, prevRequest);
+    // The card and the totals agree on what a reroll is.
+    const resent = resentAfterFailure(all);
+    const shown = lastRequest?.cacheDiag?.reroll && !isReroll(lastRequest, resent)
+        ? { ...lastRequest, cacheDiag: { ...lastRequest.cacheDiag, reroll: false } } : lastRequest;
+    const lastCache = explainCache(shown, prevRequest);
     const bgToday = bg.filter((e) => e.at >= startOfDay.getTime());
-    const background = { today: aggregate(bgToday), week: aggregate(bg) };
-    return { today: aggregate(today), week: aggregate(main), background, lastRequest, lastCache, lastError, pricesAsOf: PRICES_AS_OF };
+    const background = { today: aggregate(bgToday, resent), week: aggregate(bg, resent) };
+    return { today: aggregate(today, resent), week: aggregate(main, resent), background, lastRequest, lastCache, lastError, pricesAsOf: PRICES_AS_OF };
 }
 
 /** The last `n` usage records, oldest first (the diagnostics report). */

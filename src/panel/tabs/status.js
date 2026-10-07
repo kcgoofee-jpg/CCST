@@ -32,6 +32,10 @@ export function statusAdvisories(status, endpoint) {
     if (actual && endpoint && normalizeEndpoint(actual) !== normalizeEndpoint(endpoint)) {
         out.push({ tone: 'warn', text: `代理实际地址与面板设置不一致：设置里是 ${endpoint}，应答的这个代理在 ${actual}。请把面板端点改成实际地址，或确认 8901 上没有另一个代理。` });
     }
+    const own = status.sharedBy;
+    if (own && status.root && own.root !== status.root && own.version !== status.version) {
+        out.push({ tone: 'warn', text: `在聊天的是另一份 CCST v${status.version}（${status.root}），不是这个酒馆装的 v${own.version}。关掉它（另一个酒馆，或旧的单独代理），再重启这个酒馆。` });
+    }
     return out;
 }
 

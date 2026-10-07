@@ -22,6 +22,7 @@ import { join } from 'node:path';
 import { ROOT } from '../paths.js';
 import { SDK_VERSION } from './sdk-version.js';
 import { recentEntries } from './usage-stats.js';
+import { scriptSuspects } from './cache-diag.js';
 import { recentLogLines } from './diag-log.js';
 import { capturedExchanges } from './wire-tap.js';
 
@@ -149,10 +150,8 @@ export function stChanges(e, prev) {
     const gone = (a.wi ?? []).filter((x) => !(b.wi ?? []).includes(x));
     if (added.length || gone.length) out.push(`世界书${added.length ? ` +${added.join(',')}` : ''}${gone.length ? ` −${gone.join(',')}` : ''}`);
     if (out.length) return `酒馆变化: ${out.join('；')}`;
-    // Nothing changed in SillyTavern yet the prompt did: a script / regex of the preset or card.
-    const d = e.cacheDiag ?? {};
-    const changed = d.systemChanged || d.replyChanged || (d.historyDiffAt != null);
-    return changed && !d.reroll && b.mut?.length ? `酒馆没改设置，可能是: ${b.mut.join(',')}` : '';
+    const suspects = scriptSuspects(e, prev);
+    return suspects ? `酒馆没改设置，可能是: ${suspects.join(',')}（或改了角色卡 / 用户设定 / 作者注释）` : '';
 }
 
 function usageEntryLine(e, prev) {

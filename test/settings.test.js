@@ -40,3 +40,10 @@ test('purpose: quiet from the panel marks a background call as auxiliary', () =>
     assert.equal(chat.auxiliary, false);
     assert.equal(chat.purpose, 'chat');
 });
+
+test('st_fp keeps the 「world info list unknown」 mark of an old SillyTavern, and nothing else unknown', () => {
+    const fp = (st_fp) => extractSettings({ messages: [], claude_subscription: { st_fp } }).stFingerprint;
+    assert.equal(fp({ preset: 'p', wi: [], wiOff: true }).wiOff, true);
+    assert.equal('wiOff' in fp({ preset: 'p', wi: [], wiOff: 'yes', other: 1 }), false);
+    assert.equal('other' in fp({ preset: 'p', other: 1 }), false);
+});

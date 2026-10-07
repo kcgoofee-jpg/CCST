@@ -155,12 +155,35 @@ test('the last-turn card compares with the previous successful request, and a re
     const usage = { input_tokens: 3, output_tokens: 100, cache_read_input_tokens: 9000, cache_creation_input_tokens: 1000 };
     const base = { backend: 'subscription', path: 'resume', stream: true, chatKey: 'k1', textChars: 10, finish: 'stop' };
     try {
-        stats.recordRequest({ ...base, model: 'claude-opus-4-6', effort: 'low', startedAt: Date.now() - 3000, usage, cacheDiag: { chat: 'c', firstTurn: false } });
-        stats.recordRequest({ ...base, model: 'claude-opus-4-6', effort: 'high', startedAt: Date.now() - 2000, error: 'API Error: 401 OAuth access token has expired' });
-        stats.recordRequest({ ...base, model: 'claude-opus-4-6', effort: 'low', startedAt: Date.now() - 1000, usage, cacheDiag: { chat: 'c', firstTurn: false, reroll: true } });
+        stats.recordRequest({ ...base, model: 'claude-opus-4-6', startedAt: Date.now() - 3000, usage, cacheDiag: { chat: 'c', firstTurn: false } });
+        // The failed attempt ran on another model: comparing with it would report a model change.
+        stats.recordRequest({ ...base, model: 'claude-sonnet-4-6', startedAt: Date.now() - 2000, error: 'API Error: 401 OAuth access token has expired' });
+        stats.recordRequest({ ...base, model: 'claude-opus-4-6', startedAt: Date.now() - 1000, usage, cacheDiag: { chat: 'c', firstTurn: false, reroll: true } });
     } finally { console.log = log; }
     const s = stats.summarizeStats(Date.now(), { chat: 'k1' });
     assert.equal(s.week.rerolls, 0, 'the resend after the failed request is the turn itself');
-    assert.ok(!s.lastCache.reasons.some((r) => /思考深度和上一轮不同/.test(r)), 'compared with the last successful request, not the failed one');
+    assert.ok(!s.lastCache.reasons.some((r) => /模型和上一轮不同/.test(r)), 'compared with the last successful request, not the failed one');
+    assert.ok(!s.lastCache.reasons.some((r) => /这是重roll/.test(r)), 'the card agrees with the totals');
+    delete process.env.CLAUDE_SUBSCRIPTION_STATS_FILE;
+});
+
+test('resend after failure: found across other chats, never for requests without a chat key', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ccst-stats-'));
+    process.env.CLAUDE_SUBSCRIPTION_STATS_FILE = join(dir, 'usage.jsonl');
+    const stats = await import(`../src/proxy/features/usage-stats.js?resend=${Date.now()}`);
+    const log = console.log; console.log = () => {};
+    const usage = { input_tokens: 3, output_tokens: 100, cache_read_input_tokens: 9000, cache_creation_input_tokens: 1000 };
+    const req = (chatKey, extra) => stats.recordRequest({ backend: 'subscription', model: 'm', path: 'resume', stream: true, textChars: 10, finish: 'stop', startedAt: Date.now() - 100, ...(chatKey ? { chatKey } : {}), ...extra });
+    const reroll = { usage, cacheDiag: { chat: 'c', firstTurn: false, reroll: true } };
+    const fail = { error: 'API Error: 529 overloaded' };
+    try {
+        req('a', fail);
+        req('b', { usage }); // another chat in between
+        req('a', reroll); // resend of chat a: not a reroll
+        req(null, fail);
+        req(null, reroll); // no chat key: no chat to tell, stays a reroll
+        req('b', reroll); // chat b's previous request went through: a real reroll
+    } finally { console.log = log; }
+    assert.equal(stats.summarizeStats(Date.now()).week.rerolls, 2);
     delete process.env.CLAUDE_SUBSCRIPTION_STATS_FILE;
 });

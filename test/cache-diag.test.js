@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import { diagnoseCache, describeDiag, nearestLabel, explainCache, __resetCacheDiag } from '../src/proxy/features/cache-diag.js';
 
@@ -284,13 +285,60 @@ test('a reply that differs from last turn is reported as a swipe / edit', () => 
     assert.match(explainCache(e, { ok: true, model: 'm' }).reasons.join(), /swipe/);
 });
 
-test('prompt changed with the SillyTavern setup unchanged: the explanation names the preset / card scripts', () => {
+test('prompt changed with the SillyTavern setup unchanged: scripts named as a maybe, only when some run and nothing else explains it', () => {
     const st = { preset: 'Izumi 1002', pp: 'none', order: 'aa', wi: ['x'], mut: ['脚本「泉此方悬浮窗」'] };
-    const d = { firstTurn: false, systemChanged: true, systemDiffAt: 2161, systemDiffLabel: '<ban>', historyDiffAt: null, historyLen: 4 };
-    const e = { ok: true, model: 'm', inputTokens: 3, cacheReadTokens: 0, cacheCreationTokens: 44000, cacheDiag: d, st };
-    const r = explainCache(e, { ok: true, model: 'm', st: { ...st } }).reasons;
-    assert.match(r[0], /没在酒馆里改任何设置.*泉此方悬浮窗/);
-    // A preset switch is a setting change: no script blamed.
-    const r2 = explainCache(e, { ok: true, model: 'm', st: { ...st, preset: '衡' } }).reasons;
-    assert.ok(!r2.some((x) => /没在酒馆里改任何设置/.test(x)));
+    const d = { chat: 'c', firstTurn: false, systemChanged: true, systemDiffAt: 2161, systemDiffLabel: '<ban>', historyDiffAt: null, historyLen: 4 };
+    const e = { ok: true, model: 'm', chatKey: 'k', inputTokens: 3, cacheReadTokens: 0, cacheCreationTokens: 44000, cacheDiag: d, st };
+    const prev = { ok: true, model: 'm', chatKey: 'k', st: { ...st } };
+    const blamed = (entry, p = prev) => explainCache(entry, p).reasons.some((x) => /设置没变/.test(x));
+    const r = explainCache(e, prev).reasons;
+    assert.match(r[0], /设置没变.*可能是.*泉此方悬浮窗.*角色卡、用户设定或作者注释/);
+    assert.ok(!blamed(e, { ...prev, st: { ...st, preset: '衡' } }), 'a preset switch is a setting change');
+    assert.ok(!blamed({ ...e, st: { ...st, mut: [] } }), 'no script running: no claim');
+    assert.ok(!blamed({ ...e, cacheDiag: { ...d, loreMoved: ['Lore'] } }), 'lore moved explains it');
+    assert.ok(!blamed({ ...e, cacheDiag: { ...d, tailRewritten: 2 } }), 'post-history entries explain it');
+    assert.ok(!blamed({ ...e, cacheDiag: { ...d, historyDiffAt: 1 } }), 'an edited older message');
+    assert.ok(!blamed({ ...e, cacheDiag: { ...d, rewrite: true } }));
+    assert.ok(!blamed({ ...e, st: { ...st, wiOff: true } }), 'old SillyTavern: world info unknown');
+    assert.ok(!blamed(e, { ...prev, chatKey: 'other' }), 'another chat');
+});
+
+test('scriptSuspects: one rule for the status card and the report', async () => {
+    const { scriptSuspects } = await import('../src/proxy/features/cache-diag.js');
+    const st = { preset: 'p', pp: 'none', order: 'aa', wi: [], mut: ['正则「摘要」'] };
+    const e = { chatKey: 'k', st, cacheDiag: { firstTurn: false, systemChanged: true, historyDiffAt: null } };
+    assert.deepEqual(scriptSuspects(e, { chatKey: 'k', st }), ['正则「摘要」']);
+    assert.equal(scriptSuspects({ ...e, cacheDiag: { systemChanged: false, replyChanged: true, historyDiffAt: 3 } }, { chatKey: 'k', st }), null);
+    assert.equal(scriptSuspects({ ...e, chatKey: undefined, cacheDiag: { ...e.cacheDiag } }, { st }), null, 'no chat to compare');
+});
+
+test('a failed request is discarded: the resend is compared with the last request that went through', async () => {
+    const { discardDiag } = await import('../src/proxy/features/cache-diag.js');
+    __resetCacheDiag();
+    const h1 = [A('hi'), U('u1')];
+    const h2 = [A('hi'), U('u1'), A('a1'), U('u2')];
+    diagnoseCache('<p>rules</p>', h1, { chatKey: 'k' });
+    const failed = diagnoseCache('<p>rules</p>', h2, { chatKey: 'k' });
+    assert.equal(failed.reroll, undefined);
+    discardDiag(failed);
+    const resend = diagnoseCache('<p>rules</p>', h2, { chatKey: 'k' });
+    assert.equal(resend.reroll, undefined, 'not a reroll of the failed request');
+    assert.equal(resend.firstTurn, false);
+    // A true reroll of the last successful request stays one.
+    assert.equal(diagnoseCache('<p>rules</p>', h2, { chatKey: 'k' }).reroll, true);
+    // A first turn that failed leaves nothing behind.
+    __resetCacheDiag();
+    discardDiag(diagnoseCache('<p>rules</p>', h1, { chatKey: 'n' }));
+    assert.equal(diagnoseCache('<p>rules</p>', h1, { chatKey: 'n' }).firstTurn, true);
+});
+
+test('cache writes of unknown TTL count as 1 hour in both the equivalent tokens and the cost estimate', async () => {
+    const { cacheWriteMultiplier } = await import('../src/shared/backends.js');
+    const { equivalentTokens } = await import('../src/proxy/features/cache-diag.js');
+    assert.equal(cacheWriteMultiplier(null), 2);
+    assert.equal(cacheWriteMultiplier('1h'), 2);
+    assert.equal(cacheWriteMultiplier('5m'), 1.25);
+    assert.equal(equivalentTokens({ cacheCreationTokens: 1000, cacheTtl: null }), 2000);
+    assert.match(readFileSync(new URL('../src/shared/backends.js', import.meta.url), 'utf8'), /writeMult = cacheWriteMultiplier\(opts\.cacheTtl\)/);
+    assert.match(readFileSync(new URL('../src/proxy/features/usage-stats.js', import.meta.url), 'utf8'), /estimateCostUsd\(entry, entry\.backend, \{ cacheTtl: entry\.cacheTtl \}\)/);
 });

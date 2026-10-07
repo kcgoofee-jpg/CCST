@@ -30,6 +30,7 @@ stop_with() { # 出错：说清楚发生了什么、下一步做什么
     print -r -- "✗ $1"
     shift
     local l; for l in "$@"; do print -r -- "  $l"; done
+    [[ -n "$LOG" ]] && print -r -- "  还不行就把「${LOG:t}」（在${LOG:h:t}）发给作者。"
     finish 1
 }
 ask() { # $1=提示；返回输入的一行（去掉首尾空白）
@@ -40,6 +41,12 @@ ask() { # $1=提示；返回输入的一行（去掉首尾空白）
     print -r -- "$a"
 }
 
+# 日志：屏幕上的每一行同时写进桌面的「CCST安装日志.txt」（每次覆盖），出问题时发这个文件
+LOG="${HOME}/Desktop/CCST安装日志.txt"; [[ -d "${HOME}/Desktop" ]] || LOG="${HOME}/CCST安装日志.txt"
+if : > "$LOG" 2>/dev/null; then
+    print -r -- "$(date '+%F %T')  macOS $(sw_vers -productVersion 2>/dev/null)  $(uname -m)" >> "$LOG"
+    exec > >(tee -a "$LOG") 2>&1
+else LOG=""; fi
 print -r -- "════════ CCST 一键安装 ════════"
 say "这个程序会帮你把 CCST 装进酒馆。中间可能要等几分钟，请不要关窗口。"
 
@@ -158,7 +165,10 @@ zip_install() {
     { ditto -x -k "$tmp/ccst.zip" "$tmp/x" 2>/dev/null || unzip -q -o "$tmp/ccst.zip" -d "$tmp/x"; } || { rm -rf "$tmp"; return 1; }
     local top=("$tmp"/x/*(/N[1]))
     [[ -n "$top" && -f "$top/package.json" ]] || { rm -rf "$tmp"; return 1; }
-    mkdir -p "$DEST" && cp -R "$top/." "$DEST/"; local rc=$?  # 只覆盖同名文件，从不删除 DEST 里已有的东西
+    mkdir -p "$DEST" || { rm -rf "$tmp"; return 1; }
+    # 更新：先清掉旧代码（新版删掉的文件不能留着），只留 data（聊天统计、设置）和 node_modules
+    local x; for x in "$DEST"/*(DN); do [[ "${x:t}" == (data|node_modules|launcher) ]] || rm -rf "$x"; done
+    cp -R "$top/." "$DEST/"; local rc=$?
     rm -rf "$tmp"; return $rc
 }
 if [[ -d "$DEST/.git" ]]; then
@@ -180,7 +190,42 @@ else
     (( installed )) || stop_with "下载 CCST 失败。" "多半是没联网，或者访问 GitHub 很慢。检查网络（需要能打开 github.com），然后${AGAIN_FILE}。"
     ok "已下载到 $DEST"
 fi
-[[ -f "$DEST/package.json" ]] || stop_with "CCST 没装完整（缺少 package.json）。" "${AGAIN_FILE}试试；还不行请把这个窗口的内容截图发给作者。"
+[[ -f "$DEST/package.json" ]] || stop_with "CCST 没装完整（缺少 package.json）。" "${AGAIN_FILE}试试。"
+
+# 面板：在酒馆里「安装扩展」装的是 git 版，酒馆不会自己更新它
+for d in "$ST"/public/scripts/extensions/third-party/CCST(N/) "$ST"/data/*/extensions/CCST(N/); do
+    [[ -d "$d/.git" ]] || continue
+    if (( have_git )) && git -C "$d" pull --ff-only --quiet; then ok "面板已更新"
+    else warn "面板没能自动更新：在酒馆 扩展 → 管理扩展 里点 CCST 的「更新」。"; fi
+done
+# 旧版本留下的东西：别的文件夹里的旧插件 / 旧面板（会抢 8901 端口，聊天还是走旧代码）、旧版 Mac 启动器的开机自启
+typeset -a old
+for d in "$ST"/plugins/*(N/); do
+    [[ "${d:t}" == CCST ]] && continue
+    grep -qs "claude-subscription" "$d/package.json" "$d"/*.js(N) "$d/src/proxy/plugin.js" && old+=("$d")
+done
+old+=("$ST"/public/scripts/extensions/third-party/(SillyTavern-ClaudeMax|SillyTavern-ClaudeSubscription)(N/) "$ST"/data/*/extensions/(SillyTavern-ClaudeMax|SillyTavern-ClaudeSubscription)(N/) "$HOME"/Library/LaunchAgents/com.claudemax.*.plist(N))
+if (( ${#old} )); then
+    say "  找到旧版本留下的东西："
+    for d in $old; do say "    $d"; done
+    a=y; [[ "$ASSUME_YES" == 1 ]] || a=$(ask "  移到备份文件夹（不删除）？[Y/n] ")
+    if [[ "$a" == [nN]* ]]; then warn "没动它们。它们还在的话，聊天可能还是走旧版本。"
+    else
+        BAK="$ST/CCST旧版备份-$STAMP"; mkdir -p "$BAK"
+        for d in $old; do
+            [[ "$d" == *.plist ]] && launchctl bootout "gui/$(id -u)" "$d" 2>/dev/null
+            mv "$d" "$BAK/${d:h:t}-${d:t}" && ok "已移走 ${d:t}"
+        done
+        ok "备份在 $BAK（用了几天没问题就可以删）"
+    fi
+fi
+# 正在运行的代理不是这一份（旧版本、别的文件夹）：装完要先关掉它
+[[ "${CCST_NO_PROCESS_SCAN:-0}" == 1 ]] || running=$(curl -fsS -m 3 http://127.0.0.1:8901/status 2>/dev/null)
+if [[ "$running" == *claude-subscription* ]]; then
+    rv=${${running#*\"version\":\"}%%\"*}
+    rroot=""; [[ "$running" == *'"root":"'* ]] && rroot=${${running#*\"root\":\"}%%\"*}
+    [[ "$rroot" != "$DEST" ]] && warn "现在 8901 上在跑 CCST v${rv}${rroot:+（$rroot）}。下面装完后，先关掉所有酒馆窗口，再启动酒馆。"
+fi
 
 # ── 5. 依赖 ──
 step "5/6 安装依赖（第一次要联网下载，约 1–3 分钟）"
