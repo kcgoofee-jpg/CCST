@@ -1,8 +1,9 @@
 //! OpenAI ↔ Claude 转换与 SSE 翻译。
 
+pub mod cache;
 mod sse;
 
-pub use sse::{finish_reason_of, Collector, SseTranslator};
+pub use sse::{finish_reason_of, openai_usage, Collector, SseFramer, SseTranslator};
 
 use serde_json::{json, Value};
 use std::error::Error;
@@ -45,8 +46,7 @@ pub fn upstream_error(upstream_status: u16, body: &str) -> (u16, String) {
 
 /// 转换结果：Claude 请求体 + 需要追加的 anthropic-beta 头。
 ///
-/// OpenAI 请求 → Claude Messages 请求（语义正确的转换；缓存断点策略在 P2
-/// 的 cache 模块）：system 归并（1h 缓存断点）、连续同角色合并、data-URL
+/// OpenAI 请求 → Claude Messages 请求：system 归并、缓存断点（[`cache`]，一律 1h）、连续同角色合并、data-URL
 /// 图片转 base64 块、`[1m]` 变体剥后缀并加 context-1m beta、stop/温度透传。
 pub fn to_claude_request(openai: &Value) -> Result<Converted, ConvertError> {
     let obj = openai.as_object().ok_or_else(|| ConvertError("请求体不是 JSON 对象".into()))?;
@@ -115,11 +115,11 @@ pub fn to_claude_request(openai: &Value) -> Result<Converted, ConvertError> {
         "messages": messages,
     });
     if !system_text.is_empty() {
-        body["system"] = json!([{
-            "type": "text",
-            "text": system_text,
-            "cache_control": { "type": "ephemeral", "ttl": "1h" },
-        }]);
+        body["system"] = json!([{ "type": "text", "text": system_text }]);
+    }
+    cache::place_breakpoints(&mut body);
+    if obj.get("stream").and_then(Value::as_bool) == Some(true) {
+        body["stream"] = json!(true);
     }
     if let Some(stop) = stop_sequences(openai) {
         body["stop_sequences"] = stop;
@@ -250,6 +250,9 @@ mod tests {
         let msgs = c.body["messages"].as_array().unwrap();
         assert_eq!(msgs.len(), 3);
         assert!(c.extra_beta.is_empty());
+        assert!(c.body.get("stream").is_none());
+        let streamed = to_claude_request(&json!({"model": "m", "stream": true, "messages": [{"role": "user", "content": "hi"}]})).unwrap();
+        assert_eq!(streamed.body["stream"], true, "流式要转发给上游，否则上游回整段 JSON");
     }
 
     #[test]

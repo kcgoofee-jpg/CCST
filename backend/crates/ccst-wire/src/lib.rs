@@ -5,6 +5,8 @@
 //! + `claude-cli/<version>` User-Agent。客户端版本号是配置项：上游会在版本
 //! 过旧时拒绝请求，届时只改这里的一个常量/配置。
 
+pub mod billing;
+
 use serde::{Deserialize, Serialize};
 
 pub const ANTHROPIC_BASE: &str = "https://api.anthropic.com";
@@ -20,7 +22,9 @@ pub const API_VERSION: &str = "2023-06-01";
 /// 订阅（OAuth 走 Claude Code 通道）必需的 beta 头。
 pub const BETA_OAUTH: &str = "oauth-2025-04-20";
 /// 跟随上游 Claude Code 的客户端版本（配置项；过旧会被 400）。
-pub const DEFAULT_CLIENT_VERSION: &str = "2.1.258";
+pub const DEFAULT_CLIENT_VERSION: &str = "2.1.285";
+/// 计费头里的入口名（CLI 直接运行时为 `cli`）。
+pub const ENTRYPOINT: &str = "cli";
 
 #[derive(Debug, Clone)]
 pub struct SubscriptionClient {
@@ -46,7 +50,6 @@ impl SubscriptionClient {
         h.insert(HeaderName::from_static("anthropic-version"), HeaderValue::from_static(API_VERSION));
         h.insert(HeaderName::from_static("anthropic-beta"), HeaderValue::from_static(BETA_OAUTH));
         h.insert(HeaderName::from_static("x-app"), HeaderValue::from_static("cli"));
-        let _ = &self.client_version;
         h
     }
 
@@ -63,10 +66,13 @@ impl SubscriptionClient {
                 headers.insert(reqwest::header::HeaderName::from_static("anthropic-beta"), v);
             }
         }
+        // 订阅通道只收 Claude Code 形态的请求：每个请求都盖上计费头
+        let mut body = body.clone();
+        billing::stamp(&mut body, &self.client_version, ENTRYPOINT);
         self.http
             .post(format!("{}/v1/messages", base_url()))
             .headers(headers)
-            .json(body)
+            .json(&body)
             .send()
             .await
             .map_err(Into::into)

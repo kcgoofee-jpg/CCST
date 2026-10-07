@@ -12,4 +12,5 @@ serde.workspace = true
 serde_json.workspace = true
 reqwest.workspace = true
 tokio.workspace = true
+sha2.workspace = true
 ccst-auth = { path = "../ccst-auth" }

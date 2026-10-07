@@ -153,15 +153,28 @@ async fn complete(state: SharedState, converted: ccst_chat::Converted) -> anyhow
     Ok(UpstreamOutcome::Ok(retried, converted.extra_beta))
 }
 
+/// 上游非 200：读完错误体，按错误类型给出中文提示与状态码（流式 / 非流式共用）。
+async fn upstream_failure(resp: reqwest::Response) -> Response {
+    let status = resp.status().as_u16();
+    let payload = resp.text().await.unwrap_or_default();
+    // upstream_error 已经给出完整的 OpenAI 错误体，不要再包一层
+    let (out_status, body) = ccst_chat::upstream_error(status, &payload);
+    let body: Value = serde_json::from_str(&body).unwrap_or_else(|_| error_body(&body));
+    json_response(StatusCode::from_u16(out_status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR), &body)
+}
+
 async fn stream_reply(resp: reqwest::Response, model: &str, _extra_beta: &[String]) -> Response {
     use futures::StreamExt;
+    if resp.status().as_u16() != 200 {
+        return upstream_failure(resp).await;
+    }
     let mut upstream: futures::stream::BoxStream<'static, Result<bytes::Bytes, reqwest::Error>> =
         Box::pin(resp.bytes_stream());
     let (tx, rx) = mpsc::channel::<Result<bytes::Bytes, std::io::Error>>(32);
     let model = model.to_string();
     tokio::spawn(async move {
         let mut translator = ccst_chat::SseTranslator::new(&model);
-        let mut buffer = String::new();
+        let mut framer = ccst_chat::SseFramer::default();
         while let Some(chunk) = upstream.next().await {
             let bytes = match chunk {
                 Ok(b) => b,
@@ -170,20 +183,11 @@ async fn stream_reply(resp: reqwest::Response, model: &str, _extra_beta: &[Strin
                     return;
                 }
             };
-            buffer.push_str(&String::from_utf8_lossy(&bytes));
-            // SSE 事件以空行分隔
-            while let Some(pos) = buffer.find("\n\n") {
-                let event = buffer.drain(..pos + 2).collect::<String>();
-                for line in event.lines().filter(|l| l.starts_with("data:")) {
-                    let payload = line.trim_start_matches("data:").trim();
-                    if payload.is_empty() {
-                        continue;
-                    }
-                    for chunk in translator.feed(payload) {
-                        let wire = format!("data: {chunk}\n\n");
-                        if tx.send(Ok(bytes::Bytes::from(wire))).await.is_err() {
-                            return;
-                        }
+            for payload in framer.push(&bytes) {
+                for chunk in translator.feed(&payload) {
+                    let wire = format!("data: {chunk}\n\n");
+                    if tx.send(Ok(bytes::Bytes::from(wire))).await.is_err() {
+                        return;
                     }
                 }
             }
@@ -198,15 +202,10 @@ async fn stream_reply(resp: reqwest::Response, model: &str, _extra_beta: &[Strin
 }
 
 async fn aggregate_reply(resp: reqwest::Response, model: &str) -> Response {
-    let status = resp.status().as_u16();
-    let payload = resp.text().await.unwrap_or_default();
-    if status != 200 {
-        let (out_status, message) = ccst_chat::upstream_error(status, &payload);
-        return json_response(
-            StatusCode::from_u16(out_status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
-            &error_body(&message),
-        );
+    if resp.status().as_u16() != 200 {
+        return upstream_failure(resp).await;
     }
+    let payload = resp.text().await.unwrap_or_default();
     let reply: Value = match serde_json::from_str(&payload) {
         Ok(v) => v,
         Err(e) => return json_response(StatusCode::INTERNAL_SERVER_ERROR, &error_body(&format!("上游响应解析失败：{e}"))),

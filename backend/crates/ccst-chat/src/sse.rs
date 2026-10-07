@@ -64,11 +64,8 @@ impl SseTranslator {
         let etype = ev.get("type").and_then(Value::as_str).unwrap_or("");
         match etype {
             "message_start" => {
-                let input = ev
-                    .pointer("/message/usage/input_tokens")
-                    .and_then(Value::as_u64)
-                    .unwrap_or(0);
-                self.usage = Some(json!({"input_tokens": input}));
+                // 缓存读写只在 message_start 里出现：整份留下
+                self.usage = Some(ev.pointer("/message/usage").cloned().unwrap_or_else(|| json!({})));
                 vec![]
             }
             "content_block_start" => {
@@ -121,8 +118,12 @@ impl SseTranslator {
                 }
                 if let Some(u) = ev.get("usage") {
                     let cur = self.usage.get_or_insert_with(|| json!({}));
-                    if let Some(o) = u.get("output_tokens") {
-                        cur["output_tokens"] = o.clone();
+                    if let (Some(cur), Some(u)) = (cur.as_object_mut(), u.as_object()) {
+                        for (k, v) in u {
+                            if !v.is_null() {
+                                cur.insert(k.clone(), v.clone());
+                            }
+                        }
                     }
                 }
                 vec![]
@@ -133,14 +134,7 @@ impl SseTranslator {
                 let mut final_chunk: Value = serde_json::from_str(&self.chunk(json!({}), Some(&reason))).unwrap_or(Value::Null);
                 // usage 挂在最后一个 chunk 的顶层（OpenAI stream_options 习惯）
                 if let Some(u) = &self.usage {
-                    let input = u.get("input_tokens").cloned().unwrap_or(json!(0));
-                    let output = u.get("output_tokens").cloned().unwrap_or(json!(0));
-                    let total = input.as_u64().unwrap_or(0) + output.as_u64().unwrap_or(0);
-                    final_chunk["usage"] = json!({
-                        "prompt_tokens": input,
-                        "completion_tokens": output,
-                        "total_tokens": total,
-                    });
+                    final_chunk["usage"] = openai_usage(u);
                 }
                 out_done(final_chunk.to_string())
             }
@@ -155,6 +149,54 @@ fn out_done(mut final_chunk: String) -> Vec<String> {
     final_chunk.push('\n');
     final_chunk.push_str("[DONE]");
     vec![final_chunk]
+}
+
+/// 按字节切 SSE 事件：网络分片可能落在一个汉字的 UTF-8 字节中间，逐片解码会变成
+/// U+FFFD。只在收齐一个完整事件（空行结尾）后再解码。
+#[derive(Debug, Default)]
+pub struct SseFramer {
+    buf: Vec<u8>,
+}
+
+impl SseFramer {
+    /// 喂一片字节，返回其中已完整的事件里所有 `data:` 载荷。
+    pub fn push(&mut self, bytes: &[u8]) -> Vec<String> {
+        self.buf.extend_from_slice(bytes);
+        let mut out = vec![];
+        while let Some(pos) = self.buf.windows(2).position(|w| w == b"\n\n") {
+            let event: Vec<u8> = self.buf.drain(..pos + 2).collect();
+            let text = String::from_utf8_lossy(&event);
+            for line in text.lines() {
+                if let Some(payload) = line.strip_prefix("data:") {
+                    let payload = payload.trim();
+                    if !payload.is_empty() {
+                        out.push(payload.to_string());
+                    }
+                }
+            }
+        }
+        out
+    }
+}
+
+/// Claude usage → OpenAI usage。prompt_tokens 按 OpenAI 语义含缓存读写；
+/// 缓存明细原样附上（面板据此显示命中率与有效期）。
+pub fn openai_usage(u: &Value) -> Value {
+    let n = |k: &str| u.get(k).and_then(Value::as_u64).unwrap_or(0);
+    let (input, read, write, output) = (n("input_tokens"), n("cache_read_input_tokens"), n("cache_creation_input_tokens"), n("output_tokens"));
+    let prompt = input + read + write;
+    let mut out = json!({
+        "prompt_tokens": prompt,
+        "completion_tokens": output,
+        "total_tokens": prompt + output,
+        "prompt_tokens_details": { "cached_tokens": read },
+        "cache_read_input_tokens": read,
+        "cache_creation_input_tokens": write,
+    });
+    if let Some(c) = u.get("cache_creation").filter(|c| c.is_object()) {
+        out["cache_creation"] = c.clone();
+    }
+    out
 }
 
 /// Claude stop_reason → OpenAI finish_reason。
@@ -174,6 +216,7 @@ pub struct Collector {
     pub finish_reason: Option<String>,
     pub input_tokens: u64,
     pub output_tokens: u64,
+    pub usage: Value,
 }
 
 impl Collector {
@@ -196,15 +239,12 @@ impl Collector {
         let u = reply.get("usage");
         c.input_tokens = u.and_then(|u| u.get("input_tokens")).and_then(Value::as_u64).unwrap_or(0);
         c.output_tokens = u.and_then(|u| u.get("output_tokens")).and_then(Value::as_u64).unwrap_or(0);
+        c.usage = u.cloned().unwrap_or(Value::Null);
         c
     }
 
     pub fn usage_json(&self) -> Value {
-        json!({
-            "prompt_tokens": self.input_tokens,
-            "completion_tokens": self.output_tokens,
-            "total_tokens": self.input_tokens + self.output_tokens,
-        })
+        openai_usage(&self.usage)
     }
 }
 
@@ -271,5 +311,34 @@ mod tests {
         assert_eq!(c.reasoning, "…");
         assert_eq!(c.finish_reason.as_deref(), Some("stop"));
         assert_eq!(c.usage_json()["total_tokens"], 7);
+    }
+
+    #[test]
+    fn framer_survives_a_chunk_boundary_inside_a_cjk_char() {
+        let wire = "data: {\"t\":\"汉字\"}\n\ndata: {\"t\":\"二\"}\n\n".as_bytes();
+        let cut = wire.iter().position(|&b| b >= 0x80).unwrap() + 1; // 切在「汉」的第 1 个字节之后
+        let mut f = SseFramer::default();
+        let mut got = f.push(&wire[..cut]);
+        assert!(got.is_empty());
+        got.extend(f.push(&wire[cut..]));
+        assert_eq!(got, vec![r#"{"t":"汉字"}"#.to_string(), r#"{"t":"二"}"#.to_string()]);
+    }
+
+    #[test]
+    fn usage_keeps_cache_read_write_and_ttl_split() {
+        let mut t = SseTranslator::new("m");
+        let out = feed_all(&mut t, &[
+            json!({"type":"message_start","message":{"id":"m","usage":{"input_tokens":3,"cache_read_input_tokens":27700,"cache_creation_input_tokens":338,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":338}}}}),
+            json!({"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}),
+            json!({"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"好"}}),
+            json!({"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":5}}),
+            json!({"type":"message_stop"}),
+        ]);
+        let last = out.last().unwrap().split('\n').next().unwrap().to_string();
+        let u = &serde_json::from_str::<Value>(&last).unwrap()["usage"];
+        assert_eq!(u["prompt_tokens"], 3 + 27700 + 338);
+        assert_eq!(u["prompt_tokens_details"]["cached_tokens"], 27700);
+        assert_eq!(u["cache_creation"]["ephemeral_1h_input_tokens"], 338);
+        assert_eq!(u["completion_tokens"], 5);
     }
 }
