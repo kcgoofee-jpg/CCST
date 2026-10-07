@@ -117,3 +117,14 @@ test('openExternal: opener plugin first, window.open as fallback; copyText falls
     assert.equal(opened, 'https://x.test/b');
     assert.equal(await copyText('x', { navigator: { clipboard: { writeText: async () => { throw new Error('no'); } } } }), false);
 });
+
+test('update card: only on a desktop SillyTavern, with the installer downloads', async () => {
+    const { updateHelp, isNewerVersion } = await import('../src/panel/core/connect-help.js');
+    const h = updateHelp({ latest: '6.0.4' });
+    assert.equal(h.title, '有新版本 v6.0.4');
+    assert.ok(h.downloads.some((d) => d.file === 'CCST安装.bat') && h.downloads.some((d) => d.key === 'mac-plugin-cmd'));
+    assert.equal(updateHelp({ latest: '6.0.4', host: 'tauri' }), null);
+    assert.equal(isNewerVersion('6.0.10', '6.0.9'), true);
+    assert.equal(isNewerVersion('6.0.3', '6.0.3'), false);
+    assert.equal(isNewerVersion('6.0.2', '6.0.3'), false);
+});

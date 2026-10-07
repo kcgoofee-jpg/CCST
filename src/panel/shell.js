@@ -6,7 +6,7 @@
 
 import { store } from './core/store.js';
 import { getSettings, saveSettingsDebounced, EFFORT_LABEL } from './core/settings.js';
-import { connectHelp, mismatchHelp, hostKind, loginHelp } from './core/connect-help.js';
+import { connectHelp, mismatchHelp, hostKind, loginHelp, updateHelp, isNewerVersion } from './core/connect-help.js';
 import { stepItem, downloadItem } from './core/help-items.js';
 import { IS_TAURI, APP_NAME, COARSE, cloudHosted, isOurEndpoint, stSideEndpoint } from './core/capabilities.js';
 import { libs } from './core/libs.js';
@@ -223,6 +223,17 @@ function mismatchCard(base, status) {
         sub: help.sub, steps: help.steps, showSteps: true, downloads: help.downloads, hint: help.hint };
 }
 
+/** 有新版本：一键安装那张下载卡片，加「这一版不再提醒」。只对装成酒馆插件的代理（一键安装更新的就是它）。 */
+function updateCard(base, status) {
+    const latest = store.get().latestVersion;
+    if (!latest || !status.version || status.runtime === 'standalone' || !isNewerVersion(latest, status.version)) return null;
+    if (getSettings().skipVersion === latest) return null;
+    const help = updateHelp({ latest, host: hostNow() });
+    if (!help) return null;
+    return { ...base, tone: 'info', dot: 'online', key: `update-${latest}`, title: help.title, sub: help.sub, downloads: help.downloads, showSteps: true, steps: [],
+        action: { label: '这一版不再提醒', run: () => { getSettings().skipVersion = latest; saveSettingsDebounced(); renderConnect(); } } };
+}
+
 /** What the card should say right now: null = no card. */
 function describeCard() {
     const { connected, model } = connectionInfo();
@@ -257,7 +268,7 @@ function describeCard() {
             if (Date.now() < flashUntil) {
                 return { ...base, tone: 'ok', dot: 'online', key: 'ok', title: model ? `已连接 · ${shortModel(model)}` : '已连接 · 请选 Claude 模型', sub: '' };
             }
-            return mismatch ? mismatchCard(base, status) : null;
+            return mismatch ? mismatchCard(base, status) : updateCard(base, status);
         }
         // Proxy is fine, SillyTavern isn't on it (yet).
         const sub = '会选好模型，并存成「CCST」连接配置。';
@@ -480,4 +491,5 @@ export function initShell() {
     // A full refresh: re-read what SillyTavern is connected to (the connect note; the tabs' own pulse
     // listeners draw the cache card, lore box, check-up and card check).
     store.subscribe('pulse', () => { renderConnect(); renderGlance(); });
+    store.subscribe('latestVersion', () => renderConnect());
 }

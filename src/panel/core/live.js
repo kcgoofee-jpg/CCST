@@ -211,10 +211,27 @@ export async function refreshStatsPage() {
 // Local renders (connect note, cache card, lore box, check-up, card check) listen to `pulse`;
 // the fetches start here.
 
+// 最新版本：GitHub 上 main 的 package.json（一键安装装的就是它），6 小时查一次，记在本机
+const LATEST_URL = 'https://raw.githubusercontent.com/kcgoofee-jpg/CCST/main/package.json';
+const LATEST_KEY = 'claude_max_latest';
+export async function checkLatest(now = Date.now()) {
+    try {
+        const saved = JSON.parse(localStorage.getItem(LATEST_KEY) ?? 'null');
+        if (saved?.version && now - saved.at < 6 * 3600_000) { store.set({ latestVersion: saved.version }); return; }
+    } catch { /* 读不了就重新查 */ }
+    try {
+        const pkg = await fetch(LATEST_URL, { cache: 'no-store', signal: AbortSignal.timeout(8000) }).then((r) => r.json());
+        if (typeof pkg?.version !== 'string') return;
+        try { localStorage.setItem(LATEST_KEY, JSON.stringify({ version: pkg.version, at: now })); } catch { /* 无痕模式 */ }
+        store.set({ latestVersion: pkg.version });
+    } catch { /* 连不上 GitHub：不提示 */ }
+}
+
 export function refreshAll() {
     store.set({ pulse: store.get().pulse + 1 });
     refreshStatus();
     refreshStatsPage();
     // The quota too (quota-gate keeps the 60 s gap): a 「点刷新」 placeholder was all 状态 showed before.
     refreshQuota();
+    checkLatest();
 }

@@ -33,6 +33,7 @@ export const defaultSettings = {
     foldTail: true,          // 发言后面的深度 0 注入并进发言（省缓存）
     stEndpoint: '',          // 酒馆服务器访问代理用的地址（旧版设置里可能有）；空 = 同「代理地址」
     accessKey: '',           // 代理的访问密码（CLAUDE_SUBSCRIPTION_LAN_KEY，旧版设置里可能有）；空 = 不带
+    skipVersion: '',         // 「这一版不再提醒」点过的版本号
     cacheTtl: '1h',          // 缓存有效期：'1h'（默认，写入 2 倍价）| '5m'（写入 1.25 倍，停 5 分钟以上就整段重写）
     quietEffort: 'low',      // 后台请求（其他插件的生图 tag、总结等）的思考深度；'follow' = 跟随面板
     panelTab: 'chat',        // 3.1 前记的分页；现在记在 localStorage，只用来迁移

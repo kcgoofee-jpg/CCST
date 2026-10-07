@@ -36,6 +36,24 @@ const desktopDownloads = () => [
     ...INSTALLERS.map((d) => ({ ...d, href: new URL(d.file, INSTALLER_BASE).href, download: true, copy: REPO_URL + '/tree/main/installer' })),
 ];
 
+/** 有新版本时的卡片内容（只给本机原版酒馆：装的是插件，一键安装会连面板一起更新、关掉再重开酒馆）。 */
+export function updateHelp({ latest, host = 'desktop' }) {
+    if (host !== 'desktop') return null;
+    return {
+        title: `有新版本 v${latest}`,
+        sub: 'Windows：双击之前下载的「CCST安装」，找不到就点下面重新下载。Mac：在「终端」粘贴下面这行。',
+        downloads: desktopDownloads(),
+    };
+}
+
+/** dotted version a newer than b */
+export function isNewerVersion(a, b) {
+    const pa = String(a).split('.').map((n) => parseInt(n, 10) || 0);
+    const pb = String(b).split('.').map((n) => parseInt(n, 10) || 0);
+    for (let i = 0; i < Math.max(pa.length, pb.length); i++) if ((pa[i] ?? 0) !== (pb[i] ?? 0)) return (pa[i] ?? 0) > (pb[i] ?? 0);
+    return false;
+}
+
 /**
  * 「连不上代理」卡片。host 见 hostKind。
  *   tauri / elsewhere：一句话 + 一行可见的安装说明链接（downloads）。
