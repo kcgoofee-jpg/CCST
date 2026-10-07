@@ -32,7 +32,7 @@ export function buildSettingsTab(pane, settings, save) {
     conn.body.append(info, connectionFields(settings, save));
     pane.append(conn.root);
 
-    const backend = group('代理后端', '代理用哪个服务回答：订阅、API 密钥或其他。');
+    const backend = group('代理后端', '代理用哪个服务回答：订阅或 API 密钥。');
     const backendBox = el('div', 'cm-conn-fields');
     backendBox.id = 'claude_max_backend';
     backendBox.append(stateLine('loading', '正在读取代理后端…'));

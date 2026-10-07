@@ -23,20 +23,10 @@ export function renderBackend(state) {
     else box.replaceChildren(stateLine('loading', '正在读取代理后端…'));
 }
 
-const BACKEND_SHORT = { subscription: '订阅', apikey: 'API', bedrock: 'Bedrock', vertex: 'Vertex', gateway: '网关', openrouter: 'OR' };
+const BACKEND_SHORT = { subscription: '订阅', apikey: 'API' };
 const BACKEND_FORM = {
     subscription: { note: '用本机 Claude 登录（Pro / Max），按订阅额度计。', fields: [] },
     apikey: { note: '按 token 计费（Anthropic 控制台）。', fields: [['apiKey', 'API 密钥（sk-ant-…）', true]] },
-    bedrock: {
-        note: '需要 AWS 账号开通 Bedrock 的 Claude 模型。凭证三选一：Bedrock API 密钥、AWS 配置名（~/.aws），或访问密钥；都不填则用本机默认 AWS 凭证。',
-        fields: [['region', '区域（如 us-east-1）'], ['bearerToken', 'Bedrock API 密钥', true], ['profile', 'AWS 配置名（可选）'], ['accessKeyId', 'Access Key ID（可选）', true], ['secretAccessKey', 'Secret Access Key（可选）', true], ['sessionToken', 'Session Token（可选）', true], ['prefix', '跨区前缀 us / eu / apac / global（可选，默认按区域）']],
-    },
-    vertex: {
-        note: '需要在代理这台电脑上先执行 gcloud auth application-default login（或填服务账号 JSON 的路径）。',
-        fields: [['projectId', 'GCP 项目 ID'], ['region', '区域（如 global、us-east5）'], ['credentialsFile', '服务账号 JSON 路径（可选）']],
-    },
-    gateway: { note: '任何兼容 Anthropic Messages 接口的网关（Bearer 令牌）。模型名按官方 id 发送。', fields: [['baseUrl', '网关地址（https://…）'], ['authToken', '令牌', true]] },
-    openrouter: { note: '走 OpenRouter 的 Anthropic 兼容接口（https://openrouter.ai/api）。模型名自动换成 anthropic/claude-…。', fields: [['authToken', 'OpenRouter 密钥（sk-or-…）', true]] },
 };
 
 function backendForm(view) {
@@ -49,7 +39,7 @@ function backendForm(view) {
     const renderFields = () => {
         fieldsBox.replaceChildren();
         for (const k of Object.keys(inputs)) delete inputs[k];
-        const form = BACKEND_FORM[chosen];
+        const form = BACKEND_FORM[chosen] ?? { note: '', fields: [] };
         fieldsBox.append(el('small', 'cm-hint', form.note));
         for (const [name, label, secret] of form.fields) {
             const info = view.fields?.[chosen]?.[name] ?? {};

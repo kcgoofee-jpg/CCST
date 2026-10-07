@@ -30,7 +30,7 @@
 
 import { backendEnv, SCRUBBED_ENV } from '../features/backend-config.js';
 
-// API credentials, base URLs and provider switches (Bedrock / Vertex / …):
+// API credentials, base URLs and provider switches:
 // see backend-config.js. The chosen backend adds back only its own.
 const SCRUB_KEYS = SCRUBBED_ENV;
 

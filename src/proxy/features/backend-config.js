@@ -1,23 +1,9 @@
 // ──────────────────────────────────────────────
-// Which backend the proxy runs chats on (subscription, API key, Bedrock,
-// Vertex, Anthropic-compatible gateway, OpenRouter)
+// Which backend the proxy runs chats on (subscription or API key)
 // ──────────────────────────────────────────────
 //
-// The Claude Code CLI picks its backend from its environment (checked in the
-// bundled CLI of claude-agent-sdk 0.3.281 and the Claude Code docs):
-//   API key     ANTHROPIC_API_KEY
-//   Bedrock     CLAUDE_CODE_USE_BEDROCK=1, AWS_REGION, and AWS credentials:
-//               AWS_BEARER_TOKEN_BEDROCK, or AWS_PROFILE, or
-//               AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY (/ AWS_SESSION_TOKEN),
-//               or whatever the default AWS chain finds
-//   Vertex      CLAUDE_CODE_USE_VERTEX=1, CLOUD_ML_REGION,
-//               ANTHROPIC_VERTEX_PROJECT_ID, Google ADC (gcloud auth
-//               application-default login or GOOGLE_APPLICATION_CREDENTIALS)
-//   Gateway     ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN (Bearer), with
-//               ANTHROPIC_API_KEY empty — OpenRouter documents exactly this
-//               for Claude Code (base https://openrouter.ai/api).
-// Model ids differ per backend; src/shared/backends.js maps them and
-// env.js pins them through ANTHROPIC_DEFAULT_<TIER>_MODEL.
+// The Claude Code CLI picks its backend from its environment: the
+// subscription login, or ANTHROPIC_API_KEY for per-token billing.
 //
 // Config lives on the proxy host only: data/backend.json (mode 0600, under
 // data/ which is never committed). CLAUDE_SUBSCRIPTION_BACKEND* env vars
@@ -31,7 +17,7 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-import { BACKENDS, BACKEND_LABELS, isApiBilled, normalizeBackend } from '../../shared/backends.js';
+import { BACKENDS, BACKEND_LABELS, isApiBilled } from '../../shared/backends.js';
 import { busyCount } from '../platform/control.js';
 import { DATA_DIR } from '../paths.js';
 import { envValue } from '../env-value.js';
@@ -41,30 +27,7 @@ export const FIELDS = {
     apikey: {
         apiKey: { secret: true, env: 'CLAUDE_SUBSCRIPTION_API_KEY' },
     },
-    bedrock: {
-        region: { env: 'CLAUDE_SUBSCRIPTION_AWS_REGION' },
-        profile: { env: 'CLAUDE_SUBSCRIPTION_AWS_PROFILE' },
-        bearerToken: { secret: true, env: 'CLAUDE_SUBSCRIPTION_BEDROCK_TOKEN' },
-        accessKeyId: { secret: true, env: 'CLAUDE_SUBSCRIPTION_AWS_ACCESS_KEY_ID' },
-        secretAccessKey: { secret: true, env: 'CLAUDE_SUBSCRIPTION_AWS_SECRET_ACCESS_KEY' },
-        sessionToken: { secret: true, env: 'CLAUDE_SUBSCRIPTION_AWS_SESSION_TOKEN' },
-        prefix: { env: 'CLAUDE_SUBSCRIPTION_BEDROCK_PREFIX' },
-    },
-    vertex: {
-        projectId: { env: 'CLAUDE_SUBSCRIPTION_VERTEX_PROJECT' },
-        region: { env: 'CLAUDE_SUBSCRIPTION_VERTEX_REGION' },
-        credentialsFile: { env: 'CLAUDE_SUBSCRIPTION_VERTEX_CREDENTIALS' },
-    },
-    gateway: {
-        baseUrl: { env: 'CLAUDE_SUBSCRIPTION_GATEWAY_URL' },
-        authToken: { secret: true, env: 'CLAUDE_SUBSCRIPTION_GATEWAY_TOKEN' },
-    },
-    openrouter: {
-        authToken: { secret: true, env: 'CLAUDE_SUBSCRIPTION_OPENROUTER_KEY' },
-    },
 };
-
-export const OPENROUTER_BASE_URL = 'https://openrouter.ai/api';
 
 export function backendFilePath() {
     return process.env.CLAUDE_SUBSCRIPTION_BACKEND_FILE || join(DATA_DIR, 'backend.json');
@@ -115,34 +78,12 @@ export function resolveBackendConfig({ env = process.env, file = readFileConfig(
 export function missingFields(backend, f) {
     const miss = [];
     if (backend === 'apikey' && !/^sk-ant-/i.test(f.apikey.apiKey)) miss.push('apikey.apiKey');
-    if (backend === 'bedrock' && !f.bedrock.region) miss.push('bedrock.region');
-    if (backend === 'bedrock' && !!f.bedrock.accessKeyId !== !!f.bedrock.secretAccessKey) miss.push(f.bedrock.accessKeyId ? 'bedrock.secretAccessKey' : 'bedrock.accessKeyId');
-    if (backend === 'vertex') {
-        if (!f.vertex.projectId) miss.push('vertex.projectId');
-        if (!f.vertex.region) miss.push('vertex.region');
-    }
-    if (backend === 'gateway') {
-        if (!isValidBaseUrl(f.gateway.baseUrl)) miss.push('gateway.baseUrl');
-        if (!f.gateway.authToken) miss.push('gateway.authToken');
-    }
-    if (backend === 'openrouter' && !f.openrouter.authToken) miss.push('openrouter.authToken');
     return miss;
-}
-
-/** https anywhere; plain http only to this machine (a local gateway). */
-export function isValidBaseUrl(url) {
-    try {
-        const u = new URL(String(url));
-        if (u.protocol === 'https:') return true;
-        return u.protocol === 'http:' && /^(localhost|127\.\d+\.\d+\.\d+|\[::1\])$/i.test(u.hostname);
-    } catch {
-        return false;
-    }
 }
 
 // Every env var that could send the CLI somewhere else. Scrubbed before a
 // backend adds its own, so a stray shell export can never flip billing or
-// hand one service's key to another.
+// send the chat to another provider.
 const PROVIDER_ENV = [
     'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL', 'ANTHROPIC_MODEL',
     'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CODE_USE_FOUNDRY', 'CLAUDE_CODE_USE_GATEWAY',
@@ -165,39 +106,6 @@ export function backendEnv(backend, f) {
             // chat would bill the subscription while the user expects per-token.
             unset.push('CLAUDE_CODE_OAUTH_TOKEN');
             set.ANTHROPIC_API_KEY = f.apikey.apiKey;
-            break;
-        case 'bedrock': {
-            const b = f.bedrock;
-            set.CLAUDE_CODE_USE_BEDROCK = '1';
-            set.AWS_REGION = b.region;
-            if (b.bearerToken) set.AWS_BEARER_TOKEN_BEDROCK = b.bearerToken;
-            if (b.profile) set.AWS_PROFILE = b.profile;
-            if (b.accessKeyId && b.secretAccessKey) {
-                set.AWS_ACCESS_KEY_ID = b.accessKeyId;
-                set.AWS_SECRET_ACCESS_KEY = b.secretAccessKey;
-                if (b.sessionToken) set.AWS_SESSION_TOKEN = b.sessionToken;
-                else unset.push('AWS_SESSION_TOKEN');
-            }
-            // The subscription login must not ride along.
-            unset.push('CLAUDE_CODE_OAUTH_TOKEN');
-            break;
-        }
-        case 'vertex':
-            set.CLAUDE_CODE_USE_VERTEX = '1';
-            set.CLOUD_ML_REGION = f.vertex.region;
-            set.ANTHROPIC_VERTEX_PROJECT_ID = f.vertex.projectId;
-            if (f.vertex.credentialsFile) set.GOOGLE_APPLICATION_CREDENTIALS = f.vertex.credentialsFile;
-            unset.push('CLAUDE_CODE_OAUTH_TOKEN');
-            break;
-        case 'gateway':
-        case 'openrouter':
-            set.ANTHROPIC_BASE_URL = backend === 'openrouter' ? OPENROUTER_BASE_URL : f.gateway.baseUrl.replace(/\/+$/, '');
-            set.ANTHROPIC_AUTH_TOKEN = backend === 'openrouter' ? f.openrouter.authToken : f.gateway.authToken;
-            // Empty on purpose (OpenRouter's Claude Code guide): a set x-api-key
-            // is treated as a direct-Anthropic credential.
-            set.ANTHROPIC_API_KEY = '';
-            // A gateway must never receive the claude.ai login token.
-            unset.push('CLAUDE_CODE_OAUTH_TOKEN');
             break;
         default:
             break;

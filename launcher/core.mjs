@@ -121,7 +121,7 @@ export function autostartOn(cfg, exists = existsSync, env = process.env) {
 }
 
 // 代理后端的短名字（首页一行放得下）
-const BACKEND_SHORT = { subscription: '订阅', apikey: 'API 密钥', bedrock: 'Bedrock', vertex: 'Vertex', gateway: '网关', openrouter: 'OpenRouter' };
+const BACKEND_SHORT = { subscription: '订阅', apikey: 'API 密钥' };
 export function backendInfo(backend, status) {
     const id = backend?.backend ?? status?.backend?.id ?? null;
     if (!id) return null;

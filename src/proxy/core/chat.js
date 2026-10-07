@@ -38,7 +38,6 @@ import { parseModelRequest, effortForModel, isExtendedContextKnownUnavailable, r
 import { buildSubprocessEnv, pickApiKeyFromAuthHeader } from './env.js';
 import { tapBaseUrl } from '../features/wire-tap.js';
 import { resolveBackendConfig } from '../features/backend-config.js';
-import { BACKEND_LABELS, mapModelId } from '../../shared/backends.js';
 import { buildSystemPrompt, extractSystemText } from './system-prompt.js';
 import { assembleEntries, splitHistoryForResume, currentToSdkUserMessage, singleMessageStream } from '../features/jsonl-entries.js';
 import { SDK_VERSION } from '../features/sdk-version.js';
@@ -83,24 +82,6 @@ const envFlag = (name, fallback) => {
     return !/^(0|false|no|off)$/i.test(v);
 };
 
-/** Model ids for the chosen backend (Bedrock / Vertex / OpenRouter name
- *  models differently). The first-party id stays in `baseId` for the cache
- *  layout, stats and the panel; `callModel` and the tier pins carry the
- *  backend's id. Null when the backend does not offer the model. */
-export function withBackendModels(modelInfo, backend) {
-    const b = backend?.backend ?? 'subscription';
-    if (b === 'subscription' || b === 'apikey' || b === 'gateway') return modelInfo;
-    const opts = { region: backend.fields?.bedrock?.region, prefix: backend.fields?.bedrock?.prefix };
-    const callModel = mapModelId(b, modelInfo.baseId, opts);
-    if (!callModel) return null;
-    const envPins = {};
-    for (const [k, v] of Object.entries(modelInfo.envPins)) {
-        const mapped = mapModelId(b, v, opts);
-        if (mapped) envPins[k] = mapped;
-    }
-    return { ...modelInfo, callModel, envPins };
-}
-
 /** How cache writes are billed (the proxy asks for 1h on the API key). */
 function env1hTtl(billedAs) {
     if (billedAs !== 'apikey') return '5m';
@@ -110,7 +91,7 @@ function env1hTtl(billedAs) {
 function buildSdkOptions({ modelInfo, oneMActive, settings, systemText, abortController, stream, env, resume, boundary }) {
     const options = {
         abortController,
-        model: oneMActive ? modelInfo.sdkModel : (modelInfo.callModel ?? modelInfo.baseId),
+        model: oneMActive ? modelInfo.sdkModel : modelInfo.baseId,
         systemPrompt: buildSystemPrompt(systemText, settings.identityMode, settings.systemSplitAt, boundary),
         includePartialMessages: stream,
         env,
@@ -569,10 +550,7 @@ async function completeChat(req, res, body, settings, conn) {
     // backend (the old API-billing opt-in), never forwarded to another service.
     const apiKey = backend.backend === 'subscription' ? pickApiKeyFromAuthHeader(req) : null;
     const billedAs = apiKey ? 'apikey' : backend.backend;
-    const modelInfo = withBackendModels(parseModelRequest(requestedModel), backend);
-    if (!modelInfo) {
-        return res.status(400).json({ error: { message: `${BACKEND_LABELS[backend.backend]} 上没有 ${requestedModel}，换个模型。`, type: 'invalid_request_error' } });
-    }
+    const modelInfo = parseModelRequest(requestedModel);
 
     let sdk;
     try {
