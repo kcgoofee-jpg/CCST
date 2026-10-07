@@ -379,6 +379,17 @@ export function explainCache(entry, prevEntry = null) {
                 ? `第 ${d.historyDiffAt + 1} 条回复和上一轮发的不同：切换了回复分支（swipe）或编辑了这条回复，从这里往后重写一次，属正常现象。`
                 : `聊天记录从第 ${d.historyDiffAt + 1} / ${d.historyLen} 条起和上一轮不同，之后全部重写。常见原因：预设正则按楼层改写旧消息（如「5 楼外只发摘要」）；「深度注入保持原位」打开时，深度注入每轮往后挪一格；或删改了消息。`);
         }
+        // The prompt changed but nothing was changed in SillyTavern (same preset, entries,
+        // post-processing and triggered world info): a script or regex of the preset / card
+        // rewrites it at send time (Izumi's 悬浮窗: Advice, 关键词替换). Only the user can turn that off.
+        const a = prevEntry?.st;
+        const b = entry.st;
+        const sameSetup = a && b && a.preset === b.preset && a.order === b.order && a.pp === b.pp
+            && JSON.stringify(a.wi ?? []) === JSON.stringify(b.wi ?? []);
+        const changed = d.systemChanged || (d.historyDiffAt !== null && d.historyDiffAt !== undefined && !d.replyChanged);
+        if (changed && sameSetup && !d.tailRewritten) {
+            reasons.unshift(`你没在酒馆里改任何设置，提示词却变了：多半是预设或角色卡里的脚本、正则或随机宏在发送时改写内容${b.mut?.length ? `（这一轮启用着：${b.mut.join('、')}）` : ''}。这类改动只能在预设或角色卡里关掉，CCST 没法替你缓存。`);
+        }
         if (d.tailRewritten) {
             reasons.push(`预设放在聊天记录后面的条目变了（开关或编辑）：之前 ${d.tailRewritten} 轮里带的旧版本已换成新版本，聊天记录重写这一次，下一轮恢复。`);
         }

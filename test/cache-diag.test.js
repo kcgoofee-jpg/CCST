@@ -281,3 +281,14 @@ test('a reply that differs from last turn is reported as a swipe / edit', () => 
     const e = { ok: true, model: 'm', inputTokens: 1, cacheReadTokens: 100, cacheCreationTokens: 900, cacheDiag: d };
     assert.match(explainCache(e, { ok: true, model: 'm' }).reasons.join(), /swipe/);
 });
+
+test('prompt changed with the SillyTavern setup unchanged: the explanation names the preset / card scripts', () => {
+    const st = { preset: 'Izumi 1002', pp: 'none', order: 'aa', wi: ['x'], mut: ['脚本「泉此方悬浮窗」'] };
+    const d = { firstTurn: false, systemChanged: true, systemDiffAt: 2161, systemDiffLabel: '<ban>', historyDiffAt: null, historyLen: 4 };
+    const e = { ok: true, model: 'm', inputTokens: 3, cacheReadTokens: 0, cacheCreationTokens: 44000, cacheDiag: d, st };
+    const r = explainCache(e, { ok: true, model: 'm', st: { ...st } }).reasons;
+    assert.match(r[0], /没在酒馆里改任何设置.*泉此方悬浮窗/);
+    // A preset switch is a setting change: no script blamed.
+    const r2 = explainCache(e, { ok: true, model: 'm', st: { ...st, preset: '衡' } }).reasons;
+    assert.ok(!r2.some((x) => /没在酒馆里改任何设置/.test(x)));
+});

@@ -33,6 +33,7 @@ function stFingerprint(fp) {
         pp: short(fp.pp, 24),
         order: short(fp.order, 16),
         wi: Array.isArray(fp.wi) ? fp.wi.filter((s) => typeof s === 'string').map((s) => s.slice(0, 40)).slice(0, 80) : [],
+        mut: Array.isArray(fp.mut) ? fp.mut.filter((s) => typeof s === 'string').map((s) => s.slice(0, 40)).slice(0, 12) : [],
     };
 }
 

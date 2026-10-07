@@ -134,6 +134,23 @@ function fnv(text) {
     return h.toString(16).padStart(8, '0');
 }
 
+/** What could rewrite the prompt on its own at send time: enabled 酒馆助手 scripts of the preset and
+ *  the card, and prompt-only regexes that act by depth (they rewrite older messages as they age).
+ *  Named in the cache explanation when the prompt changed but no setting did (Izumi's 悬浮窗). */
+export function promptMutators(ctx = SillyTavern.getContext()) {
+    const out = [];
+    const oai = ctx.chatCompletionSettings ?? {};
+    const char = ctx.characters?.[ctx.characterId]?.data?.extensions ?? {};
+    for (const s of [...(oai.extensions?.tavern_helper?.scripts ?? []), ...(char.tavern_helper?.scripts ?? [])]) {
+        if (s?.enabled && s?.name) out.push(`脚本「${String(s.name).slice(0, 24)}」`);
+    }
+    const deep = (v) => Number.isFinite(Number(v)) && v !== null && v !== '' && Number(v) >= 2;
+    for (const r of [...(oai.extensions?.regex_scripts ?? []), ...(char.regex_scripts ?? []), ...(ctx.extensionSettings?.regex ?? [])]) {
+        if (r && !r.disabled && r.promptOnly && (deep(r.minDepth) || deep(r.maxDepth))) out.push(`正则「${String(r.scriptName ?? '').slice(0, 24)}」`);
+    }
+    return [...new Set(out)].slice(0, 12);
+}
+
 export function stFingerprint(data, ctx = SillyTavern.getContext()) {
     const oai = ctx.chatCompletionSettings ?? {};
     const prompts = (oai.prompts ?? []).map((p) => [p.identifier, p.content, p.injection_position, p.injection_depth, p.role]);
@@ -142,6 +159,7 @@ export function stFingerprint(data, ctx = SillyTavern.getContext()) {
         pp: String(data?.custom_prompt_post_processing ?? '') || 'none',
         order: fnv(JSON.stringify([oai.prompt_order ?? [], prompts])),
         wi: activatedLore,
+        mut: promptMutators(ctx),
     };
 }
 
