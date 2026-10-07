@@ -13,6 +13,9 @@
 
 [安装](#安装5-分钟) · [使用指南](docs/使用指南.md) · [路线图](docs/路线图.md) · [更新记录](CHANGELOG.md) · [参与开发](CONTRIBUTING.md) · [安全](SECURITY.md)
 
+> [!IMPORTANT]
+> **本分支（main）进入维护模式**：CLI/SDK 路线定版 5.2.x，此后只收关键 bug 修复，不再加功能。下一代（Rust 直连反代 + 酒馆前端，彻底移除 CLI 子进程与版本漂移问题）在 [`dev`](https://github.com/kcgoofee-jpg/CCST/tree/dev) 分支开发。当前用户可继续使用，遇到缓存命中问题先看[缓存命中排查](docs/缓存命中排查.md)。
+
 <sub>非 Anthropic 官方产品，与 Anthropic 无关。Claude 是 Anthropic 的商标。</sub>
 
 <img src="docs/assets/panel-reason.png" width="200" alt="推理页">
