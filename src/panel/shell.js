@@ -6,8 +6,7 @@
 
 import { store } from './core/store.js';
 import { getSettings, saveSettingsDebounced, EFFORT_LABEL } from './core/settings.js';
-import { connectHelp, mismatchHelp, hostKind, formPrefill, connectOutcome, CODE_PLACEHOLDER } from './core/connect-help.js';
-import { submitConnect, revealGroup } from './core/connect-form.js';
+import { connectHelp, mismatchHelp, hostKind } from './core/connect-help.js';
 import { openExternal, copyText } from './core/external.js';
 import { IS_TAURI, APP_NAME, COARSE, cloudHosted, isOurEndpoint, stSideEndpoint } from './core/capabilities.js';
 import { libs } from './core/libs.js';
@@ -20,8 +19,7 @@ import { notify } from './core/notify.js';
 import { refreshAll, refreshStatus, refreshStats } from './core/live.js';
 import { buildReasonTab } from './tabs/reason.js';
 import { buildStatusTab } from './tabs/status.js';
-import { refreshMac } from './tabs/mac.js';
-import { buildSettingsTab, syncConnectionInputs } from './tabs/settings.js';
+import { buildSettingsTab } from './tabs/settings.js';
 import { buildOtherTab } from './tabs/other.js';
 import { TABS, resolveTab } from './core/tabs.js';
 import { buildGuideCard, renderGuide } from './guide.js';
@@ -164,8 +162,8 @@ const planOf = (cred) => SUBSCRIPTION_LABELS[cred?.subscriptionType] ?? cred?.su
  *  dot · model · where/billing · 5h quota. Clicking the bar opens 状态. */
 export function renderGlance() {
     const { nextEffort, glance, gen } = store.get();
-    const { connected, direct, model, where, billing } = connectionInfo();
-    const linked = glanceLinked({ connected, direct }, store.get().status.phase);
+    const { connected, model, where, billing } = connectionInfo();
+    const linked = glanceLinked({ connected }, store.get().status.phase);
     const settings = getSettings();
     const effort = effectiveEffort(settings);
     const parts = [];
@@ -191,8 +189,7 @@ export function renderGlance() {
             if (linked && where) bar.append(el('span', 'cm-bar-src', `${where} · ${billing}`));
             // One-off boost: the only effort worth a place in the bar, because it expires by itself.
             if (connected && nextEffort) bar.append(el('span', 'cm-bar-effort', `下一轮${EFFORT_LABEL[effort]}`));
-            // The 5h window is the subscription's: beside an API key or OpenRouter it says nothing.
-            if (q != null && !direct) {
+            if (q != null) {
                 const quota = el('span', 'cm-bar-quota', `5h ${q}%`);
                 if (q >= 70) quota.dataset.tone = q >= 90 ? 'error' : 'warn';
                 bar.append(quota);
@@ -209,11 +206,11 @@ export function renderGlance() {
 const STEPS = {
     login: [
         { text: '在 SillyTavern/plugins/CCST 文件夹里运行下面的命令，在弹出的浏览器里登录 Claude：', cmd: 'npm run login' },
-        '用一键安装包装的：打开「酒馆工具」，按 4 进「更多」，选「登录 Claude」。',
+        '用一键安装包装的：打开「酒馆工具」，进「更多」，选「登录 Claude」。',
     ],
     // TauriTavern / a phone / a remote page: the proxy is the standalone one on a computer, never in a SillyTavern plugins folder.
     loginStandalone: [
-        '在运行代理的那台电脑上，打开「酒馆工具」，按 4 进「更多」，选「登录 Claude」（只需一次）。',
+        '在运行代理的那台电脑上，打开「酒馆工具」，进「更多」，选「登录 Claude」（只需一次）。',
         { text: '没有「酒馆工具」：在 CCST 文件夹里运行下面的命令，在弹出的浏览器里登录 Claude：', cmd: 'npm run login' },
     ],
 };
@@ -224,8 +221,6 @@ function hostNow() {
     return hostKind({ tauri: IS_TAURI, elsewhere: COARSE || remote });
 }
 
-let formBusy = false;     // 「连接」 is saving and re-checking
-let formShown = false;    // the card's address / password form was visible at the last render
 let stepsOpen = false;   // the steps under the card's button
 let stepsFor = '';       // which situation they belong to (a new situation closes them)
 let prevSetup = false;   // was the panel in the first-run state at the last render
@@ -291,57 +286,6 @@ function downloadItem(d) {
     return box;
 }
 
-/** 去「其他 → 手机连接」：切到 其他、把组展开、光标放进地址框（所有「去填…」的跳转都走这里）。 */
-function openPhoneGroup() {
-    revealGroup({ showTab, tab: 'other', groupId: 'claude_max_lan' });
-}
-
-/** The card's inline form: one box for the 手机连接码, 「连接」, and the result line. The elements persist across redraws (see renderConnect). */
-function buildConnectForm() {
-    const form = el('form', 'cm-connect-form');
-    form.id = 'claude_max_connect_form';
-    form.hidden = true;
-    form.noValidate = true;
-    const code = el('input', 'text_pole');
-    code.type = 'text';
-    code.id = 'claude_max_cf_code';
-    code.autocomplete = 'off';
-    code.autocapitalize = 'off';
-    code.spellcheck = false;
-    code.setAttribute('aria-label', '手机连接码');
-    const go = el('button', 'menu_button cm-btn cm-primary', '连接');
-    go.type = 'submit';
-    go.id = 'claude_max_cf_go';
-    const result = el('small', 'cm-cf-result');
-    result.id = 'claude_max_cf_result';
-    result.setAttribute('role', 'status');
-    result.hidden = true;
-    form.append(code, go, result);
-    form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        if (formBusy) return;
-        formBusy = true;
-        go.disabled = true;
-        result.hidden = false;
-        result.dataset.kind = 'busy';
-        result.textContent = '正在连接…';
-        try {
-            const out = await submitConnect({ code: code.value }, {
-                settings: getSettings(), save: saveSettingsDebounced, sync: syncConnectionInputs,
-                refresh: refreshStatus, getStatus: () => store.get().status, connect,
-            });
-            result.dataset.kind = out.kind;
-            result.textContent = out.text;
-            result.hidden = false;
-        } finally {
-            formBusy = false;
-            go.disabled = false;
-            renderConnect();
-        }
-    });
-    return form;
-}
-
 /** 版本不一致：情况 → 影响 → 编号步骤（内容见 connect-help.js 的 mismatchHelp）。 */
 function mismatchCard(base, status) {
     const help = mismatchHelp({ side: status.mismatchSide, proxyVersion: status.version, panelVersion: status.panelVersion, runtime: status.runtime, tauri: IS_TAURI, host: hostNow() });
@@ -351,30 +295,22 @@ function mismatchCard(base, status) {
 
 /** What the card should say right now: null = no card. */
 function describeCard() {
-    const { connected, direct, model } = connectionInfo();
+    const { connected, model } = connectionInfo();
     const { proxyState, status } = store.get();
-    const online = proxyState === 'online';
-    const setup = !connected && !direct;
+    const setup = !connected;
     const base = { setup };
-    // While 「连接」 is re-checking, the card keeps showing the form (not 「正在检测」), so the typed text stays put.
-    const phase = formBusy && status.phase === 'pending' ? 'offline' : status.phase;
+    const phase = status.phase;
 
     if (phase === 'denied') {
         const title = status.code === 401 ? '访问密码不对' : '代理拒绝连接';
-        // Phone / TauriTavern: fix it right in the card. Desktop: the password lives in 其他 → 手机连接.
-        if (hostNow() !== 'desktop') {
-            return { ...base, tone: 'error', dot: 'offline', key: 'denied-form', title, sub: '重新粘贴电脑上最新的手机连接码', form: { value: formPrefill(getSettings().endpoint, getSettings().accessKey, 'tauri'), placeholder: CODE_PLACEHOLDER } };
-        }
-        return { ...base, tone: 'error', dot: 'offline', key: 'denied', title, sub: status.message,
-            action: { label: '去改连接码', run: openPhoneGroup } };
+        return { ...base, tone: 'error', dot: 'offline', key: 'denied', title, sub: status.message };
     }
     if (phase === 'offline') {
-        if (!setup && direct) return null; // direct to Claude without the proxy: nothing is wrong
-        const help = connectHelp({ endpoint: getSettings().endpoint, accessKey: getSettings().accessKey, host: hostNow() });
+        const help = connectHelp({ host: hostNow() });
         return {
             ...base, tone: setup ? 'info' : 'error', dot: 'offline', key: `start-${help.key}`,
             title: help.title,
-            sub: help.sub, steps: help.steps, showSteps: true, downloads: help.downloads, hint: help.hint, form: help.form,
+            sub: help.sub, steps: help.steps, showSteps: true, downloads: help.downloads, hint: help.hint,
         };
     }
     if (status.phase === 'nologin') {
@@ -394,9 +330,8 @@ function describeCard() {
             return mismatch ? mismatchCard(base, status) : null;
         }
         // Proxy is fine, SillyTavern isn't on it (yet).
-        const sub = direct ? '连上代理才有缓存排布、防丢回复和额度；现在酒馆直连 Claude，本地功能照常。'
-            : `${planOf(status.cred)} 订阅 · 代理 v${status.version}。点「一键连接」让${APP_NAME}改用它：会选好模型，并保存成「CCST」连接配置。`;
-        return { ...base, tone: 'info', dot: mismatch ? 'warning' : 'online', key: 'connect', title: direct ? '代理在线，可以连上它' : `代理已就绪，${APP_NAME}还没接上`,
+        const sub = `${planOf(status.cred)} 订阅 · 代理 v${status.version}。点「一键连接」让${APP_NAME}改用它：会选好模型，并保存成「CCST」连接配置。`;
+        return { ...base, tone: 'info', dot: mismatch ? 'warning' : 'online', key: 'connect', title: `代理已就绪，${APP_NAME}还没接上`,
             sub: mismatch ? `${sub}\n${mismatch}` : sub, action: { label: '一键连接', icon: 'fa-plug', primary: true, run: () => connect(getSettings()) } };
     }
     return null;
@@ -438,17 +373,6 @@ export function renderConnect() {
         const dl = card.querySelector('#claude_max_downloads');
         dl.replaceChildren(...(view.downloads ?? []).map(downloadItem));
         dl.hidden = !dl.childElementCount;
-        const form = card.querySelector('#claude_max_connect_form');
-        form.hidden = !view.form;
-        if (view.form && !formShown) {
-            // First time the form appears: start from the saved connection (empty on a phone when it is 127.0.0.1).
-            const box = card.querySelector('#claude_max_cf_code');
-            box.value = view.form.value ?? '';
-            box.placeholder = view.form.placeholder ?? '';
-            const res = card.querySelector('#claude_max_cf_result');
-            if (!formBusy) { res.hidden = true; res.textContent = ''; }
-        }
-        formShown = !!view.form;
         const dlHint = card.querySelector('#claude_max_downloads_hint');
         dlHint.textContent = view.hint ?? '';
         dlHint.hidden = dl.hidden || !view.hint;
@@ -463,19 +387,16 @@ export function renderConnect() {
                 view.action.run();
             };
         }
-    } else formShown = false;
+    }
     const { proxyState } = store.get();
-    const { direct } = connectionInfo();
-    const up = proxyState === 'online' || proxyState === 'warning';
-    // Direct to Claude with the proxy not running is not a fault: a hollow dot.
-    setDot(direct && !connected && !up ? 'direct' : view?.dot ?? (proxyState ?? 'pending'));
+    setDot(view?.dot ?? (proxyState ?? 'pending'));
     // The bar is for a working connection; during first-run the card is the only thing to look at.
     const bar = document.getElementById('claude_max_bar');
     if (bar) bar.hidden = !!view?.setup;
     // Cloud SillyTavern + loopback address + proxy unreachable: say why instead of "start the proxy".
     const cloud = document.getElementById('claude_max_cloud');
     if (cloud) {
-        cloud.hidden = direct || proxyState !== 'offline' || !cloudHosted(libs.hostCheck, { hostname: location.hostname, endpoint: getSettings().endpoint, tauri: IS_TAURI });
+        cloud.hidden = proxyState !== 'offline' || !cloudHosted(libs.hostCheck, { hostname: location.hostname, endpoint: getSettings().endpoint, tauri: IS_TAURI });
     }
     renderGlance();
 }
@@ -512,12 +433,12 @@ function buildStatusBar(showTab) {
     action.type = 'button';
     action.id = 'claude_max_status_action';
     row.append(action);
-    card.append(head, sub, buildConnectForm(), steps, downloads, dlHint, row);
+    card.append(head, sub, steps, downloads, dlHint, row);
 
     const cloud = note('info', '酒馆在云端，连不到你电脑上的代理');
     cloud.id = 'claude_max_cloud';
     cloud.hidden = true;
-    cloud.append(el('small', 'cm-hint', '云端酒馆里的 127.0.0.1 是服务器自己。可以：改用 API 密钥直连；在服务器上运行代理；或用内网穿透暴露代理，并设访问密码。'));
+    cloud.append(el('small', 'cm-hint', '云端酒馆里的 127.0.0.1 是服务器自己，CCST 代理要和酒馆在同一台机器上运行。'));
 
     block.append(bar, buildGuideCard(), card, cloud);
     return block;
@@ -562,7 +483,6 @@ export function addExtensionSettings(settings) {
     toggle.addEventListener('click', () => setTimeout(() => {
         if (drawerContent.offsetParent === null) return;
         refreshAll();
-        refreshMac(); // decides whether 其他 shows the Mac section
     }, 50));
 
     const panes = Object.fromEntries(TABS.map(([k]) => [k, el('div', 'cm-pane')]));
@@ -594,7 +514,6 @@ export function addExtensionSettings(settings) {
             showTab(k);
             // Stats go stale while the panel sits open: re-read on entering the tab
             if (k === 'status') refreshStats();
-            if (k === 'other') refreshMac();
         });
         bar.append(b);
     }

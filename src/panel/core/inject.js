@@ -1,7 +1,7 @@
 // ──────────────────────────────────────────────
 // Per-request injection (CHAT_COMPLETION_SETTINGS_READY): the Claude-native settings go out through
 // `custom_include_body`, only when the active connection points at this proxy. Also the pre-send
-// checks (preflight, prompt post-processing) for requests that go to Claude directly.
+// checks (preflight, prompt post-processing) for those requests.
 // ──────────────────────────────────────────────
 
 import { getSettings } from './settings.js';
@@ -138,7 +138,6 @@ export function buildIncludeBodyYaml(settings, quiet = false, slot = null, model
     lines.push(`  identity_mode: ${settings.identityMode}`);
     lines.push(`  use_resume: ${settings.useResume}`);
     lines.push(`  system_placement: ${settings.inlineSystem ? 'inline' : 'hoist'}`);
-    if (settings.tailBlockFront) lines.push('  tail_block: front');
     lines.push(`  lore_tail: ${settings.loreTail}`);
     lines.push(`  fold_tail: ${settings.foldTail}`);
     if (settings.debugDump) lines.push('  debug_dump: true');
@@ -155,12 +154,7 @@ export function onSettingsReady(data) {
         const settings = getSettings();
         if (!settings.enabled) return;
         if (!data) return;
-        // Direct to Claude (no proxy): only the local pre-send check applies.
-        const { ours, direct } = classifyRequest(data, settings, libs.sources);
-        if (direct) {
-            preflightCheck(data);
-            return;
-        }
+        const { ours } = classifyRequest(data, settings);
         if (!ours) return;
 
         const existing = typeof data.custom_include_body === 'string' ? data.custom_include_body : '';

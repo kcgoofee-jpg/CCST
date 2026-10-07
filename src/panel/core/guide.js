@@ -1,18 +1,15 @@
 // ──────────────────────────────────────────────
-// First-run guide (选来源 → 连接 → 完成): the state logic and the wording, pure (no DOM, no ST), so the
+// First-run guide (开始 → 连接 → 完成): the state logic and the wording, pure (no DOM, no ST), so the
 // tests can run it. The drawing is in ../guide.js.
 //
 // Two settings keys drive it:
 //   onboarded    true once the guide is done, skipped, or the user was already connected
-//   guideSource  '' = not started; 'choose' = started, no source picked yet; else a SOURCES id
+//   guideSource  '' = not started; 'choose' = started, not past the welcome yet; 'proxy' = connecting
 // ──────────────────────────────────────────────
 
-/** Who each source is for. `proxy` covers 订阅 / API 密钥 / 其他后端: the proxy's own backend form picks. */
+/** The one way in: the local proxy (订阅 or API 密钥: the proxy's own backend form picks). */
 export const SOURCES = [
-    { id: 'proxy', label: '本机代理', who: '有 Claude 订阅（Pro / Max），或想用 API 密钥 / 其他后端，想要缓存排布（预计更省额度）和防丢回复。' },
-    { id: 'claude', label: 'Claude 官方', who: '手上有 Anthropic API 密钥，不想跑代理。' },
-    { id: 'openrouter', label: 'OpenRouter', who: '用 OpenRouter 的额度，一个密钥换着用各家模型。' },
-    { id: 'relay', label: '其他中转', who: '用第三方中转站或聚合站（Electron Hub、NanoGPT、自定义地址……）。' },
+    { id: 'proxy', label: '本机代理', who: '有 Claude 订阅（Pro / Max）或 Anthropic API 密钥，想要缓存排布（预计更省额度）和防丢回复。' },
 ];
 
 export const isSourceId = (id) => SOURCES.some((s) => s.id === id);
@@ -25,16 +22,13 @@ export function chosenSource(guideSource) {
 /** Is SillyTavern's current connection the one the picked source means? */
 export function sourceLinked(choice, conn) {
     if (!choice || !conn) return false;
-    if (choice === 'proxy') return !!conn.connected;
-    if (!conn.direct) return false;
-    if (choice === 'relay') return conn.kind !== 'claude' && conn.kind !== 'openrouter';
-    return conn.kind === choice;
+    return choice === 'proxy' && !!conn.connected;
 }
 
 /**
  * SillyTavern's settings pointing at the proxy is only a claim; the proxy answering is the fact.
  * The connection as the guide and the status bar should see it: `connected` (the proxy) counts only
- * while the last status check says the proxy answered ('online' / 'nologin'). Direct sources pass through.
+ * while the last status check says the proxy answered ('online' / 'nologin').
  */
 export function gateConnection(conn, phase) {
     if (!conn?.connected) return conn;
@@ -45,9 +39,9 @@ export function gateConnection(conn, phase) {
 export const proxyUnknown = (phase) => phase === 'idle' || phase === 'pending' || phase == null;
 
 /** Status bar: linked to something that works. A proxy connection whose proxy is offline is not linked. */
-export const glanceLinked = (conn, phase) => !!conn?.direct || (!!conn?.connected && phase !== 'offline' && phase !== 'denied');
+export const glanceLinked = (conn, phase) => !!conn?.connected && phase !== 'offline' && phase !== 'denied';
 
-const linked = (conn) => !!(conn?.connected || conn?.direct);
+const linked = (conn) => !!conn?.connected;
 
 /**
  * Should a user who is already connected just be marked done (no guide)? Only when they never started
@@ -61,7 +55,7 @@ export function shouldAutoOnboard({ onboarded, guideSource }, conn) {
  * Which step to show: 0 = no guide; 1 选来源; 2 连接; 3 完成. Facts only, no guessing from setting values:
  *   settingsExisted  the extension's settings were already saved when the panel booted (any install
  *                    before this one): a returning user, never shown the guide on its own
- *   everConnected    SillyTavern was on a Claude connection at least once: a later disconnect (proxy
+ *   everConnected    SillyTavern was on the proxy at least once: a later disconnect (proxy
  *                    down, Mac asleep) shows the connect card, never the guide
  * Only a brand-new install begins at 1. 「其他 → 重新引导」 sets guideSource, which shows it for anyone.
  */
@@ -73,51 +67,15 @@ export function guideStep({ onboarded, guideSource, settingsExisted = false, eve
     return sourceLinked(choice, conn) ? 3 : 2;
 }
 
-export const STEP_TITLES = { 1: '选来源', 2: '连接', 3: '完成' };
+export const STEP_TITLES = { 1: '开始', 2: '连接', 3: '完成' };
 
-/** Step 2 for the direct sources: where in SillyTavern's own API panel the key goes (we never touch keys). */
-export const KEY_STEPS = {
-    claude: [
-        '点酒馆顶部的插头图标（API 连接），「API」选 聊天补全（Chat Completion）。',
-        '「聊天补全来源」选 Claude。',
-        '把 API 密钥粘到「Claude API 密钥」框，点 连接。',
-        '在下面的 Claude 模型里选一个。',
-    ],
-    openrouter: [
-        '点酒馆顶部的插头图标（API 连接），「API」选 聊天补全（Chat Completion）。',
-        '「聊天补全来源」选 OpenRouter。',
-        '把 OpenRouter 密钥粘到「OpenRouter API 密钥」框（或点它旁边的登录），点 连接。',
-        '模型选 anthropic/claude-… 开头的一个。',
-    ],
-    relay: [
-        '点酒馆顶部的插头图标（API 连接），「API」选 聊天补全（Chat Completion）。',
-        '「聊天补全来源」选你的中转：Electron Hub / NanoGPT 等直接选；其他选 自定义（兼容 OpenAI）。',
-        '自定义要填中转的地址和密钥，模型 ID 填带 claude 的名字。密钥都粘在酒馆自己的框里，点 连接。',
-    ],
-};
-
-/** Step 3: what CCST does for each source. */
+/** Step 3: what CCST does. */
 export const SUMMARY = {
     proxy: {
         works: ['缓存排布（预计长提示词更容易命中，视预设和扩展而定）', '防丢回复（断线后补回）', '额度和用量统计', '模型与思考深度、发送前检查、最新回复检查（拒绝 / 截断）'],
         gaps: ['不支持温度、Top-P 等采样参数'],
     },
-    claude: {
-        works: ['模型切换、按预设调整模型', '发送前检查、最新回复检查（拒绝 / 截断）'],
-        gaps: ['没有防丢回复、额度和用量统计（要走代理）', '缓存靠酒馆自带设置，见下面的建议'],
-    },
-    openrouter: {
-        works: ['模型切换、按预设调整模型', '发送前检查、最新回复检查（拒绝 / 截断）'],
-        gaps: ['没有防丢回复、额度和用量统计（要走代理）', '缓存靠酒馆自带设置，见下面的建议'],
-    },
-    relay: {
-        works: ['发送前检查、最新回复检查（拒绝 / 截断）'],
-        gaps: ['没有防丢回复、额度和用量统计（要走代理）', '缓存由中转自己决定，酒馆多半没有设置'],
-    },
 };
-
-/** Direct sources get the recommended-cache-settings card on 第 3 步. */
-export const showsCacheCard = (choice) => choice === 'claude' || choice === 'openrouter' || choice === 'relay';
 
 /** Settings after each user action (the caller assigns the keys back). */
 export const startGuide = () => ({ onboarded: false, guideSource: 'choose' });

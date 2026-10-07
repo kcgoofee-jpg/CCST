@@ -38,7 +38,6 @@ import { parseModelRequest, effortForModel, isExtendedContextKnownUnavailable, r
 import { buildSubprocessEnv, pickApiKeyFromAuthHeader } from './env.js';
 import { tapBaseUrl } from '../features/wire-tap.js';
 import { resolveBackendConfig } from '../features/backend-config.js';
-import { BACKEND_LABELS, mapModelId } from '../../shared/backends.js';
 import { buildSystemPrompt, extractSystemText } from './system-prompt.js';
 import { assembleEntries, splitHistoryForResume, currentToSdkUserMessage, singleMessageStream } from '../features/jsonl-entries.js';
 import { SDK_VERSION } from '../features/sdk-version.js';
@@ -50,7 +49,6 @@ import { isExpiredTokenError, isRateLimitError, isExtraUsageRequiredError, isSta
 import { explainError, formatErrorForUser } from '../features/errors-zh.js';
 import { recordRequest, promptShape } from '../features/usage-stats.js';
 import { inlineLateSystemMessages } from '../features/system-placement.js';
-import { moveTailBlockToFront } from '../features/tail-block.js';
 import { diagnoseCache, describeDiag } from '../features/cache-diag.js';
 import { extractVolatileBlocks, foldTrailingInjections, injectBlocks, injectedTextFor, loreTarget, newLoreOnly, noteTail, rememberInjected, rewriteInjected } from '../features/lore-tail.js';
 import { dumpEntries, dumpRequest, noteDebugSetting } from '../features/debug-dump.js';
@@ -84,24 +82,6 @@ const envFlag = (name, fallback) => {
     return !/^(0|false|no|off)$/i.test(v);
 };
 
-/** Model ids for the chosen backend (Bedrock / Vertex / OpenRouter name
- *  models differently). The first-party id stays in `baseId` for the cache
- *  layout, stats and the panel; `callModel` and the tier pins carry the
- *  backend's id. Null when the backend does not offer the model. */
-export function withBackendModels(modelInfo, backend) {
-    const b = backend?.backend ?? 'subscription';
-    if (b === 'subscription' || b === 'apikey' || b === 'gateway') return modelInfo;
-    const opts = { region: backend.fields?.bedrock?.region, prefix: backend.fields?.bedrock?.prefix };
-    const callModel = mapModelId(b, modelInfo.baseId, opts);
-    if (!callModel) return null;
-    const envPins = {};
-    for (const [k, v] of Object.entries(modelInfo.envPins)) {
-        const mapped = mapModelId(b, v, opts);
-        if (mapped) envPins[k] = mapped;
-    }
-    return { ...modelInfo, callModel, envPins };
-}
-
 /** How cache writes are billed (the proxy asks for 1h on the API key). */
 function env1hTtl(billedAs) {
     if (billedAs !== 'apikey') return '5m';
@@ -111,7 +91,7 @@ function env1hTtl(billedAs) {
 function buildSdkOptions({ modelInfo, oneMActive, settings, systemText, abortController, stream, env, resume, boundary }) {
     const options = {
         abortController,
-        model: oneMActive ? modelInfo.sdkModel : (modelInfo.callModel ?? modelInfo.baseId),
+        model: oneMActive ? modelInfo.sdkModel : modelInfo.baseId,
         systemPrompt: buildSystemPrompt(systemText, settings.identityMode, settings.systemSplitAt, boundary),
         includePartialMessages: stream,
         env,
@@ -539,7 +519,7 @@ export function watchClient(res, { keep, slot }) {
 
 export async function handleChatCompletions(req, res) {
     const body = req.body || {};
-    const messages = body.messages;
+    let messages = body.messages;
 
     if (!Array.isArray(messages) || messages.length === 0 || !body.model
         || messages.some((m) => !m || typeof m !== 'object' || Array.isArray(m))) {
@@ -564,24 +544,13 @@ async function completeChat(req, res, body, settings, conn) {
     const wantStream = body.stream === true;
     // The debug dumps live only while the switch is on (debug-dump.js).
     if (body.claude_subscription && typeof body.claude_subscription === 'object') noteDebugSetting(settings.debugDump);
-    // Background calls leave the per-chat memory alone (see below).
-    if (settings.tailBlock === 'front' && !settings.auxiliary) {
-        const { messages: reordered, moved } = moveTailBlockToFront(messages);
-        if (moved) {
-            messages = reordered;
-            console.log(`${PLUGIN_TAG} 预设后置条目提前：${moved} 条移到对话最前（每轮相同的后置块）`);
-        }
-    }
     // Resolved once per request: a switch in the panel applies from the next one.
     const backend = resolveBackendConfig();
     // A Bearer sk-ant key is an Anthropic key: only used on the subscription
     // backend (the old API-billing opt-in), never forwarded to another service.
     const apiKey = backend.backend === 'subscription' ? pickApiKeyFromAuthHeader(req) : null;
     const billedAs = apiKey ? 'apikey' : backend.backend;
-    const modelInfo = withBackendModels(parseModelRequest(requestedModel), backend);
-    if (!modelInfo) {
-        return res.status(400).json({ error: { message: `${BACKEND_LABELS[backend.backend]} 上没有 ${requestedModel}，换个模型。`, type: 'invalid_request_error' } });
-    }
+    const modelInfo = parseModelRequest(requestedModel);
 
     let sdk;
     try {
@@ -597,7 +566,7 @@ async function completeChat(req, res, body, settings, conn) {
     let cacheDiag = null;
     // Background calls (another extension's tag writer, a summary) are not
     // turns of the conversation: they leave the per-chat state alone — cache
-    // memory, lore-tail learning, the tail-block comparison above and the
+    // memory, lore-tail learning and the
     // turn captures / context pin (buildQueryConfig). They may still READ
     // captured turns, which only helps their prompt match the chat's cache.
     if (!settings.auxiliary) try {

@@ -160,11 +160,7 @@ case "${1:-status}" in
     login) cmd_login ;;
     start) cmd_start ;;
     stop) cmd_stop ;;
-    restart)
-        # 代理在写回复时不重启（会把回复掐断）；和菜单的 core.mjs 同一条规则
-        busy=$(curl -s --max-time 3 "http://127.0.0.1:$PORT/v1/control/status" 2>/dev/null | sed -n 's/.*"busy":\([0-9][0-9]*\).*/\1/p')
-        if [[ -n "$busy" ]] && (( busy > 0 )); then warn "代理正在写 $busy 条回复，现在重启会把它掐断。等写完再来。"; exit 0; fi
-        cmd_stop; cmd_start ;;
+    restart) cmd_stop; cmd_start ;;
     status) cmd_status ;;
     update) cmd_update ;;
     logs) tail -n 50 "$LOG" ;;

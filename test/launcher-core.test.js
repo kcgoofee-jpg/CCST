@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { join } from 'node:path';
 
 import {
-    classify, confirmStarted, diagnoseText, loadConfig, parseConfig, parseLsofCwd, parseNetstat, parseTsv, proxyIdentities, readState, recentLog,
-    reportedProxyPid, restartRefusal, services, startService, stopAll, stopService,
+    classify, confirmStarted, diagnoseText, loadConfig, parseConfig, parseLsofCwd, parseNetstat, proxyIdentities, readState, recentLog,
+    reportedProxyPid, services, startService, stopAll, stopService,
 } from '../launcher/core.mjs';
 import { nodeAction } from '../launcher/menu.mjs';
 
@@ -53,9 +53,8 @@ test('parseNetstat keeps only LISTENING rows on that exact port', () => {
     assert.deepEqual(parseNetstat(out, 18901), [99]);
 });
 
-test('parseLsofCwd and parseTsv', () => {
+test('parseLsofCwd', () => {
     assert.deepEqual(parseLsofCwd('p12\nfcwd\nn/a/b\np13\nfcwd\nn/c\n'), { 12: '/a/b', 13: '/c' });
-    assert.deepEqual(parseTsv('a\t1\nb\t\nbad\n'), { a: '1', b: '' });
 });
 
 function fakeProc({ listeners, cwds = {}, names = {}, dies = 'TERM' }) {
@@ -144,12 +143,6 @@ test('stopService stops the proxy inside SillyTavern only after the user agrees'
     assert.equal(r.warn, 1);
     assert.equal(await stopService(svc, quiet(), proc, { inTavernPid: 50, ask, wait: async () => {} }), true);
     assert.deepEqual(proc.killed, [[50, 'SIGTERM']]);
-});
-
-test('restart is refused while the proxy is writing a reply', () => {
-    assert.equal(restartRefusal({ busy: 0 }), null);
-    assert.equal(restartRefusal(null), null); // proxy down: nothing to interrupt
-    assert.match(restartRefusal({ busy: 2 }), /2 条回复/);
 });
 
 test('log diagnosis only looks after the last launch / last good reply and ignores quota 429s', () => {
@@ -249,55 +242,30 @@ test('startService 只在 /status 确认是自己启动的进程后才报「已�
     assert.equal(deadRep.fail, 1);
 });
 
-test('readState on Windows: proxy/HTTP fields filled, Mac-only probes n/a', async () => {
+test('readState on Windows: proxy/HTTP fields filled', async () => {
     const cfg = loadConfig({ root: ROOT, env: {}, os: 'win', termux: false, exists: () => false, read: () => { throw new Error(); }, home: 'C:\\Users\\u' });
     cfg.stDir = 'D:\\SillyTavern';
     const s = await readState({
         cfg,
-        fetch: jsonFetch({ '/status': { ok: true, version: '9.9.9', credential: { present: true, subscriptionType: 'pro' } }, '/v1/control/status': { busy: 1 },
-            '/v1/backend': { ok: true, backend: 'openrouter', label: 'OpenRouter', missing: [] } }),
+        fetch: jsonFetch({ '/status': { ok: true, version: '9.9.9', credential: { present: true, subscriptionType: 'pro' } },
+            '/v1/backend': { ok: true, backend: 'apikey', label: 'Anthropic API 密钥', missing: [] } }),
         exists: () => false,
-        nonEmpty: () => false,
         portOpen: async (p) => p === 8000,
-        osStatus: () => ({}),
     });
     assert.equal(s.proxy, true);
     assert.equal(s.proxyVersion, '9.9.9');
     assert.equal(s.plan, 'Pro');
-    assert.equal(s.busy, 1);
     assert.equal(s.stManaged, true);
     assert.equal(s.stRunning, true);
-    assert.equal(s.phone, null);
-    assert.equal(s.phoneTT, null);
-    assert.deepEqual(s.backend, { id: 'openrouter', label: 'OpenRouter', missing: [] });
-    assert.equal(s.hasTT, false);
-    assert.equal(s.lastSync, null);
-    assert.equal(s.phoneMode, false);
+    assert.deepEqual(s.backend, { id: 'apikey', label: 'API 密钥', missing: [] });
 });
 
-test('readState on macOS: proxy down, phone and sync from the OS helper and files', async () => {
-    const cfg = loadConfig({ root: ROOT, env: {}, os: 'mac', termux: false, exists: () => false, read: () => { throw new Error(); }, home: '/Users/u' });
-    const when = new Date(2026, 8, 26, 7, 5);
-    const s = await readState({
-        cfg,
-        fetch: jsonFetch({}),
-        exists: (p) => p === '/Applications/TauriTavern.app',
-        nonEmpty: (f) => f.endsWith('phone-sync-state-tt.local.json') || f === cfg.lanKeyFile,
-        mtime: () => when,
-        portOpen: async () => false,
-        osStatus: () => ({ watchdog: '1', phone: 'wifi', ip: '10.0.0.2', lid_on: '0', adb: '/adb', serial: '10.0.0.3:5555' }),
-        phoneProbe: (adb, serial) => (adb === '/adb' && serial === '10.0.0.3:5555' ? { ttRunning: true, guardVersion: '1.9' } : null),
-    });
-    assert.deepEqual(s.phoneTT, { ttRunning: true, guardVersion: '1.9' });
-    assert.equal(+s.lastSyncAt, +when);
+test('readState: proxy down', async () => {
+    const cfg = loadConfig({ root: ROOT, env: {}, os: 'linux', termux: false, exists: () => false, read: () => { throw new Error(); }, home: '/home/u' });
+    const s = await readState({ cfg, fetch: jsonFetch({}), exists: () => false, portOpen: async () => false });
     assert.equal(s.proxy, false);
     assert.equal(s.loggedIn, null);
-    assert.equal(s.hubLabel, 'Mac TT'); // no SillyTavern: the hub is the Mac TT
-    assert.equal(s.lastSync, '09-26 07:05');
-    assert.equal(s.phoneMode, true);
-    assert.equal(s.watchdog, true);
-    assert.equal(s.phone, 'wifi');
-    assert.equal(s.hasTT, true);
+    assert.equal(s.hasST, false);
 });
 
 test('services: SillyTavern first when there is one; PID files shared with claude-max.ps1', () => {
@@ -306,24 +274,10 @@ test('services: SillyTavern first when there is one; PID files shared with claud
     assert.deepEqual(services({ ...cfg, stDir: '' }).map((s) => s.key), ['proxy']);
 });
 
-test('action routing: check is Node everywhere; start/stop/restart Node except macOS and Termux', () => {
+test('action routing: check is Node everywhere; start/stop/restart Node except Termux', () => {
     for (const os of ['mac', 'win', 'linux']) assert.ok(nodeAction('check', os, false));
     assert.ok(nodeAction('check', 'linux', true));
-    assert.equal(nodeAction('restart', 'mac', false), null);
     assert.ok(nodeAction('restart', 'win', false));
     assert.equal(nodeAction('start', 'linux', true), null);
-    assert.equal(nodeAction('phone-sync', 'win', false), null);
-    assert.ok(nodeAction('phone-sync', 'mac', false));
-    assert.ok(nodeAction('guard-restore', 'mac', false));
-    assert.equal(nodeAction('guard-pull', 'linux', true), null);
-});
-
-test('readState: the phone-mode access key is read from the key file only in phone mode (kept in memory for the menu)', async () => {
-    const cfg = loadConfig({ root: ROOT, env: {}, os: 'mac', termux: false, exists: () => false, read: () => { throw new Error(); }, home: '/Users/u' });
-    const mk = (nonEmpty) => readState({
-        cfg, fetch: jsonFetch({}), exists: () => false, nonEmpty, mtime: () => null, portOpen: async () => false,
-        osStatus: () => ({ ip: '10.0.0.2' }), readKey: (f) => (f === cfg.lanKeyFile ? ' Kx9mPq2\n' : ''),
-    });
-    assert.equal((await mk((f) => f === cfg.lanKeyFile)).lanKey, 'Kx9mPq2');
-    assert.equal((await mk(() => false)).lanKey, '');
+    assert.equal(nodeAction('login', 'win', false), null);
 });

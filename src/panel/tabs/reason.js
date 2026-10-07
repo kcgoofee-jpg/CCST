@@ -118,11 +118,6 @@ export function buildReasonTab(pane, settings, save) {
         pane.append(g.root);
     }
     const think = group('思考', '想多久再回答：越深越连贯，也越慢、越耗额度。');
-    if (connectionInfo().direct) {
-        const n = note('info');
-        n.append(el('small', 'cm-hint', '直连 Claude 时这里不生效，请用酒馆「AI 回复配置」的「推理强度」。'));
-        think.body.append(n);
-    }
     const depth = segmented({
         label: '思考深度', hideLabel: true,
         options: [...EFFORT_OPTIONS, { value: 'off', label: '不思考', hint: '回得最快。Fable、Opus 5.5、Sonnet 5.5 总会思考，对它们无效。' }],

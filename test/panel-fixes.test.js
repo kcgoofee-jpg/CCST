@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { makeStatsAfterReply } from '../src/panel/core/stats-after-reply.js';
-import { extraModelId, appName, isPhoneLike } from '../src/panel/core/capabilities.js';
+import { extraModelId, appName } from '../src/panel/core/capabilities.js';
 import { canonicalModel, isAdaptiveOnly } from '../src/shared/sources.js';
 import { isAdaptiveOnlyModel } from '../src/proxy/core/models.js';
 
@@ -58,13 +58,6 @@ test('connect toast is one line, long-lived; advice is separate', () => {
     assert.doesNotMatch(shell, /presetNote: \(libs/);
 });
 
-test('手机连接: 酒馆侧地址 hidden on TauriTavern / phone, kept on desktop', () => {
-    assert.equal(isPhoneLike({ tauri: true, coarse: false }), true);
-    assert.equal(isPhoneLike({ tauri: false, coarse: true }), true);
-    assert.equal(isPhoneLike({ tauri: false, coarse: false }), false);
-    assert.match(src('panel/tabs/other.js'), /showStEndpoint\(\) \? \[stEndpointField/);
-});
-
 test('使用说明: plain, current wording', () => {
     const other = src('panel/tabs/other.js');
     assert.doesNotMatch(other, /Agent SDK|一小时|里选 Claude 模型/);
@@ -95,12 +88,6 @@ test('不思考: no effort is sent', async () => {
     const off = buildIncludeBodyYaml({ ...base, thinking: 'off' });
     assert.doesNotMatch(off, /effort:/);
     assert.match(off, /thinking: off/);
-});
-
-test('体检: sub-toggles are greyed while the master switch is off', () => {
-    const check = src('panel/tabs/check.js');
-    assert.match(check, /input\.disabled = !settings\.heuristicChecks/);
-    assert.match(check, /claudeMaxCheckupToast', 'claude_max_card_audit_on/);
 });
 
 test('explainCache flags a first turn so the panel can show a neutral note', async () => {

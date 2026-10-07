@@ -2,9 +2,8 @@
 // Platform capabilities: every "what am I running on / talking to" check in
 // one place (they used to be scattered through the panel).
 //
-//   • TauriTavern (no server plugins), a touch device (COARSE), phone-like
-//   • which chat-completion source SillyTavern is on: this proxy ("ours"),
-//     Claude without the proxy ("direct"), or something else
+//   • TauriTavern (no server plugins), a touch device (COARSE)
+//   • which chat-completion source SillyTavern is on: this proxy ("ours"), or something else
 //   • whether the proxy can be reached only directly (no ST plugin route)
 //   • cloud-hosted SillyTavern
 //
@@ -52,23 +51,8 @@ export const COARSE = platform.coarse;
 export const appName = (tauri = IS_TAURI) => (tauri ? 'TauriTavern' : '酒馆');
 export const APP_NAME = appName();
 
-/** A phone or TauriTavern: the devices that get the lighter display and phone wording. */
-export function isPhoneLike(p = platform) {
-    return !!(p.tauri || p.coarse);
-}
-
-/** The 省电显示 setting normalised to 'auto' | 'on' | 'off'. */
-export function quietRenderMode(setting) {
-    return ['on', 'off'].includes(setting) ? setting : 'auto';
-}
-
-/** 省电显示 is in effect: on for phones and TauriTavern unless the debug switch says otherwise. */
-export function quietRenderOn(setting, p = platform) {
-    return setting === 'on' || (setting !== 'off' && isPhoneLike(p));
-}
-
 /** The plugin route speaks for the proxy on the default port only: with another endpoint
- *  (phone → Mac, another port) or in TauriTavern, calls go to the proxy itself and nothing else. */
+ *  (another machine, another port) or in TauriTavern, calls go to the proxy itself and nothing else. */
 export function proxyDirectOnly({ tauri, endpoint }) {
     return !!tauri || normalizeEndpoint(endpoint) !== normalizeEndpoint(DEFAULT_ENDPOINT);
 }
@@ -78,15 +62,6 @@ export function cloudHosted(hostCheck, { hostname, endpoint, tauri }) {
     return !!hostCheck?.cloudNeedsNote({ hostname, endpoint, tauri });
 }
 
-/** Phone → Mac sync only makes sense from inside TauriTavern on a proxy in phone mode. */
-export function canSyncPhone(macStatus, p = platform) {
-    return !!(macStatus?.phoneMode && p.tauri);
-}
-
-/** 同步手机 inside TauriTavern: TT has its own sync / backup; Mac-to-TT sync is untested. */
-export const PHONE_SYNC_WARNING = 'TauriTavern 自带同步和备份，建议用它；电脑酒馆和 TT 之间的同步还没测试过，可能有问题。';
-export const PHONE_SYNC_LABEL = '仍要同步（未测试）';
-
 /** 查看发给模型的内容 needs 保存最近一次完整请求 to be on; otherwise the button is greyed with this hint. */
 export function debugViewState(settings) {
     return settings?.debugDump
@@ -94,40 +69,21 @@ export function debugViewState(settings) {
         : { enabled: false, hint: '先打开上面的开关，再聊一轮。' };
 }
 
-const CLAUDE_OPENROUTER = /claude/i;
-
 /**
  * Where SillyTavern sends chat requests, from its settings.
- *   connected: this proxy (everything works)
- *   direct:    Claude without this proxy — SillyTavern's own Claude source, or a Claude model on an
- *              aggregator. Local features work there too; cache layout, reply recovery, quota need the proxy.
- * `sources` (shared/sources.js) is optional: without it only the Claude source and OpenRouter are known.
+ *   connected: this proxy (everything works); anything else is not ours.
  */
-export function resolveConnection({ mainApi, oai = {}, settings, sources = null }) {
+export function resolveConnection({ mainApi, oai = {}, settings }) {
     const src = mainApi === 'openai' ? oai.chat_completion_source : null;
     if (src === 'custom' && isOurEndpoint(oai.custom_url, settings)) {
-        return { kind: 'ours', connected: true, direct: false, model: oai.custom_model, where: '本机代理', billing: '订阅' };
+        return { kind: 'ours', connected: true, model: oai.custom_model, where: '本机代理', billing: '订阅' };
     }
-    if (sources) {
-        const model = oai[sources.CLAUDE_SOURCES[src]?.modelKey] ?? null;
-        const d = sources.describeSource({ source: src, model, reverseProxy: src === 'claude' ? oai.reverse_proxy : '' });
-        if (d) return { kind: src, connected: false, direct: true, model, where: d.where, billing: d.billing };
-        return { kind: 'other', connected: false, direct: false, model: null };
-    }
-    if (src === 'claude') return { kind: 'claude', connected: false, direct: true, model: oai.claude_model ?? null, where: 'Claude 官方', billing: 'API 密钥' };
-    if (src === 'openrouter' && CLAUDE_OPENROUTER.test(oai.openrouter_model ?? '')) {
-        return { kind: 'openrouter', connected: false, direct: true, model: oai.openrouter_model, where: 'OpenRouter', billing: 'OpenRouter 额度' };
-    }
-    return { kind: 'other', connected: false, direct: false, model: null };
+    return { kind: 'other', connected: false, model: null };
 }
 
-/** A chat request about to leave (CHAT_COMPLETION_SETTINGS_READY): ours, direct to Claude, or someone else's. */
-export function classifyRequest(data, settings, sources = null) {
-    const ours = data.chat_completion_source === 'custom' && isOurEndpoint(data.custom_url, settings);
-    const direct = !ours && (sources
-        ? !!sources.describeSource({ source: data.chat_completion_source, model: data.model })
-        : data.chat_completion_source === 'claude' || (data.chat_completion_source === 'openrouter' && CLAUDE_OPENROUTER.test(String(data.model ?? ''))));
-    return { ours, direct };
+/** A chat request about to leave (CHAT_COMPLETION_SETTINGS_READY): ours or someone else's. */
+export function classifyRequest(data, settings) {
+    return { ours: data.chat_completion_source === 'custom' && isOurEndpoint(data.custom_url, settings) };
 }
 
 /** The status bar's text while a reply is being written or has just finished; '' when idle. */

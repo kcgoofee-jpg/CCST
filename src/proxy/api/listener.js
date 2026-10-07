@@ -14,7 +14,7 @@
 // UI extension (running on the SillyTavern browser origin) can read /status,
 // /v1/usage/quota etc. directly. The listener binds 127.0.0.1 by default.
 // POST /v1/chat/completions comes from SillyTavern's server (no Origin), or —
-// in LAN mode — straight from a phone's TauriTavern, which must present the
+// in LAN mode — straight from a client on another machine, which must present the
 // access key (guardRemote).
 
 import express from 'express';
@@ -53,7 +53,7 @@ export function startStandaloneListener({ port, host }) {
             serverInstance = server;
             if (host === '0.0.0.0' || host === '::') {
                 console.warn(process.env.CLAUDE_SUBSCRIPTION_LAN_KEY
-                    ? '[claude-subscription] 局域网访问已开启：其他设备要带访问密码才能用（手机 TauriTavern 在 CCST 面板「其他 → 手机连接」里填）。'
+                    ? '[claude-subscription] 局域网访问已开启：其他设备要带访问密码才能用。'
                     : '[claude-subscription] listening on every network interface, but no CLAUDE_SUBSCRIPTION_LAN_KEY is set: requests from other machines are refused.');
             }
             console.log(

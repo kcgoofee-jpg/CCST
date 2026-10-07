@@ -17,7 +17,7 @@ import { chatKeyOf } from './chat-key.js';
 import { quotaGate, QUOTA_MIN_GAP_MS } from './quota-gate.js';
 
 // ── Version: panel and proxy update through different channels ──
-// (SillyTavern's extension manager or 手机同步 for the panel; git pull / ZIP + a restart for the proxy),
+// (SillyTavern's extension manager for the panel; git pull / ZIP + a restart for the proxy),
 // so they drift apart. Same major.minor = compatible; otherwise say which side is behind and how to update it.
 
 let panelVersion = null;
@@ -93,7 +93,7 @@ export async function refreshStatus() {
     }
 }
 
-// ── Heartbeat: notice a dropped proxy (Mac asleep, Wi-Fi switched) and its return ──
+// ── Heartbeat: notice a dropped proxy and its return ──
 
 export const HEARTBEAT_MS = 20000;
 let heartbeatDown = false;
@@ -107,8 +107,6 @@ export async function heartbeat() {
         up = res.ok;
         status = res.status;
     } catch { /* down */ }
-    if (up) F.perf.diagIfAsked();
-    F.quiet.quietSweep();
     if (up !== store.get().proxyOnline) { store.set({ proxyOnline: up }); }
     // Only worth a notice when SillyTavern is actually using this proxy.
     const { connected } = connectionInfo();
@@ -118,11 +116,11 @@ export async function heartbeat() {
     } else if (!up && !heartbeatDown && connected) {
         heartbeatDown = true;
         if (status === 401) {
-            notify('bad', '访问密码不对', '代理拒绝了这台设备。把电脑上「酒馆工具」「手机」页最新的手机连接码粘贴到 CCST 卡片，点「连接」。', { ms: 0, replace: 'proxy' });
+            notify('bad', '访问密码不对', '代理拒绝了这台设备：访问密码不对。', { ms: 0, replace: 'proxy' });
         } else if (status === 403) {
-            notify('bad', '代理不让这台设备用', '代理只开放给它所在的那台电脑，手机 / 另一台电脑要用，得在代理那边打开「手机模式」（Mac 的「酒馆工具」首页按 1 进「手机」页），再点「重新连接」。', { ms: 0, replace: 'proxy' });
+            notify('bad', '代理不让这台设备用', '代理只开放给它所在的那台电脑。', { ms: 0, replace: 'proxy' });
         } else {
-            notify('bad', '连不上代理，重试中', '先确认代理还在运行、那台电脑没睡眠。手机连电脑时，两边还要在同一个 Wi-Fi。', { ms: 0, replace: 'proxy' });
+            notify('bad', '连不上代理，重试中', '先确认代理还在运行、那台电脑没睡眠。', { ms: 0, replace: 'proxy' });
         }
         refreshStatus();
     } else if (up && heartbeatDown) {

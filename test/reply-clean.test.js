@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { checkReply, detectRefusal, repeatedParagraphs } from '../src/shared/chat-check.js';
+import { detectRefusal } from '../src/shared/chat-check.js';
 import { profileNotice, connectAdvice } from '../src/panel/core/connection-profile.js';
 import { presetFamily, presetMismatchNote } from '../src/shared/preset-reco.js';
 
@@ -23,17 +23,6 @@ test('refusal with image blocks, alternatives and a placeholder is still detecte
     const padded = REAL_REFUSAL + '\n\n' + 'Qualquer uma dessas opcoes pode ser desenvolvida em detalhe. '.repeat(10);
     assert.ok(detectRefusal(REAL_REFUSAL));
     assert.ok(detectRefusal(padded));
-    // two refusals in a row: only the refusal is shown, no repeat finding
-    const r = checkReply({ mes: REAL_REFUSAL, prevMes: REAL_REFUSAL, words: [800, 1200] });
-    assert.deepEqual(r.issues.map((i) => i.code), ['refusal']);
-});
-
-test('repeat counts real paragraphs, never window offsets; bullets and short lines are ignored', () => {
-    const body = '这是一段足够长的正文，用来确认重复检测按段落计数而不是按滑动窗口计数。\n\n另一段全新的内容，和上一条完全不同，不应该被算作重复。\n\n- A politica interna de uma corte ficticia, com intrigas e alianças\n\n短行';
-    const prevBody = '这是一段足够长的正文，用来确认重复检测按段落计数而不是按滑动窗口计数。\n\n- A politica interna de uma corte ficticia, com intrigas e alianças\n\n别的。';
-    assert.equal(repeatedParagraphs(prevBody, body).length, 1);
-    const f = checkReply({ mes: body, prevMes: prevBody }).issues.find((i) => i.code === 'repeat');
-    assert.match(f.text, /重复 1 段/);
 });
 
 test('connect notice warns when the active preset looks made for another model family', () => {

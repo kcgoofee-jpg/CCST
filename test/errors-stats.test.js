@@ -80,14 +80,14 @@ test('usage stats record metadata only and aggregate today / week', async () => 
     const log2 = console.log;
     console.log = () => {};
     try {
-        stats.recordRequest({ backend: 'bedrock', model: 'claude-sonnet-5', path: 'resume', stream: true, startedAt: Date.now() - 1000,
+        stats.recordRequest({ backend: 'apikey', model: 'claude-sonnet-5', path: 'resume', stream: true, startedAt: Date.now() - 1000,
             usage: { input_tokens: 1000, output_tokens: 1000, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }, textChars: 10, finish: 'stop' });
     } finally {
         console.log = log2;
     }
     const s2 = stats.summarizeStats();
-    assert.equal(s2.today.backends.bedrock.requests, 1, 'split by backend');
-    assert.equal(s2.today.backends.bedrock.costUsd, 0.012, '1k in × $2 + 1k out × $10 per M');
+    assert.equal(s2.today.backends.apikey.requests, 1, 'split by backend');
+    assert.equal(s2.today.backends.apikey.costUsd, 0.012, '1k in × $2 + 1k out × $10 per M');
     assert.equal(s2.today.backends.subscription.requests, 2);
     const file = readFileSync(process.env.CLAUDE_SUBSCRIPTION_STATS_FILE, 'utf8');
     assert.equal(file.trim().split('\n').length, 4);

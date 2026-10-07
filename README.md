@@ -29,8 +29,8 @@
 
 | | |
 | --- | --- |
-| 🎟️ **用订阅聊天**<br>Claude Pro / Max，不用另买 API 额度；也支持 API 密钥、Bedrock、Vertex、OpenRouter | 💰 **长聊更省额度**<br>聊天记录走提示词缓存，每轮通常只重算最新一段；状态页显示每轮实测命中率 |
-| 🛟 **断线回复不丢**<br>浏览器关了、断网了，回复照样写完，回来自动补上 | 🩺 **拒绝 / 截断提示**<br>模型拒绝、回复被截断或为空时直接告诉你；字数、禁词等检查在「其他」里（实验） |
+| 🎟️ **用订阅聊天**<br>Claude Pro / Max，不用另买 API 额度；也支持 Anthropic API 密钥 | 💰 **长聊更省额度**<br>聊天记录走提示词缓存，每轮通常只重算最新一段；状态页显示每轮实测命中率 |
+| 🛟 **断线回复不丢**<br>浏览器关了、断网了，回复照样写完，回来自动补上 | 🩺 **拒绝 / 截断提示**<br>模型拒绝、回复被截断或为空时直接告诉你 |
 
 省多少取决于预设、世界书和其他扩展的组合；面板「状态」页每轮都会写清楚这一轮读了多少缓存、为什么没读到。
 
@@ -39,7 +39,7 @@
 
 ## 你需要
 
-- 一台装好 [SillyTavern](https://github.com/SillyTavern/SillyTavern) 的电脑或服务器，[Node.js](https://nodejs.org) 18 以上（没有的话安装程序会提示）。只用 TauriTavern / 手机、电脑上没装酒馆的，看[其他用法](#其他用法)的用法二（目前仅 Mac）。
+- 一台装好 [SillyTavern](https://github.com/SillyTavern/SillyTavern) 的电脑，[Node.js](https://nodejs.org) 18 以上（没有的话安装程序会提示）。
 - Claude Pro 或 Max 订阅（或 API 密钥）。
 - Chrome 或 Edge 浏览器。
 
@@ -109,8 +109,8 @@ zsh -c "$(curl -fsSL https://raw.githubusercontent.com/kcgoofee-jpg/CCST/main/in
 | --- | --- |
 | **推理** | 选模型、调思考深度（越深越慢越费额度） |
 | **状态** | 这一轮用时、缓存命中和原因；回复被拒绝 / 截断 / 为空时的提示；订阅额度；7 天用量 |
-| **设置** | 代理地址、后端（订阅 / API 密钥 / Bedrock …）、思考选项；「高级」里是缓存与上下文开关 |
-| **其他** | 手机连接、Mac 遥控、调试；默认关闭的「体检（实验）」（字数、禁词、重复、角色卡检查） |
+| **设置** | 代理地址、后端（订阅 / API 密钥）、思考选项；「高级」里是缓存与上下文开关 |
+| **其他** | 查看发给模型的请求、重新引导、使用说明 |
 
 ## 常见问题
 
@@ -125,21 +125,14 @@ zsh -c "$(curl -fsSL https://raw.githubusercontent.com/kcgoofee-jpg/CCST/main/in
 
 ## 其他用法
 
-- **用 API 密钥 / Bedrock / Vertex / OpenRouter**：照上面装好，在「设置 → 代理后端」切换并填密钥。密钥只存在你电脑上。
-- **不装代理，直连 Claude API 或 OpenRouter**：只在酒馆里装扩展。切模型、拒绝 / 截断提示照常；没有防丢回复和额度统计。
-- **用法二：TauriTavern / 手机（目前仅 Mac）**：Mac 上单独跑代理。打开「终端」粘贴下面这行（装到 `~/CCST`，装依赖、登录、放桌面快捷方式、启动代理、打开 TauriTavern 一气呵成，最后进入「酒馆工具」菜单，按 `q` 退出）：
-  ```bash
-  zsh -c "$(curl -fsSL https://raw.githubusercontent.com/kcgoofee-jpg/CCST/main/install-mac.sh)"
-  ```
-  手机上：菜单首页按 `1` 进「手机」页，按 `x` 开启手机模式，把「手机连接码」粘到手机面板的卡片里点「连接」（也可以扫码）。更新：再运行同一行，然后在菜单里选「重启代理」。[详细](docs/使用指南.md#用法二-tauritavern-与手机)
-- **用法三：服务器 / 云酒馆 / Docker**：[详细](docs/使用指南.md#用法三-服务器与-docker)。镜像 `ghcr.io/kcgoofee-jpg/ccst` 公开，`docker pull` 直接用。
+- **用 Anthropic API 密钥**：照上面装好，在「设置 → 代理后端」切换并填密钥。密钥只存在你电脑上。
+- **TauriTavern / 不装成酒馆插件**：在同一台电脑上单独运行代理（`npm install`、`npm run login`、`npm start`），见[使用指南](docs/使用指南.md#只跑代理命令行)。
 
 更多细节（缓存原理、环境变量、所有设置项）在 **[使用指南](docs/使用指南.md)**。
 
 ## 限制
 
 - 没有温度、Top-P、Top-K。
-- 手机 / TauriTavern 连电脑上的代理（连接码、二维码、「酒馆工具」菜单）目前只支持 Mac。
 - 额度和 Claude.ai 共用，受 5 小时与 7 天窗口限制。
 - 首字比直连 API 慢几秒（要先启动 CLI）。
 

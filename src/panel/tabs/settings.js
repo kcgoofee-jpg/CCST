@@ -5,7 +5,6 @@
 import { store } from '../core/store.js';
 import { getSettings, DEFAULT_ENDPOINT, VALID_THINKING, THINKING_OPTIONS } from '../core/settings.js';
 import { normalizeEndpoint, APP_NAME } from '../core/capabilities.js';
-import { makeConnectCode, parseConnectCode } from '../core/connect-code.js';
 import { el, segmented, toggleRow, group, collapsible, stateLine, button } from '../core/dom.js';
 import { notify } from '../core/notify.js';
 import { refreshStatus, refreshBackend } from '../core/live.js';
@@ -33,7 +32,7 @@ export function buildSettingsTab(pane, settings, save) {
     conn.body.append(info, connectionFields(settings, save));
     pane.append(conn.root);
 
-    const backend = group('代理后端', '代理用哪个服务回答：订阅、API 密钥或其他。');
+    const backend = group('代理后端', '代理用哪个服务回答：订阅或 API 密钥。');
     const backendBox = el('div', 'cm-conn-fields');
     backendBox.id = 'claude_max_backend';
     backendBox.append(stateLine('loading', '正在读取代理后端…'));
@@ -98,32 +97,15 @@ export function buildSettingsTab(pane, settings, save) {
         more: 'MVU 等变量卡把状态以「深度 0」放在发言后；并进去后下一轮原样重放，预计缓存能对上。',
         checked: settings.foldTail, onChange: (v) => { settings.foldTail = v; save(); },
     }));
-    add(toggleRow({
-        id: 'claudeMaxTailBlock', title: '实验：预设后置条目提前', desc: '只对 Ny、图灵这类预设有用。',
-        more: '把每轮不变的后置条目挪到对话最前，预计旧楼层更容易命中缓存；代价是规则离回复更远。',
-        checked: settings.tailBlockFront, onChange: (v) => { settings.tailBlockFront = v; save(); },
-    }));
     pane.append(adv.root);
 }
 
-/** Every address input shows the same setting (设置 → 连接 and 其他 → 手机连接): keep them in step. */
+/** Every address input shows the same setting: keep them in step. */
 function syncEndpointInputs(value) {
     for (const input of document.querySelectorAll('.cm-endpoint-input')) input.value = value;
 }
 
-/** The 手机连接码 as the fields show it: the saved address + password; empty for the plain local default. */
-function codeFor(settings) {
-    const ep = normalizeEndpoint(settings.endpoint);
-    return !ep || ep === DEFAULT_ENDPOINT ? '' : makeConnectCode(ep, settings.accessKey);
-}
-
-/** After the connect card (or a field) saved a new address / password: show them in the fields of 设置 and 其他 → 手机连接. */
-export function syncConnectionInputs(settings) {
-    syncEndpointInputs(settings.endpoint);
-    for (const input of document.querySelectorAll('.cm-code-input')) input.value = codeFor(settings);
-}
-
-/** The proxy address input. `id` differs per copy (设置 has one, 其他 → 手机连接 the other). */
+/** The proxy address input. */
 export function endpointField(settings, save, { id = 'claude_max_endpoint', hint } = {}) {
     const field = el('div', 'cm-field');
     field.append(el('div', 'cm-field-label', '代理地址'));
@@ -138,7 +120,7 @@ export function endpointField(settings, save, { id = 'claude_max_endpoint', hint
         const next = normalizeEndpoint(input.value) || DEFAULT_ENDPOINT;
         if (normalizeEndpoint(settings.endpoint) === next) { input.value = settings.endpoint; return; }
         settings.endpoint = next;
-        syncConnectionInputs(settings);
+        syncEndpointInputs(settings.endpoint);
         save();
         // Requests are only tagged when ST's own Custom URL matches this address.
         notify('info', '代理地址已改', `点「重新连接」让${APP_NAME}改用它。`, { ms: 10000, replace: 'endpoint' });
@@ -150,65 +132,11 @@ export function endpointField(settings, save, { id = 'claude_max_endpoint', hint
     return field;
 }
 
-/** 酒馆和代理分开部署时，酒馆服务器访问代理用的地址（浏览器用上面的代理地址）。 */
-export function stEndpointField(settings, save) {
-    const field = el('div', 'cm-field');
-    field.append(el('div', 'cm-field-label', '酒馆侧地址（可选）'));
-    const input = el('input', 'text_pole');
-    input.type = 'text';
-    input.value = settings.stEndpoint ?? '';
-    input.placeholder = '留空 = 同上';
-    input.addEventListener('change', () => {
-        const next = normalizeEndpoint(input.value);
-        if (normalizeEndpoint(settings.stEndpoint) === next) return;
-        settings.stEndpoint = next;
-        save();
-        notify('info', '酒馆侧地址已改', '点「重新连接」后生效。', { ms: 10000, replace: 'endpoint' });
-    });
-    field.append(input, el('small', 'cm-hint', 'Docker 里酒馆和代理是两个容器时填（如 http://ccst:8901/v1）：酒馆服务器用它连代理，你的浏览器用上面的代理地址。其他情况留空。'));
-    return field;
-}
-
-/**
- * 其他 → 手机连接: ONE box for the 手机连接码 (the address and the access password together, as the Mac's 酒馆工具 shows it).
- * A plain address is accepted too. Saved to the same two settings the connect card uses.
- */
-export function connectCodeField(settings, save, { id = 'claude_max_lan_code' } = {}) {
-    const field = el('div', 'cm-field');
-    field.append(el('div', 'cm-field-label', '手机连接码'));
-    const input = el('input', 'text_pole cm-code-input');
-    input.type = 'text';
-    input.id = id;
-    input.autocomplete = 'off';
-    input.spellcheck = false;
-    input.value = codeFor(settings);
-    input.placeholder = 'http://192.168.x.x:8901/v1#k=…';
-    input.addEventListener('change', () => {
-        if (!input.value.trim()) {
-            // Emptied: back to the local proxy, no password.
-            settings.endpoint = DEFAULT_ENDPOINT;
-            settings.accessKey = '';
-        } else {
-            const parsed = parseConnectCode(input.value);
-            if (!parsed) { notify('warn', '没认出连接码', '请把电脑上酒馆工具「手机」页显示的「手机连接码」整行粘贴过来。', { ms: 8000, replace: 'endpoint' }); input.value = codeFor(settings); return; }
-            settings.endpoint = parsed.endpoint;
-            settings.accessKey = parsed.accessKey;
-        }
-        syncConnectionInputs(settings);
-        save();
-        notify('info', '连接码已保存', `点「重新连接」让${APP_NAME}改用它。`, { ms: 10000, replace: 'endpoint' });
-        refreshStatus();
-        refreshBackend();
-    });
-    field.append(input);
-    return field;
-}
-
 export function reconnectButton() {
     return button('重新连接', () => connect(getSettings()), { icon: 'fa-plug', text: true });
 }
 
-/** 设置 → 连接: the local proxy's address. (The LAN password lives in 其他 → 手机连接.) */
+/** 设置 → 连接: the local proxy's address. */
 function connectionFields(settings, save) {
     const box = el('div', 'cm-conn-fields');
     box.append(endpointField(settings, save), reconnectButton());

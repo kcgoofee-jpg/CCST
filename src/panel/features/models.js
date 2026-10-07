@@ -1,11 +1,8 @@
 // ──────────────────────────────────────────────
-// Model picks & source handling: the quick model switch, each source's own model spelling, and filling
-// the Claude source's model list (shared/sources.js knows the sources).
+// Model picks: the quick model switch on the proxy connection (shared/sources.js knows the model names).
 // ──────────────────────────────────────────────
 
 import { libs } from '../core/libs.js';
-import { getSettings } from '../core/settings.js';
-import { proxyBase, timeoutSignal } from '../core/proxy.js';
 import { connectionInfo, shortModel, modelKey, modelBase } from '../core/connection.js';
 import { cards } from '../core/dom.js';
 import { extraModelId } from '../core/capabilities.js';
@@ -22,41 +19,11 @@ export const MODEL_PICKS = [
     { value: 'claude-sonnet-5-5', label: 'Sonnet 5.5', hint: '通常更快更省，原生 1M 上下文；总会思考。' },
 ];
 
-/** Add an option the dropdown lacks (ST's static Claude list lags new models). */
-function addMissingOption(sel, id, label = id) {
-    if (sel.find('option').filter((_, o) => o.value === id).length) return false;
-    sel.append(new Option(label, id));
-    return true;
-}
-
-/** Switch SillyTavern's model on whatever source it is on. `id` is canonical (claude-opus-4-6),
- *  optionally with [1m]; each source gets its own spelling. False when the source has no such model. */
+/** Switch SillyTavern's model on the proxy connection (its custom model field). `id` is canonical
+ *  (claude-opus-4-6), optionally with [1m]. */
 export function setModel(id) {
     const ctx = SillyTavern.getContext();
-    const $ = globalThis.jQuery;
-    const { kind } = connectionInfo();
-    const meta = kind === 'ours' ? null : libs.sources?.CLAUDE_SOURCES[kind] ?? (kind === 'claude' ? { select: '#model_claude_select', modelKey: 'claude_model' } : null);
-    if (meta?.select) {
-        const sel = $?.(meta.select);
-        if (sel?.length) {
-            const ids = sel.find('option').map((_, o) => o.value).get().filter(Boolean);
-            // Claude source: [1m] rides along as before; elsewhere ids are the source's own.
-            const target = kind === 'claude' ? id : (libs.sources?.sourceModelId(kind, id, ids) ?? null);
-            if (!target) return false;
-            // The Claude source's dropdown can lag behind new models (1.19 has no Opus 5.5):
-            // add the option so the dropdown and the setting agree, then pick it.
-            if (kind === 'claude') addMissingOption(sel, target);
-            else if (!ids.includes(target)) return false;
-            sel.val(target).trigger('change');
-        } else if (ctx.chatCompletionSettings) {
-            const target = kind === 'claude' ? id : libs.sources?.sourceModelId(kind, id, []);
-            if (!target) return false;
-            ctx.chatCompletionSettings[meta.modelKey] = target;
-            ctx.saveSettingsDebounced?.();
-        }
-        return true;
-    }
-    const input = $?.('#custom_model_id');
+    const input = globalThis.jQuery?.('#custom_model_id');
     if (input?.length) input.val(id).trigger('input');
     else if (ctx.chatCompletionSettings) {
         ctx.chatCompletionSettings.custom_model = id;
@@ -68,38 +35,14 @@ export function setModel(id) {
     return true;
 }
 
-// #7: ST's Claude source has a fixed dropdown and never asks Anthropic for its model list
-// (that needs the key, which stays on ST's server). Fill it from this proxy's list when it is
-// reachable, else from the few ids the panel knows are missing. Sources with a live list
-// (OpenRouter and the aggregators) are filled by ST itself.
-export async function fillMissingClaudeModels() {
-    const sel = globalThis.jQuery?.('#model_claude_select');
-    if (!libs.sources || !sel?.length) return;
-    const ids = new Set(libs.sources.KNOWN_CLAUDE_MODELS);
-    try {
-        const settings = getSettings();
-        const res = await fetch(`${proxyBase(settings)}/v1/models`, {
-            signal: timeoutSignal(1500), headers: settings.accessKey ? { 'X-Claude-Max-Key': settings.accessKey } : {},
-        });
-        const data = res.ok ? await res.json() : null;
-        for (const m of data?.data ?? []) if (/^claude-[\w-]+$/.test(m?.id ?? '')) ids.add(m.id);
-    } catch { /* proxy not running: the known ids only */ }
-    const added = [...ids].filter((id) => addMissingOption(sel, id));
-    if (added.length) {
-        const cur = SillyTavern.getContext().chatCompletionSettings?.claude_model;
-        if (added.includes(cur)) sel.val(cur); // a saved model the dropdown didn't have
-        console.log(`[claude-max] added to the Claude model list: ${added.join(', ')}`);
-    }
-}
-
 /** The Claude model that needs its own card ('' when none: a non-Claude leftover never gets one). */
 function currentExtra(model) {
     return extraModelId(model, MODEL_PICKS, (id) => libs.sources?.canonicalModel(id) ?? (/^claude-/i.test(String(id ?? '')) ? modelBase(id).toLowerCase() : null));
 }
 
 export function modelRow() {
-    const { connected, direct, model } = connectionInfo();
-    if (!connected && !direct) return null;
+    const { connected, model } = connectionInfo();
+    if (!connected) return null;
     const extra = currentExtra(model);
     const options = [...MODEL_PICKS];
     if (extra) options.push({ value: extra, label: shortModel(extra), hint: '当前模型，在「API 连接」里选的。' });
@@ -133,19 +76,19 @@ export function modelRow() {
 // is applied here. Presets without one keep whatever model is selected.
 export function applyPresetModel(model) {
     if (typeof model !== 'string' || !/^claude-[\w.-]+$/i.test(model)) return;
-    const { connected, direct, model: cur } = connectionInfo();
-    if ((!connected && !direct) || modelKey(cur) === modelKey(model)) return;
+    const { connected, model: cur } = connectionInfo();
+    if (!connected || modelKey(cur) === modelKey(model)) return;
     const id = modelBase(model) + (/\[1m\]$/i.test(cur ?? '') ? '[1m]' : '');
     if (!setModel(id)) return;
     renderGlance();
     notify('info', `这个预设用 ${shortModel(id)}`, '预设自带模型设置，已自动选上。想换的话在「推理」页点另一个模型。', { ms: 5000 });
 }
 
-/** The model row exists only while ST is on a Claude source: rebuild when that flips. */
+/** The model row exists only while ST is on the proxy: rebuild when that flips. */
 export function modelRowFollowsSource() {
-    const { connected, direct } = connectionInfo();
+    const { connected } = connectionInfo();
     const has = !!document.getElementById('claude_max_model');
-    if (has !== (connected || direct) && document.querySelector('.inline-drawer.claude-max')) rebuildPanel();
+    if (has !== connected && document.querySelector('.inline-drawer.claude-max')) rebuildPanel();
     else syncModelControl();
 }
 

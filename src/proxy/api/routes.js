@@ -33,7 +33,7 @@ import { handleBackendGet, handleBackendPost } from '../features/backend-config.
 import { handleDebugLast } from '../features/debug-dump.js';
 import { handleDiagFull, handleDiagReport } from '../features/diag-report.js';
 import { handleCancelReply, handleKeptReply } from '../features/reply-keeper.js';
-import { countInFlight, handleControlAction, handleControlLog, handleControlStatus, handleDiagRequest, handleDiagResult } from '../platform/control.js';
+import { countInFlight } from '../platform/control.js';
 import { asyncRoute, allowCors, allowCorsGet, allowCorsGetTrusted, guardPostOrigin } from './guards.js';
 
 export const ROUTES = [
@@ -50,14 +50,6 @@ export const ROUTES = [
     // Kept replies (features/reply-keeper.js): fetch one back, or cancel (the panel's Stop).
     { method: 'get', standalone: '/v1/replies/:slot', plugin: '/reply/:slot', handler: handleKeptReply, cors: 'get' },
     { method: 'post', standalone: '/v1/replies/:slot/cancel', plugin: '/reply/:slot/cancel', handler: handleCancelReply, cors: 'full', origin: true },
-    // Phone → Mac remote control (launcher actions only; see platform/control.js).
-    { method: 'get', standalone: '/v1/control/status', handler: handleControlStatus, async: true, cors: 'full' },
-    { method: 'get', standalone: '/v1/control/log', handler: handleControlLog, async: true, cors: 'full' },
-    { method: 'get', standalone: '/v1/control/diag-request', handler: handleDiagRequest, cors: 'full' },
-    { method: 'post', standalone: '/v1/control/diag-request', handler: handleDiagRequest, cors: 'full', origin: true },
-    { method: 'get', standalone: '/v1/control/diag', handler: handleDiagResult, cors: 'full' },
-    { method: 'post', standalone: '/v1/control/diag', handler: handleDiagResult, cors: 'full', origin: true },
-    { method: 'post', standalone: '/v1/control/action', handler: handleControlAction, async: true, cors: 'full', origin: true },
     // Backend choice (features/backend-config.js): secrets go in, never come back out.
     // Remote callers need the access key like everything else (guardRemote).
     { method: 'get', standalone: '/v1/backend', plugin: '/backend', handler: handleBackendGet, cors: 'full' },

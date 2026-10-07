@@ -15,7 +15,7 @@
 //   core/       state store, settings, platform capabilities, notices, proxy access, live data, events
 //   shell.js    the drawer, header, status bar and tab bar
 //   tabs/       one module per tab (推理 / 状态 / 设置 / 其他)
-//   features/   optional pieces (reply keeper, check-up, card check, lore cache, backend form, …):
+//   features/   optional pieces (reply keeper, latest-reply check, lore cache, backend form, …):
 //               each is loaded on its own, and one that fails to load is skipped, never fatal
 //   ../shared/  pure helpers also used by the tests, loaded by core/libs.js the same forgiving way
 //
@@ -37,10 +37,9 @@
 
 // [name it registers under (F.<name>), file in features/]
 const FEATURES = [
-    ['keeper', 'reply-keeper'], ['lore', 'lore-cache'], ['checkup', 'checkup'], ['audit', 'card-audit'],
-    ['backend', 'backend-form'], ['perf', 'perf-diag'], ['quiet', 'quiet-render'], ['compact', 'compact-buttons'],
-    ['models', 'models'], ['presets', 'presets'], ['notice', 'turn-notice'], ['progress', 'gen-progress'],
-    ['score', 'image-score'], ['debug', 'debug-request'],
+    ['keeper', 'reply-keeper'], ['lore', 'lore-cache'], ['checkup', 'checkup'],
+    ['backend', 'backend-form'], ['models', 'models'], ['presets', 'presets'], ['notice', 'turn-notice'], ['progress', 'gen-progress'],
+    ['debug', 'debug-request'],
 ];
 
 const load = (path) => import(new URL(path, import.meta.url).href);

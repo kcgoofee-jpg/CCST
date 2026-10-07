@@ -4,11 +4,9 @@
 // registry (F): a feature that didn't load is simply skipped.
 // ──────────────────────────────────────────────
 
-import { getSettings } from './settings.js';
 import { F } from './registry.js';
 import { isReplyEvent, recovery } from './replies.js';
 import { onSettingsReady, noteActivatedLore, resetActivatedLore } from './inject.js';
-import { currentCharKey } from './st.js';
 import { connectionInfo } from './connection.js';
 import { refreshStats, refreshQuota } from './live.js';
 import { makeStatsAfterReply } from './stats-after-reply.js';
@@ -18,10 +16,6 @@ import { clearOneShotEffort, syncAlwaysThinks } from '../tabs/reason.js';
 import { renderCacheCard } from '../tabs/status.js';
 
 export function wireEvents({ eventSource, eventTypes }) {
-    // A check-up asked for during streaming runs now that the message is finished.
-    for (const ev of [eventTypes.GENERATION_ENDED, eventTypes.GENERATION_STOPPED]) {
-        if (ev) eventSource.on(ev, () => setTimeout(() => F.checkup.flushCheckup(), 300));
-    }
     // Which world info entries fired for this request (the diagnostic report lists them).
     if (eventTypes.GENERATION_STARTED) eventSource.on(eventTypes.GENERATION_STARTED, resetActivatedLore);
     if (eventTypes.WORLD_INFO_ACTIVATED) eventSource.on(eventTypes.WORLD_INFO_ACTIVATED, noteActivatedLore);
@@ -34,30 +28,19 @@ export function wireEvents({ eventSource, eventTypes }) {
         if (box && box.offsetParent !== null) setTimeout(refreshStats, 500);
     };
     // Greetings (first_message) and /sendas-style messages (command) aren't replies to watch.
-    const onReply = (fn) => (id, type) => { if (isReplyEvent(type)) fn(id, type); };
     const onOwnReply = (fn) => (id, type) => { if (isReplyEvent(type) && !recovery.emitting) fn(id, type); };
     eventSource.on(eventTypes.MESSAGE_RECEIVED, onOwnReply(clearOneShotEffort));
     eventSource.on(eventTypes.MESSAGE_RECEIVED, (id, type) => F.keeper.onReplyReceived(id, type));
-    eventSource.on(eventTypes.CHARACTER_MESSAGE_RENDERED ?? eventTypes.MESSAGE_RECEIVED, onReply(() => setTimeout(() => F.checkup.runCheckup({ toast: true }), 200)));
-    eventSource.on(eventTypes.CHAT_CHANGED, () => { F.quiet.pruneQuieted(); setTimeout(() => F.keeper.recoverKeptReply(), 1500); });
+    eventSource.on(eventTypes.CHAT_CHANGED, () => { setTimeout(() => F.keeper.recoverKeptReply(), 1500); });
     if (eventTypes.STREAM_TOKEN_RECEIVED) eventSource.on(eventTypes.STREAM_TOKEN_RECEIVED, (...a) => F.keeper.markPendingFloor(...a));
     if (eventTypes.GENERATION_STOPPED) eventSource.on(eventTypes.GENERATION_STOPPED, (...a) => F.keeper.onGenerationStopped(...a));
     if (eventTypes.GENERATION_ENDED) eventSource.on(eventTypes.GENERATION_ENDED, () => F.keeper.onGenerationEnded());
     if (eventTypes.MESSAGE_EDITED) eventSource.on(eventTypes.MESSAGE_EDITED, (...a) => F.keeper.onMessageEdited(...a));
     if (eventTypes.MESSAGE_DELETED) eventSource.on(eventTypes.MESSAGE_DELETED, (...a) => F.keeper.onMessageDeleted(...a));
-    eventSource.on(eventTypes.CHAT_CHANGED, () => setTimeout(() => {
-        const leak = document.getElementById('claude_max_leak');
-        if (leak) leak.value = getSettings().leakWords?.[currentCharKey()] ?? '';
-        F.checkup.runCheckup();
-        F.lore.refreshLoreBox();
-        F.audit.runCardAudit({ toast: true });
-    }, 200));
+    eventSource.on(eventTypes.CHAT_CHANGED, () => setTimeout(() => F.lore.refreshLoreBox(), 200));
     // Model / API switches: keep the header summary and connect button current.
     for (const ev of [eventTypes.CHATCOMPLETION_MODEL_CHANGED, eventTypes.CHATCOMPLETION_SOURCE_CHANGED, eventTypes.MAIN_API_CHANGED, eventTypes.SETTINGS_UPDATED]) {
         if (ev) eventSource.on(ev, () => setTimeout(() => { renderConnect(); renderGlance(); renderCacheCard(); F.models.modelRowFollowsSource(); syncAlwaysThinks(); }, 100));
-    }
-    for (const ev of [eventTypes.CHATCOMPLETION_SOURCE_CHANGED, eventTypes.APP_READY]) {
-        if (ev) eventSource.on(ev, () => setTimeout(() => F.models.fillMissingClaudeModels(), 300));
     }
     eventSource.on(eventTypes.MESSAGE_RECEIVED, refreshIfOpen);
     eventSource.on(eventTypes.MESSAGE_RECEIVED, onOwnReply(() => refreshAfterReply()));

@@ -107,8 +107,6 @@
 .claude-max .cm-dot[data-state="online"] { background: var(--cm-ok); box-shadow: 0 0 6px color-mix(in srgb, var(--cm-ok) 60%, transparent); }
 .claude-max .cm-dot[data-state="warning"] { background: var(--cm-warn); }
 .claude-max .cm-dot[data-state="offline"] { background: var(--cm-bad); }
-/* 直连 Claude、没开代理：不是故障，空心圆 */
-.claude-max .cm-dot[data-state="direct"] { background: transparent; box-shadow: inset 0 0 0 1.5px var(--cm-ok); }
 .claude-max .cm-dot[data-state="pending"] { animation: cm-pulse 1s ease-in-out infinite; }
 
 @keyframes cm-pulse { 50% { opacity: 0.3; } }
@@ -194,15 +192,6 @@
 .claude-max .cm-note-title { font-weight: 700; }
 .claude-max small.cm-warn { color: color-mix(in srgb, var(--cm-warn) 75%, var(--cm-text)); opacity: 1; }
 .claude-max .cm-raw { word-break: break-all; opacity: 0.5; }
-
-.claude-max .cm-issues {
-    margin: 4px 0 0;
-    padding-left: 1.2em;
-    font-size: var(--cm-fs-caption);
-    line-height: 1.5;
-}
-
-.claude-max .cm-issues li + li { margin-top: 4px; }
 
 /* the connect card: the only thing on screen until SillyTavern is on Claude */
 .claude-max .cm-setup { gap: 4px; padding: 12px; }
@@ -805,43 +794,16 @@
 .cm-debug-view .cm-details { margin: 6px 0; }
 .cm-debug-view .cm-hint { display: block; opacity: 0.7; }
 
-/* 酒馆助手 gives every script its own full-width button row inside a wrapping
-   #qr--bar; let the rows sit side by side and only wrap when they run out of room. */
-body.cm-compact-qr #qr--bar > .qr--buttons[id^="script_container_"] {
-    width: auto;
-    flex: 0 1 auto;
-}
-
-body.cm-compact-qr #qr--bar:has(> .qr--buttons[id^="script_container_"]) {
-    justify-content: center;
-    gap: 5px;
-}
-/* Mac 日志 */
+/* 日志 / 配置片段 */
 .claude-max pre.cm-log { max-height: 40vh; overflow: auto; white-space: pre-wrap; word-break: break-all; font-size: var(--cm-fs-caption); line-height: 1.4; padding: 6px; border-radius: 6px; background: var(--cm-soft); }
-
-/* 省电显示（面板「其他 → 省电显示」）：最新一楼以外，美化界面的动画只播一遍、不做毛玻璃 */
-body.cm-quiet #chat > .mes:not(.last_mes) *,
-body.cm-quiet #chat > .mes:not(.last_mes) *::before,
-body.cm-quiet #chat > .mes:not(.last_mes) *::after { animation-iteration-count: 1 !important; }
-body.cm-quiet #chat > .mes:not(.last_mes) * { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
 
 /* 生成进度占用状态栏那一行：思考中 / 写作中 / 完成 */
 .claude-max .cm-bar[data-gen="thinking"] .cm-bar-model,
 .claude-max .cm-bar[data-gen="writing"] .cm-bar-model { color: var(--cm-accent); font-variant-numeric: tabular-nums; }
 .claude-max .cm-bar[data-gen="done"] .cm-bar-model { color: color-mix(in srgb, var(--cm-ok) 75%, var(--cm-text)); font-variant-numeric: tabular-nums; }
 
-/* 连接卡片里的地址 + 访问密码表单、折叠说明 */
-.claude-max .cm-connect-form { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
-.claude-max .cm-connect-form .text_pole { min-height: var(--cm-tap); margin: 0; box-sizing: border-box; width: 100%; }
-.claude-max .cm-connect-form .cm-field-label { font-weight: 600; }
-.claude-max .cm-cf-row { display: flex; align-items: center; gap: 8px; }
-.claude-max .cm-cf-row .text_pole { flex: 1 1 auto; min-width: 0; }
-.claude-max .cm-cf-row .cm-link-btn { flex: 0 0 auto; min-height: var(--cm-tap); }
-.claude-max .cm-cf-result { font-weight: 600; }
-.claude-max .cm-cf-result[data-kind="ok"] { color: var(--cm-ok); }
-.claude-max .cm-cf-result[data-kind="denied"], .claude-max .cm-cf-result[data-kind="offline"], .claude-max .cm-cf-result[data-kind="empty"] { color: var(--cm-bad); }
+/* 连接卡片里的折叠说明 */
 .claude-max .cm-card-fold { margin-top: 8px; }
 .claude-max .cm-card-fold .cm-fold-body { display: flex; flex-direction: column; gap: 6px; }
 
-.claude-max .cm-toggle.cm-disabled { opacity: 0.5; }
 .claude-max .cm-seg-btn:disabled { opacity: 0.45; cursor: not-allowed; }

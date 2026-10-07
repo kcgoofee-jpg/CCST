@@ -44,7 +44,6 @@ const PRESET_FIELDS = {
     showReasoning: { label: '显示思考过程', valid: (v) => typeof v === 'boolean' },
     useResume: { label: '会话续接', valid: (v) => typeof v === 'boolean' },
     inlineSystem: { label: '深度注入保持原位', valid: (v) => typeof v === 'boolean' },
-    tailBlockFront: { label: '预设后置条目提前', valid: (v) => typeof v === 'boolean' },
     loreTail: { label: '世界书变化部分移到末尾', valid: (v) => typeof v === 'boolean' },
     foldTail: { label: '发言后的注入并进发言', valid: (v) => typeof v === 'boolean' },
     identityMode: { label: '身份模式', valid: (v) => typeof v === 'boolean' },
@@ -63,8 +62,8 @@ export function applyPresetRecommendation() {
 export async function applyModelProfile() {
     const ctx = SillyTavern.getContext();
     const byModel = ctx.chatCompletionSettings?.extensions?.claude_max?.byModel;
-    const { connected, direct, model } = connectionInfo();
-    if (!byModel || typeof byModel !== 'object' || !model || !(connected || direct)) return;
+    const { connected, model } = connectionInfo();
+    if (!byModel || typeof byModel !== 'object' || !model || !connected) return;
     const prof = byModel[modelKey(model)];
     if (!prof || typeof prof !== 'object') return;
     const done = [];
