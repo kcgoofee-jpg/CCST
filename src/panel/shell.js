@@ -158,7 +158,7 @@ export const SOURCE_LABELS = { keychain: '钥匙串', file: '凭据文件', env:
  *  dot · model · where/billing · 5h quota. Clicking the bar opens 状态. */
 export function renderGlance() {
     const { nextEffort, glance, gen } = store.get();
-    const { connected, model, where, billing } = connectionInfo();
+    const { connected, model, billing } = connectionInfo();
     const linked = glanceLinked({ connected }, store.get().status.phase);
     const settings = getSettings();
     const effort = effectiveEffort(settings);
@@ -182,7 +182,8 @@ export function renderGlance() {
         } else {
             barBtn?.removeAttribute('data-gen');
             bar.replaceChildren(el('b', 'cm-bar-model', linked ? (model ? shortModel(model) : '未选模型') : '未连接'));
-            if (linked && where) bar.append(el('span', 'cm-bar-src', `${where} · ${billing}`));
+            // Only the local proxy is left: 「本机代理」 says nothing; the billing (订阅) does.
+            if (linked && billing) bar.append(el('span', 'cm-bar-src', billing));
             // One-off boost: the only effort worth a place in the bar, because it expires by itself.
             if (connected && nextEffort) bar.append(el('span', 'cm-bar-effort', `下一轮${EFFORT_LABEL[effort]}`));
             if (q != null) {

@@ -5,11 +5,11 @@
 // The Claude Code CLI resolves auth and model aliases from its environment.
 // Getting this env exactly right is what keeps subscription billing working:
 //
-//   • ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN / ANTHROPIC_BASE_URL are
-//     SCRUBBED unless the caller explicitly opted into API billing —
-//     any stray key in SillyTavern's process env would silently flip
-//     billing off the subscription (Meridian scrubs identically). The
-//     proxy's own CLAUDE_SUBSCRIPTION_* settings are dropped too.
+//   • ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN / ANTHROPIC_BASE_URL and
+//     every provider switch are SCRUBBED — any stray key in SillyTavern's
+//     process env would silently flip billing off the subscription
+//     (Meridian scrubs identically). The proxy's own CLAUDE_SUBSCRIPTION_*
+//     settings are dropped too.
 //   • ANTHROPIC_DEFAULT_<TIER>_MODEL pins resolve tier aliases (and the
 //     [1m] alias forms) to exact versions — request pins win over both
 //     canonical defaults and inherited shell env.
@@ -28,21 +28,24 @@
 //     the CLI from injecting the cwd project's auto-memory index into the
 //     context (verified with a probe prompt); this does.
 
-import { backendEnv, SCRUBBED_ENV } from '../features/backend-config.js';
-
-// API credentials, base URLs and provider switches:
-// see backend-config.js. The chosen backend adds back only its own.
-const SCRUB_KEYS = SCRUBBED_ENV;
+// Every env var that could send the CLI somewhere else or bill something
+// other than the subscription. API-key users use SillyTavern's own Claude
+// source; the proxy only runs on the subscription.
+export const SCRUB_KEYS = [
+    'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL', 'ANTHROPIC_MODEL',
+    'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CODE_USE_FOUNDRY', 'CLAUDE_CODE_USE_GATEWAY',
+    'CLAUDE_CODE_USE_MANTLE', 'CLAUDE_CODE_USE_ANTHROPIC_AWS', 'CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD',
+    'ANTHROPIC_BEDROCK_BASE_URL', 'ANTHROPIC_VERTEX_BASE_URL', 'AWS_BEARER_TOKEN_BEDROCK',
+    'CLAUDE_CODE_SKIP_BEDROCK_AUTH', 'CLAUDE_CODE_SKIP_VERTEX_AUTH', 'ANTHROPIC_CUSTOM_HEADERS',
+];
 
 /**
  * @param {object} args
  * @param {Record<string,string>} args.envPins ANTHROPIC_DEFAULT_* pins from parseModelRequest
  * @param {number|undefined} args.maxTokens
- * @param {string|null} args.apiKey explicit sk-ant-* API-billing opt-in (or null for subscription)
- * @param {{ backend: string, fields: object }|null} [args.backend] resolved backend config (backend-config.js); null = subscription
  * @returns {Record<string,string|undefined>}
  */
-export function buildSubprocessEnv({ envPins, maxTokens, apiKey, backend = null }) {
+export function buildSubprocessEnv({ envPins, maxTokens }) {
     const env = { ...process.env };
     for (const key of SCRUB_KEYS) delete env[key];
     // The proxy's own settings (LAN access key, file paths, …) are none of
@@ -77,29 +80,6 @@ export function buildSubprocessEnv({ envPins, maxTokens, apiKey, backend = null 
         delete env.CLAUDE_CODE_MAX_OUTPUT_TOKENS;
     }
 
-    const chosen = backend?.backend ?? 'subscription';
-    if (chosen !== 'subscription') {
-        const { set, unset } = backendEnv(chosen, backend.fields);
-        for (const key of unset) delete env[key];
-        Object.assign(env, set);
-        if (chosen === 'apikey') env.CLAUDE_CODE_PROMPT_CACHE_TTL ??= '1h'; // same reason as below
-        return env;
-    }
-
-    if (apiKey) {
-        // Opt-in API-billing fallback — overrides subscription auth.
-        env.ANTHROPIC_API_KEY = apiKey;
-        // ... and really does: a CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`
-        // outranks ANTHROPIC_API_KEY, so the chat would bill the subscription
-        // while the user pays for the key (same reason the other backends unset it).
-        delete env.CLAUDE_CODE_OAUTH_TOKEN;
-        // On a subscription the CLI already caches the conversation for 1 hour; with an API key it
-        // falls back to 5 minutes, and roleplay turns are often further apart than that (measured:
-        // cache reads still hit after 12–25 min on the subscription). 1h writes cost 2x base instead
-        // of 1.25x, reads 0.1x. An explicit CLAUDE_CODE_PROMPT_CACHE_TTL in the environment wins.
-        env.CLAUDE_CODE_PROMPT_CACHE_TTL ??= '1h';
-    }
-
     // The subscription does not always get 1 hour either. Per the Claude Code docs (prompt
     // caching → "Which TTL each request gets"), the main conversation gets 1h only while the
     // account is within its plan's included usage; once it draws on usage credits (extra
@@ -109,16 +89,4 @@ export function buildSubprocessEnv({ envPins, maxTokens, apiKey, backend = null 
     env.CLAUDE_CODE_PROMPT_CACHE_TTL ??= '1h';
 
     return env;
-}
-
-/** Only forward genuine Anthropic API keys (sk-ant-*). SillyTavern always
- *  sends `Authorization: Bearer <key>` for Custom sources, even placeholders,
- *  so anything else is treated as "no key" to keep subscription auth intact. */
-export function pickApiKeyFromAuthHeader(req) {
-    const auth = req.get('authorization') || '';
-    const match = auth.match(/^Bearer\s+(.+)$/i);
-    if (!match) return null;
-    const key = match[1].trim();
-    if (!/^sk-ant-/i.test(key)) return null;
-    return key;
 }

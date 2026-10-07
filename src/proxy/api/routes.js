@@ -29,7 +29,6 @@ import { listModelsHandler } from '../core/models.js';
 import { handleStatus } from './status.js';
 import { handleQuota } from '../features/oauth.js';
 import { handleStats } from '../features/usage-stats.js';
-import { handleBackendGet, handleBackendPost } from '../features/backend-config.js';
 import { handleDebugLast } from '../features/debug-dump.js';
 import { handleDiagFull, handleDiagReport } from '../features/diag-report.js';
 import { handleCancelReply, handleKeptReply } from '../features/reply-keeper.js';
@@ -50,10 +49,6 @@ export const ROUTES = [
     // Kept replies (features/reply-keeper.js): fetch one back, or cancel (the panel's Stop).
     { method: 'get', standalone: '/v1/replies/:slot', plugin: '/reply/:slot', handler: handleKeptReply, cors: 'get' },
     { method: 'post', standalone: '/v1/replies/:slot/cancel', plugin: '/reply/:slot/cancel', handler: handleCancelReply, cors: 'full', origin: true },
-    // Backend choice (features/backend-config.js): secrets go in, never come back out.
-    // Remote callers need the access key like everything else (guardRemote).
-    { method: 'get', standalone: '/v1/backend', plugin: '/backend', handler: handleBackendGet, cors: 'full' },
-    { method: 'post', standalone: '/v1/backend', plugin: '/backend', handler: handleBackendPost, cors: 'full', origin: true },
     { method: 'post', standalone: '/v1/embeddings', handler: rejectEmbeddings, origin: true },
 ];
 

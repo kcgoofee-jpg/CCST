@@ -4,13 +4,12 @@
 //
 // Pure functions shared by the proxy (env / usage stats) and the panel
 // (labels). Which env vars select a backend is decided in
-// src/proxy/backend-config.js; this file only knows names and numbers.
+// by the proxy (subscription only); this file only knows names and numbers.
 
-export const BACKENDS = ['subscription', 'apikey'];
+export const BACKENDS = ['subscription'];
 
 export const BACKEND_LABELS = {
     subscription: '订阅（Claude 登录）',
-    apikey: 'Anthropic API 密钥',
 };
 
 /** Billed per token (everything except the subscription). */

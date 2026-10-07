@@ -53,14 +53,10 @@ export function init() {
 }
 
 // ── Quota meter ──
-/** 「点刷新查看额度」 with its button: what the quota shows until it has been asked for. */
+/** What the quota shows until the first answer. */
 function idleQuotaLine() {
-    const line = stateLine('empty', '点刷新查看额度');
-    const b = el('button', 'cm-link-btn', '刷新');
-    b.type = 'button';
-    b.addEventListener('click', () => refreshQuota({ force: true }));
-    line.append(b);
-    return line;
+    // Asked for on opening (live.js refreshAll); the group's own refresh icon forces it.
+    return stateLine('empty', '读取中…');
 }
 
 const WINDOW_LABELS = {

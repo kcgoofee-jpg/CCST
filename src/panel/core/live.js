@@ -213,4 +213,6 @@ export function refreshAll() {
     store.set({ pulse: store.get().pulse + 1 });
     refreshStatus();
     refreshStatsPage();
+    // The quota too (quota-gate keeps the 60 s gap): a 「点刷新」 placeholder was all 状态 showed before.
+    refreshQuota();
 }

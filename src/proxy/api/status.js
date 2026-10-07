@@ -14,7 +14,6 @@ import { join } from 'node:path';
 import { SDK_VERSION } from '../features/sdk-version.js';
 import { credentialSummary } from '../features/oauth.js';
 import { ROOT } from '../paths.js';
-import { resolveBackendConfig } from '../features/backend-config.js';
 import { BACKEND_LABELS } from '../../shared/backends.js';
 import { checkSdkCompat, loadSdk } from '../core/sdk-loader.js';
 import { foldStreak } from '../core/chat.js';
@@ -61,8 +60,7 @@ export async function handleStatus(req, res) {
             credential: credentialSummary(),
             // 最近一次回复里 CLI 报的各额度窗口状态（还没回复过则为空）
             rateLimit: rateLimitSnapshot(),
-            // Name only; fields and secrets are at /v1/backend.
-            backend: (({ backend }) => ({ id: backend, label: BACKEND_LABELS[backend] }))(resolveBackendConfig()),
+            backend: { id: 'subscription', label: BACKEND_LABELS.subscription },
             note: 'Credential expiry is advisory — the CLI can refresh a stale token on the next chat.',
             latencyMs: Date.now() - start,
         });

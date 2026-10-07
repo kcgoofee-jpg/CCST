@@ -25,15 +25,15 @@ test('both mounts register exactly what the table says', () => {
 test('plugin mount serves the panel same-origin endpoints, each backed by a standalone path', () => {
     for (const r of ROUTES.filter((x) => x.plugin)) assert.ok(r.standalone, r.plugin);
     assert.deepEqual(routeKeys('plugin').sort(), [
-        'GET /backend', 'GET /debug', 'GET /diag/full', 'GET /diag/report', 'GET /quota', 'GET /reply/:slot', 'GET /stats', 'GET /status',
-        'POST /backend', 'POST /reply/:slot/cancel',
+        'GET /debug', 'GET /diag/full', 'GET /diag/report', 'GET /quota', 'GET /reply/:slot', 'GET /stats', 'GET /status',
+        'POST /reply/:slot/cancel',
     ].sort());
 });
 
 test('standalone keeps every documented URL', () => {
     for (const k of ['GET /status', 'GET /v1/models', 'GET /v1/usage/quota', 'GET /v1/usage/stats', 'GET /v1/debug/last', 'GET /v1/diag/report', 'GET /v1/diag/full',
         'POST /v1/chat/completions', 'GET /v1/replies/:slot', 'POST /v1/replies/:slot/cancel',
-        'GET /v1/backend', 'POST /v1/backend', 'POST /v1/embeddings']) {
+        'POST /v1/embeddings']) {
         assert.ok(routeKeys('standalone').includes(k), k);
     }
 });

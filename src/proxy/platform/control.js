@@ -2,7 +2,7 @@
 // Replies being written right now (the chat route counts them)
 // ──────────────────────────────────────────────
 //
-// backend-config.js reads the count to say which replies still run on the
+// The panel reads the count to say which replies still run on the
 // old backend after a switch.
 
 let inFlight = 0;

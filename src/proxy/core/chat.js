@@ -35,9 +35,8 @@ import { loadSdk } from './sdk-loader.js';
 import { renderTranscript } from './transcript.js';
 import { extractSettings } from '../features/settings.js';
 import { parseModelRequest, effortForModel, isExtendedContextKnownUnavailable, recordExtendedContextUnavailable } from './models.js';
-import { buildSubprocessEnv, pickApiKeyFromAuthHeader } from './env.js';
+import { buildSubprocessEnv } from './env.js';
 import { tapBaseUrl, tapSkipReason } from '../features/wire-tap.js';
-import { resolveBackendConfig } from '../features/backend-config.js';
 import { buildSystemPrompt, extractSystemText } from './system-prompt.js';
 import { assembleEntries, splitHistoryForResume, currentToSdkUserMessage, singleMessageStream } from '../features/jsonl-entries.js';
 import { SDK_VERSION } from '../features/sdk-version.js';
@@ -89,12 +88,6 @@ const envFlag = (name, fallback) => {
     if (v === undefined || v === '') return fallback;
     return !/^(0|false|no|off)$/i.test(v);
 };
-
-/** How cache writes are billed (the proxy asks for 1h on the API key). */
-function env1hTtl(billedAs) {
-    if (billedAs !== 'apikey') return '5m';
-    return (process.env.CLAUDE_CODE_PROMPT_CACHE_TTL ?? '1h') === '1h' ? '1h' : '5m';
-}
 
 function buildSdkOptions({ modelInfo, oneMActive, settings, systemText, abortController, stream, env, resume, boundary }) {
     const options = {
@@ -552,12 +545,8 @@ async function completeChat(req, res, body, settings, conn) {
     const wantStream = body.stream === true;
     // The debug dumps live only while the switch is on (debug-dump.js).
     if (body.claude_subscription && typeof body.claude_subscription === 'object') noteDebugSetting(settings.debugDump);
-    // Resolved once per request: a switch in the panel applies from the next one.
-    const backend = resolveBackendConfig();
-    // A Bearer sk-ant key is an Anthropic key: only used on the subscription
-    // backend (the old API-billing opt-in), never forwarded to another service.
-    const apiKey = backend.backend === 'subscription' ? pickApiKeyFromAuthHeader(req) : null;
-    const billedAs = apiKey ? 'apikey' : backend.backend;
+    // The proxy only runs on the subscription (API-key users use SillyTavern's own Claude source).
+    const billedAs = 'subscription';
     const modelInfo = parseModelRequest(requestedModel);
 
     let sdk;
@@ -705,11 +694,11 @@ async function completeChat(req, res, body, settings, conn) {
     // Retry ladder state.
     let oneMActive = modelInfo.oneM && !isExtendedContextKnownUnavailable();
     // Diagnostics (panel → 状态 → 诊断): route the CLI through the in-process wire
-    // capture. Anthropic's own endpoint only — other backends keep their URL.
+    // capture.
     // Never with a non-http proxy in the environment (socks5:// …): the forwarder would bypass it.
     const tapSkip = settings.diagCapture ? tapSkipReason() : null;
     if (tapSkip) warnTapSkippedOnce(tapSkip);
-    const tapUrl = settings.diagCapture && !tapSkip && (billedAs === 'subscription' || billedAs === 'apikey')
+    const tapUrl = settings.diagCapture && !tapSkip
         ? await tapBaseUrl().catch((err) => { console.warn(`${PLUGIN_TAG} 诊断抓包没能启动，本轮不记录：${err.message}`); return null; })
         : null;
     let didTokenRefresh = false;
@@ -722,7 +711,7 @@ async function completeChat(req, res, body, settings, conn) {
             const abortController = new AbortController();
             conn.controller = abortController;
             partialUsage = null;
-            const env = buildSubprocessEnv({ envPins: modelInfo.envPins, maxTokens: settings.maxTokens, apiKey, backend });
+            const env = buildSubprocessEnv({ envPins: modelInfo.envPins, maxTokens: settings.maxTokens });
             if (tapUrl) env.ANTHROPIC_BASE_URL = tapUrl;
             const cfg = buildQueryConfig({
                 messages, modelInfo, oneMActive, settings,
@@ -895,7 +884,7 @@ async function completeChat(req, res, body, settings, conn) {
         const described = err?.sdkErrorText === 'served-model-guard' ? `served-model guard: ${raw}` : raw;
         noteFoldOutcome(lastPath, settings);
         recordRequest({
-            backend: billedAs, cacheTtl: env1hTtl(billedAs), model: modelInfo.requested, effort: settings.effort ?? null, placement: settings.systemPlacement, auxiliary: settings.auxiliary, purpose: settings.purpose, chatKey: settings.chatKey, timing, path: lastPath, stream: wantStream, startedAt, firstTokenAt, shape, cacheDiag, st: settings.stFingerprint,
+            backend: billedAs, model: modelInfo.requested, effort: settings.effort ?? null, placement: settings.systemPlacement, auxiliary: settings.auxiliary, purpose: settings.purpose, chatKey: settings.chatKey, timing, path: lastPath, stream: wantStream, startedAt, firstTokenAt, shape, cacheDiag, st: settings.stFingerprint,
             usage: usage ?? partialUsage, textChars: collectedText.length,
             error: described,
         });
@@ -928,7 +917,7 @@ async function completeChat(req, res, body, settings, conn) {
     }
 
     recordRequest({
-        backend: billedAs, cacheTtl: env1hTtl(billedAs), model: modelInfo.requested, effort: settings.effort ?? null, placement: settings.systemPlacement, auxiliary: settings.auxiliary, purpose: settings.purpose, chatKey: settings.chatKey, timing, path: lastPath, stream: wantStream, startedAt, firstTokenAt, shape, cacheDiag, st: settings.stFingerprint,
+        backend: billedAs, model: modelInfo.requested, effort: settings.effort ?? null, placement: settings.systemPlacement, auxiliary: settings.auxiliary, purpose: settings.purpose, chatKey: settings.chatKey, timing, path: lastPath, stream: wantStream, startedAt, firstTokenAt, shape, cacheDiag, st: settings.stFingerprint,
         usage, textChars: collectedText.length,
         finish: finishReason, clientClosed: conn.aborted, notices,
     });

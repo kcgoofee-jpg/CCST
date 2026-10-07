@@ -29,6 +29,6 @@ test('a socks / https / scheme-less proxy anywhere in the environment: never thr
 test('chat.js checks the proxy before starting the forwarder and keeps the start-failure fallback', () => {
     const chat = readFileSync(new URL('../src/proxy/core/chat.js', import.meta.url), 'utf8');
     assert.match(chat, /const tapSkip = settings\.diagCapture \? tapSkipReason\(\) : null;/);
-    assert.match(chat, /settings\.diagCapture && !tapSkip &&/);
+    assert.match(chat, /settings\.diagCapture && !tapSkip\b/);
     assert.match(chat, /tapBaseUrl\(\)\.catch\(/);
 });
