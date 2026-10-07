@@ -247,3 +247,26 @@ test('without lore moving, a new chat learns nothing up front', () => {
     const first = diagnoseCache('<Lore>a</Lore>', [A('greet-plain'), U('u1')]);
     assert.deepEqual(first.volatileTags, []);
 });
+
+test('a turn started after the cache TTL ran out is expiry, not a broken replay', async () => {
+    const { cacheExpired, cacheAnomaly } = await import('../src/proxy/features/cache-diag.js');
+    const diag = { chat: 'c1', firstTurn: false, systemChanged: false, historyDiffAt: null, historyLen: 9 };
+    const t0 = 1_800_000_000_000;
+    // 5-minute write, 4-minute reply, next turn sent 3 minutes after it finished
+    const prev = { ok: true, model: 'm', at: t0 + 240_000, durationMs: 240_000, cacheReadTokens: 0, cacheCreationTokens: 60000, cacheTtl: '5m', cacheDiag: { chat: 'c1' } };
+    const cur = { ok: true, model: 'm', at: t0 + 420_000 + 200_000, durationMs: 200_000, cacheReadTokens: 0, cacheCreationTokens: 62000, cacheTtl: '5m', cacheDiag: diag };
+    assert.deepEqual(cacheExpired(cur, prev), { gapMin: 7, ttl: '5m' });
+    assert.equal(cacheAnomaly(cur, prev), false);
+    assert.match(explainCache(cur, prev).reasons.join(), /5 分钟/);
+    // The same gap with a 1-hour write is neither expired nor explained away
+    const prev1h = { ...prev, cacheTtl: '1h' };
+    assert.equal(cacheExpired({ ...cur, cacheTtl: '1h' }, prev1h), null);
+    assert.equal(cacheAnomaly({ ...cur, cacheTtl: '1h' }, prev1h), true);
+});
+
+test('usage-stats reads which TTL the cache was written with', async () => {
+    const { writtenTtl } = await import('../src/proxy/features/usage-stats.js');
+    assert.equal(writtenTtl({ cache_creation: { ephemeral_5m_input_tokens: 9, ephemeral_1h_input_tokens: 0 } }), '5m');
+    assert.equal(writtenTtl({ cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 9 } }), '1h');
+    assert.equal(writtenTtl({ cache_creation_input_tokens: 9 }), null);
+});

@@ -747,6 +747,8 @@ async function completeChat(req, res, body, settings, conn) {
                     } else if (ev.kind === 'usage') {
                         partialUsage ??= {};
                         for (const [k, v] of Object.entries(ev.usage)) if (typeof v === 'number') partialUsage[k] = v;
+                        // 5m / 1h split of the cache write (usage-stats cacheTtl)
+                        if (ev.usage.cache_creation && typeof ev.usage.cache_creation === 'object') partialUsage.cache_creation = ev.usage.cache_creation;
                     } else if (ev.kind === 'text') {
                         const { emit, matched } = scanner.feed(ev.text);
                         if (emit) {
