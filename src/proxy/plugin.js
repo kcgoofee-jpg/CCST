@@ -34,6 +34,7 @@ import { dirname, join, resolve } from 'node:path';
 import { registerRoutes } from './api/routes.js';
 import { startStandaloneListener, stopStandaloneListener, probeExistingProxy, portInUseMessage } from './api/listener.js';
 import { startSharing, stopSharing } from './api/shared-proxy.js';
+import { markPluginHosted } from './api/status.js';
 import { noteSdkVersionRun } from './features/sdk-version.js';
 import { ROOT } from './paths.js';
 
@@ -143,6 +144,7 @@ function installUiExtension() {
 }
 
 export async function init(router) {
+    markPluginHosted();
     noteSdkVersionRun();
     // SillyTavern-mounted routes (GET is CSRF-exempt): /status for browser
     // health checks, /quota so the UI extension can read quota SAME-ORIGIN —

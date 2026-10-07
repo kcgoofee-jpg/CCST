@@ -31,9 +31,11 @@ export function getPluginVersion() {
     return cachedPluginVersion;
 }
 
-/** 代理是怎么启动的：从请求走的入口看（酒馆插件挂在 /api/plugins/ 下），不探测环境。 */
+/** 代理是怎么启动的：酒馆插件（plugin.js init 会标记）还是单独运行。面板直连 8901 时请求入口看不出来，所以不看入口。 */
+let pluginHosted = false;
+export function markPluginHosted() { pluginHosted = true; }
 function runtimeOf(req) {
-    return String(req?.originalUrl ?? '').startsWith('/api/plugins/') ? 'plugin' : 'standalone';
+    return pluginHosted || String(req?.originalUrl ?? '').startsWith('/api/plugins/') ? 'plugin' : 'standalone';
 }
 
 export async function handleStatus(req, res) {
