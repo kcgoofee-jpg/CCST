@@ -111,8 +111,6 @@ export function extractSettings(body) {
         replySlot: typeof ns.reply_slot === 'string' && /^[0-9a-f]{8,40}$/.test(ns.reply_slot) ? ns.reply_slot : null,
         // Dev only: build everything (placement, lore tail, transcript) and dump it, but never call Claude.
         dryRun: ns.dry_run === true && ns.debug_dump === true,
-        // Experimental: move a preset's post-history block in front (tail-block.js).
-        tailBlock: ns.tail_block === 'front' ? 'front' : 'off',
         // A system-prompt block that changes every turn (keyword world info)
         // moves to the current message so the history stays cached (lore-tail.js).
         loreTail: ns.lore_tail !== undefined ? ns.lore_tail !== false : !/^(0|false|off|no)$/i.test(process.env.CLAUDE_SUBSCRIPTION_LORE_TAIL ?? ''),

@@ -138,7 +138,6 @@ export function buildIncludeBodyYaml(settings, quiet = false, slot = null, model
     lines.push(`  identity_mode: ${settings.identityMode}`);
     lines.push(`  use_resume: ${settings.useResume}`);
     lines.push(`  system_placement: ${settings.inlineSystem ? 'inline' : 'hoist'}`);
-    if (settings.tailBlockFront) lines.push('  tail_block: front');
     lines.push(`  lore_tail: ${settings.loreTail}`);
     lines.push(`  fold_tail: ${settings.foldTail}`);
     if (settings.debugDump) lines.push('  debug_dump: true');

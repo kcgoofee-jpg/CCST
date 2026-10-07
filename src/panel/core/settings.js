@@ -28,7 +28,6 @@ export const defaultSettings = {
     debugDump: false,
     diagCapture: false,      // 诊断：让 Claude Code 经过代理内部的转发口，记录原始请求（状态 → 诊断）
     presetRecoRecord: null,  // 上一个预设的推荐改了什么（切走时恢复）
-    tailBlockFront: false,   // 实验：预设后置条目提前（省缓存）
     loreTail: true,          // 每轮变化的世界书移到本轮消息开头（省缓存）
     foldTail: true,          // 发言后面的深度 0 注入并进发言（省缓存）
     stEndpoint: '',          // 酒馆服务器访问代理用的地址（旧版设置里可能有）；空 = 同「代理地址」

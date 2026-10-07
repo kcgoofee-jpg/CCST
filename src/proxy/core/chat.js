@@ -50,7 +50,6 @@ import { isExpiredTokenError, isRateLimitError, isExtraUsageRequiredError, isSta
 import { explainError, formatErrorForUser } from '../features/errors-zh.js';
 import { recordRequest, promptShape } from '../features/usage-stats.js';
 import { inlineLateSystemMessages } from '../features/system-placement.js';
-import { moveTailBlockToFront } from '../features/tail-block.js';
 import { diagnoseCache, describeDiag } from '../features/cache-diag.js';
 import { extractVolatileBlocks, foldTrailingInjections, injectBlocks, injectedTextFor, loreTarget, newLoreOnly, noteTail, rememberInjected, rewriteInjected } from '../features/lore-tail.js';
 import { dumpEntries, dumpRequest, noteDebugSetting } from '../features/debug-dump.js';
@@ -539,7 +538,7 @@ export function watchClient(res, { keep, slot }) {
 
 export async function handleChatCompletions(req, res) {
     const body = req.body || {};
-    const messages = body.messages;
+    let messages = body.messages;
 
     if (!Array.isArray(messages) || messages.length === 0 || !body.model
         || messages.some((m) => !m || typeof m !== 'object' || Array.isArray(m))) {
@@ -564,14 +563,6 @@ async function completeChat(req, res, body, settings, conn) {
     const wantStream = body.stream === true;
     // The debug dumps live only while the switch is on (debug-dump.js).
     if (body.claude_subscription && typeof body.claude_subscription === 'object') noteDebugSetting(settings.debugDump);
-    // Background calls leave the per-chat memory alone (see below).
-    if (settings.tailBlock === 'front' && !settings.auxiliary) {
-        const { messages: reordered, moved } = moveTailBlockToFront(messages);
-        if (moved) {
-            messages = reordered;
-            console.log(`${PLUGIN_TAG} 预设后置条目提前：${moved} 条移到对话最前（每轮相同的后置块）`);
-        }
-    }
     // Resolved once per request: a switch in the panel applies from the next one.
     const backend = resolveBackendConfig();
     // A Bearer sk-ant key is an Anthropic key: only used on the subscription
@@ -597,7 +588,7 @@ async function completeChat(req, res, body, settings, conn) {
     let cacheDiag = null;
     // Background calls (another extension's tag writer, a summary) are not
     // turns of the conversation: they leave the per-chat state alone — cache
-    // memory, lore-tail learning, the tail-block comparison above and the
+    // memory, lore-tail learning and the
     // turn captures / context pin (buildQueryConfig). They may still READ
     // captured turns, which only helps their prompt match the chat's cache.
     if (!settings.auxiliary) try {

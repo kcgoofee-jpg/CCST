@@ -97,11 +97,6 @@ export function buildSettingsTab(pane, settings, save) {
         more: 'MVU 等变量卡把状态以「深度 0」放在发言后；并进去后下一轮原样重放，预计缓存能对上。',
         checked: settings.foldTail, onChange: (v) => { settings.foldTail = v; save(); },
     }));
-    add(toggleRow({
-        id: 'claudeMaxTailBlock', title: '实验：预设后置条目提前', desc: '只对 Ny、图灵这类预设有用。',
-        more: '把每轮不变的后置条目挪到对话最前，预计旧楼层更容易命中缓存；代价是规则离回复更远。',
-        checked: settings.tailBlockFront, onChange: (v) => { settings.tailBlockFront = v; save(); },
-    }));
     pane.append(adv.root);
 }
 
