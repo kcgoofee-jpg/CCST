@@ -70,6 +70,15 @@ export function buildSettingsTab(pane, settings, save) {
         current: settings.quietEffort === 'follow' ? 'follow' : 'low',
         onChange: (v) => { settings.quietEffort = v === 'follow' ? 'follow' : 'low'; save(); },
     }));
+    add(segmented({
+        label: '缓存有效期',
+        options: [
+            { value: '1h', label: '1 小时', hint: '写缓存按 2 倍价；读回复、想下一句超过 5 分钟也不用重写' },
+            { value: '5m', label: '5 分钟', hint: '写缓存按 1.25 倍价，连续快聊更省；停顿超过 5 分钟，下一轮整段重写' },
+        ],
+        current: settings.cacheTtl === '5m' ? '5m' : '1h',
+        onChange: (v) => { settings.cacheTtl = v === '5m' ? '5m' : '1h'; save(); },
+    }));
     add(toggleRow({
         id: 'claudeMaxAlwaysThink', title: '始终思考', tip: '每次都先思考（关 = 自适应）。Sonnet 5 按自适应处理',
         checked: settings.thinking === 'on',

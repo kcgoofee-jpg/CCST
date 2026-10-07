@@ -47,3 +47,10 @@ test('st_fp keeps the 「world info list unknown」 mark of an old SillyTavern, 
     assert.equal('wiOff' in fp({ preset: 'p', wi: [], wiOff: 'yes', other: 1 }), false);
     assert.equal('other' in fp({ preset: 'p', other: 1 }), false);
 });
+
+test('cache_ttl: only 5m switches away from the 1-hour default', () => {
+    const ttl = (v) => extractSettings({ claude_subscription: v === undefined ? {} : { cache_ttl: v } }).cacheTtl;
+    assert.equal(ttl(undefined), '1h');
+    assert.equal(ttl('5m'), '5m');
+    assert.equal(ttl('30m'), '1h');
+});

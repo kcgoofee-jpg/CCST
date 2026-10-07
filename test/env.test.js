@@ -45,3 +45,8 @@ test('the subscription asks the CLI for a 1-hour prompt cache', () => {
     const sub = buildSubprocessEnv({ envPins: {}, maxTokens: undefined });
     assert.equal(sub.CLAUDE_CODE_PROMPT_CACHE_TTL, process.env.CLAUDE_CODE_PROMPT_CACHE_TTL ?? '1h');
 });
+
+test('the panel can ask for the 5-minute cache', () => {
+    if (process.env.CLAUDE_CODE_PROMPT_CACHE_TTL) return;
+    assert.equal(buildSubprocessEnv({ envPins: {}, cacheTtl: '5m' }).CLAUDE_CODE_PROMPT_CACHE_TTL, '5m');
+});

@@ -110,6 +110,26 @@ fi
 ok "酒馆在：$ST"
 has_ext "$ST" || warn "这个酒馆里还没装 CCST 面板。先在酒馆里 扩展 → 安装扩展，粘贴 https://github.com/kcgoofee-jpg/CCST ；不装也能继续，只是面板不会出现。"
 
+# 酒馆正在运行：先关掉（换插件文件、移走旧插件时它不能占着），装完再打开
+ST_PORT=$(sed -nE 's/^port:[[:space:]]*([0-9]+).*/\1/p' "$ST/config.yaml" 2>/dev/null | head -1)
+ST_RUNNING=0; STOPPED=0
+if [[ "${CCST_NO_PROCESS_SCAN:-0}" != 1 ]]; then
+    typeset -a st_pids
+    for pid in ${(f)"$(lsof -nP -iTCP:${ST_PORT:-8000} -sTCP:LISTEN -t 2>/dev/null)"}; do
+        [[ "$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p')" == "$ST" ]] && st_pids+=("$pid")
+    done
+    if (( ${#st_pids} )); then
+        ST_RUNNING=1
+        a=y; [[ "$ASSUME_YES" == 1 ]] || a=$(ask "酒馆正在运行。先关掉它（聊天记录都已保存），装完再帮你打开？[Y/n] ")
+        if [[ "$a" == [nN]* ]]; then warn "没关。装完要自己关掉酒馆再打开。"
+        else
+            kill $st_pids 2>/dev/null
+            for i in {1..20}; do kill -0 $st_pids 2>/dev/null || break; sleep 0.5; done
+            ST_RUNNING=0; STOPPED=1; ok "酒馆已关掉"
+        fi
+    fi
+fi
+
 # ── 2. Node.js ──
 step "2/6 检查 Node.js（代理靠它运行）"
 if ! command -v node >/dev/null 2>&1; then
@@ -235,6 +255,11 @@ else
     stop_with "依赖没装成功。" "先检查网络能不能上外网，${AGAIN_FILE}重试。" "如果窗口里提示 EACCES / 权限，把酒馆文件夹放到「文稿」或「桌面」里再试。"
 fi
 
+# 面板在酒馆里被停用了（扩展 → 管理扩展 里关掉的）：重新启用。酒馆开着时它会覆盖设置，只能让你自己开
+if [[ -n "$(node "$DEST/installer/panel-enable.mjs" "$ST" --check 2>/dev/null)" ]]; then
+    if (( ST_RUNNING )); then warn "CCST 面板在酒馆里被停用了：在 扩展 → 管理扩展 里把 CCST 打开。"
+    else node "$DEST/installer/panel-enable.mjs" "$ST" >/dev/null 2>&1 && ok "CCST 面板之前被停用了，已重新启用"; fi
+fi
 # ── 6. 登录 Claude ──
 step "6/6 登录 Claude"
 if [[ "${CCST_SKIP_LOGIN:-0}" == 1 ]]; then
@@ -255,6 +280,11 @@ fi
 
 print -r -- ""
 print -r -- "════════════════════════════════"
-print -r -- "装好了。关掉酒馆再打开，面板会自动连上。"
-print -r -- "（酒馆是在终端窗口里运行的话，关掉那个窗口再重新启动；浏览器里按 Cmd+Shift+R 刷新一下。）"
+if (( STOPPED )) && open -a Terminal "$ST/start.sh" 2>/dev/null; then
+    print -r -- "装好了。酒馆已经在新的终端窗口里重新打开，面板会自动连上。"
+    print -r -- "（浏览器里按 Cmd+Shift+R 刷新一下。）"
+else
+    print -r -- "装好了。关掉酒馆再打开，面板会自动连上。"
+    print -r -- "（酒馆是在终端窗口里运行的话，关掉那个窗口再重新启动；浏览器里按 Cmd+Shift+R 刷新一下。）"
+fi
 finish 0

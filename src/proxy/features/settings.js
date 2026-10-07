@@ -135,6 +135,8 @@ export function extractSettings(body) {
             start: strList(ns.hist?.start, 3, 80),
             end: strList(ns.hist?.end, 2, 80),
         },
+        // Cache lifetime the panel picked (env.js); 1 hour unless it asks for 5 minutes.
+        cacheTtl: ns.cache_ttl === '5m' ? '5m' : '1h',
         genType: typeof ns.gen_type === 'string' ? ns.gen_type.slice(0, 20) : null,
         // Text of the keyword-triggered entries inside the system prompt (lore-tail.js cutExactLore).
         loreText: strList(ns.lore_text, 120, 20_000),

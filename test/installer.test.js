@@ -106,3 +106,21 @@ test('CCST_BRANCH: Mac installer clones that branch; both installers build the z
         assert.match(readFileSync(`${st}/plugins/CCST/package.json`, 'utf8'), /"feature"/);
     } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test('panel-enable: a CCST panel disabled in SillyTavern is re-enabled (backed up), other entries kept', () => {
+    const st = mkdtempSync(`${tmpdir()}/ccst-pe-`);
+    try {
+        mkdirSync(`${st}/data/default-user`, { recursive: true });
+        mkdirSync(`${st}/data/other`, { recursive: true });
+        const file = `${st}/data/default-user/settings.json`;
+        writeFileSync(file, JSON.stringify({ extension_settings: { disabledExtensions: ['third-party/LittleWhiteBox', 'third-party/CCST'] } }, null, 4));
+        writeFileSync(`${st}/data/other/settings.json`, JSON.stringify({ extension_settings: { disabledExtensions: [] } }));
+        const run = (...a) => execFileSync('node', [`${dir}panel-enable.mjs`, st, ...a], { encoding: 'utf8' });
+        assert.equal(run('--check').trim(), 'default-user');
+        assert.match(readFileSync(file, 'utf8'), /third-party\/CCST/, '--check changes nothing');
+        assert.equal(run().trim(), 'default-user');
+        assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')).extension_settings.disabledExtensions, ['third-party/LittleWhiteBox']);
+        assert.equal(readdirSync(`${st}/data/default-user`).filter((f) => f.startsWith('settings.json.ccst-backup-')).length, 1);
+        assert.equal(run('--check').trim(), '');
+    } finally { rmSync(st, { recursive: true, force: true }); }
+});

@@ -729,7 +729,7 @@ async function completeChat(req, res, body, settings, conn) {
             const abortController = new AbortController();
             conn.controller = abortController;
             partialUsage = null;
-            const env = buildSubprocessEnv({ envPins: modelInfo.envPins, maxTokens: settings.maxTokens });
+            const env = buildSubprocessEnv({ envPins: modelInfo.envPins, maxTokens: settings.maxTokens, cacheTtl: settings.cacheTtl });
             if (tapUrl) env.ANTHROPIC_BASE_URL = tapUrl;
             const cfg = buildQueryConfig({
                 messages, modelInfo, oneMActive, settings,

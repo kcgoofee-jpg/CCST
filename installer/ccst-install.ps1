@@ -118,6 +118,30 @@ if ($env:CCST_ST_DIR) {
 Ok "酒馆在：$St"
 if (-not (Has-Ext $St)) { Warn '这个酒馆里还没装 CCST 面板。先在酒馆里 扩展 → 安装扩展，粘贴 https://github.com/kcgoofee-jpg/CCST ；不装也能继续，只是面板不会出现。' }
 
+# 酒馆正在运行：先关掉（换插件文件、移走旧插件时它不能占着），装完再打开
+$StPort = 8000
+try { $m = Select-String -LiteralPath (Join-Path $St 'config.yaml') -Pattern '^port:\s*(\d+)' | Select-Object -First 1; if ($m) { $StPort = [int]$m.Matches[0].Groups[1].Value } } catch { }
+$StRunning = $false; $Stopped = $false
+if ($env:CCST_NO_PROCESS_SCAN -ne '1') {
+    $stPids = @()
+    try {
+        $stPids = @(Get-NetTCPConnection -LocalPort $StPort -State Listen -ErrorAction Stop | Select-Object -ExpandProperty OwningProcess -Unique | Where-Object {
+            $p = Get-CimInstance Win32_Process -Filter "ProcessId=$_" -ErrorAction SilentlyContinue
+            $p -and $p.Name -eq 'node.exe' -and $p.CommandLine -match 'server\.js'
+        })
+    } catch { }
+    if ($stPids.Count) {
+        $StRunning = $true
+        $yes = $AssumeYes -or ((Read-Host '酒馆正在运行。先关掉它（聊天记录都已保存），装完再帮你打开？[Y/n]') -notmatch '^[nN]')
+        if (-not $yes) { Warn '没关。装完要自己关掉酒馆再打开。' }
+        else {
+            foreach ($id in $stPids) { Stop-Process -Id $id -Force -ErrorAction SilentlyContinue }
+            Start-Sleep -Seconds 2
+            $StRunning = $false; $Stopped = $true; Ok '酒馆已关掉（它的黑窗口可以关掉了）'
+        }
+    }
+}
+
 # ── 2. Node.js ──
 Step '2/6 检查 Node.js（代理靠它运行）'
 $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
@@ -275,6 +299,13 @@ try {
     }
     Ok '依赖装好了'
 
+    # 面板在酒馆里被停用了（扩展 → 管理扩展 里关掉的）：重新启用。酒馆开着时它会覆盖设置，只能让你自己开
+    $off = "$(node installer/panel-enable.mjs $St --check 2>$null)"
+    if ($off.Trim()) {
+        if ($StRunning) { Warn 'CCST 面板在酒馆里被停用了：在 扩展 → 管理扩展 里把 CCST 打开。' }
+        else { node installer/panel-enable.mjs $St | Out-Null; Ok 'CCST 面板之前被停用了，已重新启用' }
+    }
+
     # ── 6. 登录 Claude ──
     Step '6/6 登录 Claude'
     if ($env:CCST_SKIP_LOGIN -eq '1') {
@@ -297,6 +328,13 @@ try {
 
 Write-Host ''
 Write-Host '════════════════════════════════'
-Write-Host '装好了。关掉酒馆再打开，面板会自动连上。' -ForegroundColor Green
-Write-Host '（酒馆的黑窗口关掉再重新启动；浏览器里按 Ctrl+F5 刷新一下。）'
+$reopened = $false
+if ($Stopped) { try { Start-Process -FilePath (Join-Path $St 'Start.bat') -WorkingDirectory $St; $reopened = $true } catch { } }
+if ($reopened) {
+    Write-Host '装好了。酒馆已经在新窗口里重新打开，面板会自动连上。' -ForegroundColor Green
+    Write-Host '（浏览器里按 Ctrl+F5 刷新一下。）'
+} else {
+    Write-Host '装好了。关掉酒馆再打开，面板会自动连上。' -ForegroundColor Green
+    Write-Host '（酒馆的黑窗口关掉再重新启动；浏览器里按 Ctrl+F5 刷新一下。）'
+}
 Finish 0

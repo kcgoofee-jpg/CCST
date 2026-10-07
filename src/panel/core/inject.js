@@ -227,6 +227,7 @@ export function buildIncludeBodyYaml(settings, quiet = false, slot = null, model
     lines.push(`  system_placement: ${settings.inlineSystem ? 'inline' : 'hoist'}`);
     lines.push(`  lore_tail: ${settings.loreTail}`);
     lines.push(`  fold_tail: ${settings.foldTail}`);
+    if (settings.cacheTtl === '5m') lines.push('  cache_ttl: 5m');
     if (settings.debugDump) lines.push('  debug_dump: true');
     if (settings.diagCapture) lines.push('  diag_capture: true');
     if (slot && !quiet) lines.push(`  reply_slot: ${slot}`);

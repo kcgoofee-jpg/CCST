@@ -45,7 +45,7 @@ export const SCRUB_KEYS = [
  * @param {number|undefined} args.maxTokens
  * @returns {Record<string,string|undefined>}
  */
-export function buildSubprocessEnv({ envPins, maxTokens }) {
+export function buildSubprocessEnv({ envPins, maxTokens, cacheTtl = '1h' }) {
     const env = { ...process.env };
     for (const key of SCRUB_KEYS) delete env[key];
     // The proxy's own settings (LAN access key, file paths, …) are none of
@@ -86,7 +86,8 @@ export function buildSubprocessEnv({ envPins, maxTokens }) {
     // usage — easy to reach on Pro) the CLI drops to 5 minutes. A long RP reply (3–4 min) plus
     // reading it outlasts that, so every new turn would re-write everything while a quick
     // reroll still hits. The env var outranks that default; an explicit value still wins.
-    env.CLAUDE_CODE_PROMPT_CACHE_TTL ??= '1h';
+    // The panel can pick 5 minutes (cheaper writes for fast back-and-forth).
+    env.CLAUDE_CODE_PROMPT_CACHE_TTL ??= cacheTtl;
 
     return env;
 }

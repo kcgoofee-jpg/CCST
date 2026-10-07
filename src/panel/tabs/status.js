@@ -189,6 +189,23 @@ function cacheVerdict(hitPct, firstTurn = false) {
     return { tone: 'warn', text: `缓存命中 ${hitPct}%，大部分重写了，通常偏慢、偏耗额度` };
 }
 
+/** Where one request's cost went, at Anthropic's list-price ratios (same as the proxy's
+ *  equivalentTokens): cache read 0.1×, write 2× (1 h) / 1.25× (5 min), output 5×, input 1×.
+ *  A high hit rate counts tokens; this counts cost — writes and output usually dominate. */
+export function costSplit(e) {
+    if (!e) return '';
+    const parts = [
+        ['写缓存', (e.cacheTtl === '5m' ? 1.25 : 2) * (e.cacheCreationTokens ?? 0)],
+        ['输出', 5 * (e.outputTokens ?? 0)],
+        ['读缓存', 0.1 * (e.cacheReadTokens ?? 0)],
+        ['未缓存输入', e.inputTokens ?? 0],
+    ];
+    const total = parts.reduce((s, [, v]) => s + v, 0);
+    if (!total) return '';
+    const shown = parts.map(([k, v]) => [k, Math.round((100 * v) / total)]).filter(([, p]) => p >= 1).sort((a, b) => b[1] - a[1]);
+    return `花在：${shown.map(([k, p]) => `${k} ${p}%`).join(' · ')}`;
+}
+
 /** The last turn: cache in plain words first, then time / output (the model is in the header), then why. */
 function lastTurnCard(data) {
     const c = data.lastCache;
@@ -197,6 +214,8 @@ function lastTurnCard(data) {
     const card = note(v.tone, v.text);
     if (last) {
         card.append(el('small', 'cm-hint', `用时 ${fmtSec(last.durationMs)} · 输出 ${fmtK(last.outputTokens)} token`));
+        const split = costSplit(last);
+        if (split) card.append(el('small', 'cm-hint', split));
     }
     // The first reason is the conclusion; everything else is detail.
     const [first, ...rest] = c.reasons;

@@ -50,3 +50,10 @@ test('another CCST answering for this SillyTavern: warn only when it is a differ
     assert.deepEqual(statusAdvisories(shared('6.0.2'), 'http://127.0.0.1:8901/v1'), []);
     assert.deepEqual(statusAdvisories(online({ root: '/st/plugins/CCST', version: '6.0.2' }), 'http://127.0.0.1:8901/v1'), []);
 });
+
+test('cost split: an 87% hit can still be mostly writes and output', async () => {
+    const { costSplit } = await import('../src/panel/tabs/status.js');
+    assert.equal(costSplit({ inputTokens: 3, cacheReadTokens: 60238, cacheCreationTokens: 9127, outputTokens: 2798, cacheTtl: '1h' }), '花在：写缓存 48% · 输出 37% · 读缓存 16%');
+    assert.match(costSplit({ cacheReadTokens: 1000, cacheCreationTokens: 1000, outputTokens: 0, cacheTtl: '5m' }), /^花在：写缓存 93% · 读缓存 7%$/);
+    assert.equal(costSplit(null), '');
+});
