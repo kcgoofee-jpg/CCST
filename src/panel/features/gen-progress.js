@@ -22,7 +22,7 @@ const idle = () => { clearInterval(tick); tick = null; store.set({ gen: { kind: 
 // a slash command in the input box takes over and nothing is generated.
 export function genStart(type, _opts, dryRun) {
     const link = connectionInfo();
-    if (dryRun || type === 'quiet' || type === 'impersonate' || !(link.connected || link.direct)) return;
+    if (dryRun || type === 'quiet' || type === 'impersonate' || !link.connected) return;
     genActive = true;
     clearTimeout(doneTimer);
     store.set({ gen: { kind: 'thinking', startedAt: Date.now(), chars: 0, cache: null, seconds: null } });

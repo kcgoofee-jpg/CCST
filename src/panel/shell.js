@@ -162,8 +162,8 @@ const planOf = (cred) => SUBSCRIPTION_LABELS[cred?.subscriptionType] ?? cred?.su
  *  dot · model · where/billing · 5h quota. Clicking the bar opens 状态. */
 export function renderGlance() {
     const { nextEffort, glance, gen } = store.get();
-    const { connected, direct, model, where, billing } = connectionInfo();
-    const linked = glanceLinked({ connected, direct }, store.get().status.phase);
+    const { connected, model, where, billing } = connectionInfo();
+    const linked = glanceLinked({ connected }, store.get().status.phase);
     const settings = getSettings();
     const effort = effectiveEffort(settings);
     const parts = [];
@@ -189,8 +189,7 @@ export function renderGlance() {
             if (linked && where) bar.append(el('span', 'cm-bar-src', `${where} · ${billing}`));
             // One-off boost: the only effort worth a place in the bar, because it expires by itself.
             if (connected && nextEffort) bar.append(el('span', 'cm-bar-effort', `下一轮${EFFORT_LABEL[effort]}`));
-            // The 5h window is the subscription's: beside an API key or OpenRouter it says nothing.
-            if (q != null && !direct) {
+            if (q != null) {
                 const quota = el('span', 'cm-bar-quota', `5h ${q}%`);
                 if (q >= 70) quota.dataset.tone = q >= 90 ? 'error' : 'warn';
                 bar.append(quota);
@@ -296,10 +295,9 @@ function mismatchCard(base, status) {
 
 /** What the card should say right now: null = no card. */
 function describeCard() {
-    const { connected, direct, model } = connectionInfo();
+    const { connected, model } = connectionInfo();
     const { proxyState, status } = store.get();
-    const online = proxyState === 'online';
-    const setup = !connected && !direct;
+    const setup = !connected;
     const base = { setup };
     const phase = status.phase;
 
@@ -308,7 +306,6 @@ function describeCard() {
         return { ...base, tone: 'error', dot: 'offline', key: 'denied', title, sub: status.message };
     }
     if (phase === 'offline') {
-        if (!setup && direct) return null; // direct to Claude without the proxy: nothing is wrong
         const help = connectHelp({ host: hostNow() });
         return {
             ...base, tone: setup ? 'info' : 'error', dot: 'offline', key: `start-${help.key}`,
@@ -333,9 +330,8 @@ function describeCard() {
             return mismatch ? mismatchCard(base, status) : null;
         }
         // Proxy is fine, SillyTavern isn't on it (yet).
-        const sub = direct ? '连上代理才有缓存排布、防丢回复和额度；现在酒馆直连 Claude，本地功能照常。'
-            : `${planOf(status.cred)} 订阅 · 代理 v${status.version}。点「一键连接」让${APP_NAME}改用它：会选好模型，并保存成「CCST」连接配置。`;
-        return { ...base, tone: 'info', dot: mismatch ? 'warning' : 'online', key: 'connect', title: direct ? '代理在线，可以连上它' : `代理已就绪，${APP_NAME}还没接上`,
+        const sub = `${planOf(status.cred)} 订阅 · 代理 v${status.version}。点「一键连接」让${APP_NAME}改用它：会选好模型，并保存成「CCST」连接配置。`;
+        return { ...base, tone: 'info', dot: mismatch ? 'warning' : 'online', key: 'connect', title: `代理已就绪，${APP_NAME}还没接上`,
             sub: mismatch ? `${sub}\n${mismatch}` : sub, action: { label: '一键连接', icon: 'fa-plug', primary: true, run: () => connect(getSettings()) } };
     }
     return null;
@@ -393,17 +389,14 @@ export function renderConnect() {
         }
     }
     const { proxyState } = store.get();
-    const { direct } = connectionInfo();
-    const up = proxyState === 'online' || proxyState === 'warning';
-    // Direct to Claude with the proxy not running is not a fault: a hollow dot.
-    setDot(direct && !connected && !up ? 'direct' : view?.dot ?? (proxyState ?? 'pending'));
+    setDot(view?.dot ?? (proxyState ?? 'pending'));
     // The bar is for a working connection; during first-run the card is the only thing to look at.
     const bar = document.getElementById('claude_max_bar');
     if (bar) bar.hidden = !!view?.setup;
     // Cloud SillyTavern + loopback address + proxy unreachable: say why instead of "start the proxy".
     const cloud = document.getElementById('claude_max_cloud');
     if (cloud) {
-        cloud.hidden = direct || proxyState !== 'offline' || !cloudHosted(libs.hostCheck, { hostname: location.hostname, endpoint: getSettings().endpoint, tauri: IS_TAURI });
+        cloud.hidden = proxyState !== 'offline' || !cloudHosted(libs.hostCheck, { hostname: location.hostname, endpoint: getSettings().endpoint, tauri: IS_TAURI });
     }
     renderGlance();
 }
@@ -445,7 +438,7 @@ function buildStatusBar(showTab) {
     const cloud = note('info', '酒馆在云端，连不到你电脑上的代理');
     cloud.id = 'claude_max_cloud';
     cloud.hidden = true;
-    cloud.append(el('small', 'cm-hint', '云端酒馆里的 127.0.0.1 是服务器自己。可以：改用 API 密钥直连；在服务器上运行代理；或用内网穿透暴露代理，并设访问密码。'));
+    cloud.append(el('small', 'cm-hint', '云端酒馆里的 127.0.0.1 是服务器自己，CCST 代理要和酒馆在同一台机器上运行。'));
 
     block.append(bar, buildGuideCard(), card, cloud);
     return block;

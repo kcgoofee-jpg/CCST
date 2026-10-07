@@ -42,9 +42,6 @@ export function wireEvents({ eventSource, eventTypes }) {
     for (const ev of [eventTypes.CHATCOMPLETION_MODEL_CHANGED, eventTypes.CHATCOMPLETION_SOURCE_CHANGED, eventTypes.MAIN_API_CHANGED, eventTypes.SETTINGS_UPDATED]) {
         if (ev) eventSource.on(ev, () => setTimeout(() => { renderConnect(); renderGlance(); renderCacheCard(); F.models.modelRowFollowsSource(); syncAlwaysThinks(); }, 100));
     }
-    for (const ev of [eventTypes.CHATCOMPLETION_SOURCE_CHANGED, eventTypes.APP_READY]) {
-        if (ev) eventSource.on(ev, () => setTimeout(() => F.models.fillMissingClaudeModels(), 300));
-    }
     eventSource.on(eventTypes.MESSAGE_RECEIVED, refreshIfOpen);
     eventSource.on(eventTypes.MESSAGE_RECEIVED, onOwnReply(() => refreshAfterReply()));
     // The quota is read after each reply (live.js keeps the 60 s gap and the backoff), not on opening.

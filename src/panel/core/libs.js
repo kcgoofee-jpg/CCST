@@ -11,7 +11,7 @@ export const libs = {
     loreConst: null,     // 世界书常驻 (shared/lore-constant.js)
     presetReco: null,    // 预设推荐 (shared/preset-reco.js)
     hostCheck: null,     // 云端酒馆检测 (shared/host.js)
-    sources: null,       // 哪些来源连 Claude、模型名、缓存 (shared/sources.js)
+    sources: null,       // Claude 模型名 (shared/sources.js)
 };
 
 const FILES = {

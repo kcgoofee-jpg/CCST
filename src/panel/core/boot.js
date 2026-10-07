@@ -20,10 +20,9 @@ export const libHooks = {
     presetReco: () => F.presets.adoptUnrecordedReco(),
     hostCheck: () => renderConnect(),
     sources: () => {
-        // The panel may be built already, knowing only two sources: rebuild so the model row shows.
+        // The panel may be built already, before the model names were known: rebuild so the model row is right.
         if (document.querySelector('.inline-drawer.claude-max')) rebuildPanel();
         refreshAll();
-        F.models.fillMissingClaudeModels();
     },
 };
 

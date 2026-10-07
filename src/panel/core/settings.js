@@ -35,8 +35,8 @@ export const defaultSettings = {
     quietEffort: 'low',      // 后台请求（其他插件的生图 tag、总结等）的思考深度；'follow' = 跟随面板
     panelTab: 'reason',      // 3.1 前记的分页；现在记在 localStorage，只用来迁移
     onboarded: false,        // 首次引导：走完、跳过、或打开时已经连上了
-    guideSource: '',         // 引导里选的来源：'' 没开始 | 'choose' 还没选 | proxy / claude / openrouter / relay
-    everConnected: false,    // 成功连接过一次就记下：之后断线只显示连接卡片，不再出现首次引导
+    guideSource: '',         // 引导走到哪：'' 没开始 | 'choose' 在欢迎页 | 'proxy' 在连接
+    everConnected: false,    // 成功连上代理一次就记下：之后断线只显示连接卡片，不再出现首次引导
     freshInstall: false,     // 面板第一次启动时设置还不存在（全新安装）才是 true，只有这时才自动出现引导
 };
 

@@ -16,11 +16,10 @@ export const USAGE_NOTES = (tauri = IS_TAURI) => [
     `${tauri ? 'TauriTavern' : '酒馆'}自带的「推理强度」保持「自动」。`,
     '温度、Top-P 等采样参数不能用。',
     '带「(1M context)」的模型有 100 万上下文；用不了时会自动换成普通版。',
-    '直连 Claude（官方、OpenRouter 等）也能用：换模型、调预设、发送前检查照常；缓存、防丢回复、额度统计要走代理。',
 ];
 
 function usageNotes() {
-    const { root, body } = collapsible('使用说明', '代理、连接、思考深度、直连 Claude 的要点。');
+    const { root, body } = collapsible('使用说明', '代理、连接、思考深度的要点。');
     const list = el('ol', 'cm-notes');
     for (const line of USAGE_NOTES()) list.append(el('li', null, line));
     body.append(list);
@@ -49,7 +48,7 @@ export function buildOtherTab(pane, settings, save) {
     dbg.body.append(viewBtn, viewHint);
     pane.append(dbg.root);
 
-    pane.append(button('重新引导（选来源 → 连接 → 完成）', () => restartGuide(), { icon: 'fa-compass', id: 'claude_max_guide_again', text: true }));
+    pane.append(button('重新引导（开始 → 连接 → 完成）', () => restartGuide(), { icon: 'fa-compass', id: 'claude_max_guide_again', text: true }));
 
     pane.append(usageNotes());
 }

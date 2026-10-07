@@ -5,7 +5,7 @@
 
 import { store } from '../core/store.js';
 import { libs } from '../core/libs.js';
-import { IS_TAURI, normalizeEndpoint } from '../core/capabilities.js';
+import { normalizeEndpoint } from '../core/capabilities.js';
 import { connectionInfo, shortModel } from '../core/connection.js';
 import { fetchProxy, proxyErrorText } from '../core/proxy.js';
 import { el, note, iconButton, group, collapsible, stateLine, button, toggleRow } from '../core/dom.js';
@@ -449,47 +449,12 @@ function buildDiagGroup() {
     return g.root;
 }
 
-/** 状态 → 缓存: how this source caches. Direct sources: SillyTavern's own settings, which
- *  live in its config.yaml (read at start-up) — shown with a copy button, not applied. */
+/** 状态 → 缓存建议: on the proxy the cache is laid out by the proxy. */
 export function renderCacheCard() {
     const box = document.getElementById('claude_max_cache');
     if (!box) return;
-    const { connected, direct, kind, where } = connectionInfo();
-    if (connected) {
-        box.replaceChildren(stateLine('empty', '走本机代理：缓存由代理排布，不用设置。命中情况看「上一轮」。'));
-        return;
-    }
-    if (!direct) {
-        box.replaceChildren(stateLine('empty', '酒馆现在没在用 Claude。'));
-        return;
-    }
-    if (!libs.sources) {
-        box.replaceChildren(stateLine('error', '没加载（扩展文件不完整），重装扩展即可。'));
-        return;
-    }
-    box.replaceChildren(directCacheCard(kind, where));
-}
-
-/** The recommended-cache card for a direct source (also shown on the last step of the first-run guide). */
-export function directCacheCard(kind, where) {
-    const advice = libs.sources.cacheAdvice(kind);
-    const card = note(advice.tone, `${where} · 酒馆自带缓存`);
-    for (const line of advice.lines) card.append(el('small', 'cm-hint', line));
-    if (advice.yaml) {
-        card.append(el('pre', 'cm-log', advice.yaml));
-        const copy = button('复制这段', () => {}, { icon: 'fa-copy' });
-        copy.addEventListener('click', async () => {
-            if (await copyText(advice.yaml)) {
-                notify('ok', '已复制', '粘到酒馆目录的 config.yaml（替换原来的 claude: 段里对应几行），再重启酒馆。', { ms: 8000 });
-            } else {
-                notify('warn', '没能自动复制', '请手动选中上面的内容复制，粘到酒馆目录的 config.yaml，再重启酒馆。');
-            }
-        });
-        const row = el('div', 'cm-btn-row');
-        row.append(copy);
-        card.append(row);
-        if (IS_TAURI) card.append(el('small', 'cm-hint', 'TauriTavern 不是酒馆的 Node 服务器，config.yaml 这几项它认不认要看 TauriTavern 自己。'));
-    }
-    card.append(el('small', 'cm-hint', '上一轮命中没有：酒馆不把缓存用量传给页面，面板看不到；到 Anthropic / OpenRouter 后台的用量记录里看。'));
-    return card;
+    const { connected } = connectionInfo();
+    box.replaceChildren(stateLine('empty', connected
+        ? '走本机代理：缓存由代理排布，不用设置。命中情况看「上一轮」。'
+        : '酒馆现在没连 CCST 代理。'));
 }

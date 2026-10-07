@@ -62,8 +62,8 @@ export function applyPresetRecommendation() {
 export async function applyModelProfile() {
     const ctx = SillyTavern.getContext();
     const byModel = ctx.chatCompletionSettings?.extensions?.claude_max?.byModel;
-    const { connected, direct, model } = connectionInfo();
-    if (!byModel || typeof byModel !== 'object' || !model || !(connected || direct)) return;
+    const { connected, model } = connectionInfo();
+    if (!byModel || typeof byModel !== 'object' || !model || !connected) return;
     const prof = byModel[modelKey(model)];
     if (!prof || typeof prof !== 'object') return;
     const done = [];

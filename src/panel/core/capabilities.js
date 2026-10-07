@@ -3,8 +3,7 @@
 // one place (they used to be scattered through the panel).
 //
 //   • TauriTavern (no server plugins), a touch device (COARSE)
-//   • which chat-completion source SillyTavern is on: this proxy ("ours"),
-//     Claude without the proxy ("direct"), or something else
+//   • which chat-completion source SillyTavern is on: this proxy ("ours"), or something else
 //   • whether the proxy can be reached only directly (no ST plugin route)
 //   • cloud-hosted SillyTavern
 //
@@ -70,40 +69,21 @@ export function debugViewState(settings) {
         : { enabled: false, hint: '先打开上面的开关，再聊一轮。' };
 }
 
-const CLAUDE_OPENROUTER = /claude/i;
-
 /**
  * Where SillyTavern sends chat requests, from its settings.
- *   connected: this proxy (everything works)
- *   direct:    Claude without this proxy — SillyTavern's own Claude source, or a Claude model on an
- *              aggregator. Local features work there too; cache layout, reply recovery, quota need the proxy.
- * `sources` (shared/sources.js) is optional: without it only the Claude source and OpenRouter are known.
+ *   connected: this proxy (everything works); anything else is not ours.
  */
-export function resolveConnection({ mainApi, oai = {}, settings, sources = null }) {
+export function resolveConnection({ mainApi, oai = {}, settings }) {
     const src = mainApi === 'openai' ? oai.chat_completion_source : null;
     if (src === 'custom' && isOurEndpoint(oai.custom_url, settings)) {
-        return { kind: 'ours', connected: true, direct: false, model: oai.custom_model, where: '本机代理', billing: '订阅' };
+        return { kind: 'ours', connected: true, model: oai.custom_model, where: '本机代理', billing: '订阅' };
     }
-    if (sources) {
-        const model = oai[sources.CLAUDE_SOURCES[src]?.modelKey] ?? null;
-        const d = sources.describeSource({ source: src, model, reverseProxy: src === 'claude' ? oai.reverse_proxy : '' });
-        if (d) return { kind: src, connected: false, direct: true, model, where: d.where, billing: d.billing };
-        return { kind: 'other', connected: false, direct: false, model: null };
-    }
-    if (src === 'claude') return { kind: 'claude', connected: false, direct: true, model: oai.claude_model ?? null, where: 'Claude 官方', billing: 'API 密钥' };
-    if (src === 'openrouter' && CLAUDE_OPENROUTER.test(oai.openrouter_model ?? '')) {
-        return { kind: 'openrouter', connected: false, direct: true, model: oai.openrouter_model, where: 'OpenRouter', billing: 'OpenRouter 额度' };
-    }
-    return { kind: 'other', connected: false, direct: false, model: null };
+    return { kind: 'other', connected: false, model: null };
 }
 
-/** A chat request about to leave (CHAT_COMPLETION_SETTINGS_READY): ours, direct to Claude, or someone else's. */
-export function classifyRequest(data, settings, sources = null) {
-    const ours = data.chat_completion_source === 'custom' && isOurEndpoint(data.custom_url, settings);
-    const direct = !ours && (sources
-        ? !!sources.describeSource({ source: data.chat_completion_source, model: data.model })
-        : data.chat_completion_source === 'claude' || (data.chat_completion_source === 'openrouter' && CLAUDE_OPENROUTER.test(String(data.model ?? ''))));
-    return { ours, direct };
+/** A chat request about to leave (CHAT_COMPLETION_SETTINGS_READY): ours or someone else's. */
+export function classifyRequest(data, settings) {
+    return { ours: data.chat_completion_source === 'custom' && isOurEndpoint(data.custom_url, settings) };
 }
 
 /** The status bar's text while a reply is being written or has just finished; '' when idle. */

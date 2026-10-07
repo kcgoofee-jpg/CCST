@@ -10,7 +10,7 @@ import { libs } from './libs.js';
 /** `where` / `billing`: 走哪 · 按什么计费, for the status bar. */
 export function connectionInfo() {
     const ctx = SillyTavern.getContext();
-    return resolveConnection({ mainApi: ctx.mainApi, oai: ctx.chatCompletionSettings ?? {}, settings: getSettings(), sources: libs.sources });
+    return resolveConnection({ mainApi: ctx.mainApi, oai: ctx.chatCompletionSettings ?? {}, settings: getSettings() });
 }
 
 const MODEL_SHORT = [
