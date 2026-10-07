@@ -12,6 +12,7 @@
 // If SillyTavern with the server plugin starts later, the plugin detects
 // this listener on the port and reuses it instead of failing.
 
+import './features/diag-log.js'; // first: keep the proxy's log lines for the diagnostics report
 import { startStandaloneListener, stopStandaloneListener, portInUseMessage, probeExistingProxy } from './api/listener.js';
 import { makeShutdownHandler } from './api/shutdown.js';
 import { networkInterfaces } from 'node:os';

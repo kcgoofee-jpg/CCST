@@ -90,6 +90,8 @@ export function extractSettings(body) {
         systemPlacement: ns.system_placement === 'hoist' ? 'hoist' : 'inline',
         // Dev tool: save the last full request (system prompt + messages) locally.
         debugDump: ns.debug_dump === true,
+        // Diagnostics: send the CLI through the wire capture (features/wire-tap.js).
+        diagCapture: ns.diag_capture === true,
         // Hash of the open chat: the usage log files each request under it (per-chat last turn).
         chatKey: typeof ns.chat_key === 'string' && /^[0-9a-f]{8,40}$/.test(ns.chat_key) ? ns.chat_key : null,
         // Slot the finished reply is kept under (features/reply-keeper.js): a hash of chat + player message.

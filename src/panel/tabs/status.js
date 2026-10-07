@@ -7,12 +7,12 @@ import { store } from '../core/store.js';
 import { libs } from '../core/libs.js';
 import { IS_TAURI, normalizeEndpoint } from '../core/capabilities.js';
 import { connectionInfo, shortModel } from '../core/connection.js';
-import { proxyErrorText } from '../core/proxy.js';
-import { el, note, iconButton, group, collapsible, stateLine, button } from '../core/dom.js';
+import { fetchProxy, proxyErrorText } from '../core/proxy.js';
+import { el, note, iconButton, group, collapsible, stateLine, button, toggleRow } from '../core/dom.js';
 import { notify } from '../core/notify.js';
 import { copyText } from '../core/external.js';
 import { refreshAll, refreshQuota, refreshStats } from '../core/live.js';
-import { getSettings } from '../core/settings.js';
+import { getSettings, saveSettingsDebounced } from '../core/settings.js';
 
 /** What /status's self-checks say needs telling (#30, #36). Pure: the status
  *  block from the store plus the endpoint the panel is set to. */
@@ -337,6 +337,116 @@ export function buildStatusTab(pane) {
     loreBox.id = 'claude_max_lore';
     lore.body.append(loreBox);
     pane.append(lore.root);
+
+    pane.append(buildDiagGroup());
+}
+
+// ── 诊断：一键复制给维护者的报告 ──
+// The proxy's half (diag-report.js: versions, usage records, proxy log, and — with capture on —
+// the shape of what the CLI really sent) plus what only the browser knows: SillyTavern's
+// version, the connection's prompt post-processing, the preset, the extensions that can
+// change the prompt. No chat text in the copied report.
+
+/** SillyTavern-side facts for the report (each one best-effort). */
+export async function clientSection(ctx = SillyTavern.getContext()) {
+    const lines = ['## 酒馆这边'];
+    const safe = async (label, fn) => {
+        try { const v = await fn(); if (v !== undefined && v !== null && v !== '') lines.push(`${label}：${v}`); } catch { /* skip */ }
+    };
+    await safe('酒馆版本', async () => {
+        const r = await fetch('/version');
+        const v = await r.json();
+        return [v.pkgVersion, v.gitBranch, v.gitRevision].filter(Boolean).join(' ');
+    });
+    const cs = ctx.chatCompletionSettings ?? {};
+    await safe('来源', () => cs.chat_completion_source);
+    await safe('地址', () => { try { const u = new URL(cs.custom_url); return `${u.hostname}:${u.port || (u.protocol === 'https:' ? 443 : 80)}${u.pathname}`; } catch { return cs.custom_url ? '(无法解析)' : ''; } });
+    await safe('模型', () => cs.custom_model || cs.claude_model || cs.openrouter_model);
+    await safe('预设', () => cs.preset_settings_openai);
+    await safe('提示词后处理', () => cs.custom_prompt_post_processing || '无');
+    await safe('上下文 / 最大回复', () => `${cs.openai_max_context} / ${cs.openai_max_tokens}`);
+    await safe('流式 / 显示思维 / 推理强度', () => `${cs.stream_openai} / ${cs.show_thoughts} / ${cs.reasoning_effort ?? '-'}`);
+    await safe('附加请求体（不含 CCST 那段）', () => {
+        const extra = String(cs.custom_include_body ?? '').replace(/^claude_subscription:[\s\S]*?(?=^\S|\s*$(?![\s\S]))/m, '').trim();
+        return extra ? `${extra.length} 字` : '无';
+    });
+    await safe('聊天楼层数', () => ctx.chat?.length);
+    await safe('扩展', async () => {
+        const r = await fetch('/api/extensions/discover', { method: 'POST', headers: ctx.getRequestHeaders?.() ?? {} });
+        const list = await r.json();
+        const disabled = new Set(ctx.extensionSettings?.disabledExtensions ?? []);
+        return list.filter((e) => e.type !== 'system').map((e) => `${e.name.replace(/^third-party\//, '')}${disabled.has(e.name) ? '(停用)' : ''}`).join(', ');
+    });
+    await safe('面板设置', () => {
+        const { accessKey, leakWords, presetRecoRecord, checkupMuted, ...rest } = getSettings();
+        return JSON.stringify(rest);
+    });
+    return lines.join('\n');
+}
+
+async function proxyText(path, direct) {
+    const r = await fetchProxy(path, direct);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r;
+}
+
+function buildDiagGroup() {
+    const g = group('诊断', '缓存命中不对、回复出错时，复制报告发给维护者。报告里没有聊天内容。');
+    const settings = getSettings();
+    g.body.append(toggleRow({
+        id: 'claudeMaxDiagCapture',
+        title: '记录发给 Claude 的原始请求',
+        desc: '开着时，报告里会多出每一轮实际发出的请求结构、缓存读写和额度状态。只存在代理内存里，重启就没了。',
+        more: '原理：让 Claude Code 先经过代理内部的一个本机转发口再发出去，转发不改任何内容。用 SOCKS 代理上网的话，转发口可能连不出去，聊天报错就把它关掉。查完问题也建议关掉。',
+        checked: !!settings.diagCapture,
+        onChange: (on) => { getSettings().diagCapture = on; saveSettingsDebounced(); },
+    }));
+    const copy = button('复制诊断报告', async () => {
+        copy.disabled = true;
+        try {
+            const proxyPart = await proxyText('/diag/report', '/v1/diag/report').then((r) => r.text());
+            const text = `# CCST 诊断报告 ${new Date().toLocaleString()}\n\n${await clientSection()}\n\n${proxyPart}\n`;
+            if (await copyText(text)) {
+                notify('ok', '已复制诊断报告', '直接粘贴发给维护者即可（不含聊天内容）。', { ms: 8000 });
+            } else {
+                showFallback(text);
+            }
+        } catch (err) {
+            notify('warn', '没拿到诊断报告', proxyErrorText('诊断报告', err) ?? String(err?.message ?? err));
+        } finally {
+            copy.disabled = false;
+        }
+    }, { icon: 'fa-copy', primary: true });
+    const full = button('下载完整请求（含聊天内容）', async () => {
+        try {
+            const data = await proxyText('/diag/full', '/v1/diag/full').then((r) => r.json());
+            data.client = await clientSection();
+            const blob = new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' });
+            const a = el('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `ccst-diag-${Date.now()}.json`;
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+        } catch (err) {
+            notify('warn', '没拿到完整请求', proxyErrorText('完整请求', err) ?? String(err?.message ?? err));
+        }
+    }, { icon: 'fa-download' });
+    const row = el('div', 'cm-btn-row');
+    row.append(copy, full);
+    g.body.append(row);
+    g.body.append(el('small', 'cm-hint', '「完整请求」里有角色卡、预设和聊天原文，只在维护者需要时发，别公开贴。'));
+    const fallback = el('textarea', 'text_pole');
+    fallback.id = 'claude_max_diag_fallback';
+    fallback.rows = 8;
+    fallback.hidden = true;
+    g.body.append(fallback);
+    function showFallback(text) {
+        fallback.value = text;
+        fallback.hidden = false;
+        fallback.select();
+        notify('warn', '没能自动复制', '报告已放在下面的框里，全选复制即可。');
+    }
+    return g.root;
 }
 
 /** 状态 → 缓存: how this source caches. Direct sources: SillyTavern's own settings, which

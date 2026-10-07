@@ -92,6 +92,7 @@ export function buildIncludeBodyYaml(settings, quiet = false, slot = null, model
     lines.push(`  lore_tail: ${settings.loreTail}`);
     lines.push(`  fold_tail: ${settings.foldTail}`);
     if (settings.debugDump) lines.push('  debug_dump: true');
+    if (settings.diagCapture) lines.push('  diag_capture: true');
     if (slot && !quiet) lines.push(`  reply_slot: ${slot}`);
     // Which chat this is (a hash): the proxy files the usage record under it, so 状态 shows this chat's last turn.
     const chatKey = quiet ? null : chatKeyOf(SillyTavern.getContext());

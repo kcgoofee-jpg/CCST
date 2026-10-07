@@ -265,6 +265,12 @@ export function summarizeStats(now = Date.now(), { chat = null } = {}) {
     return { today: aggregate(today), week: aggregate(main), background, lastRequest, lastCache, lastError, pricesAsOf: PRICES_AS_OF };
 }
 
+/** The last `n` usage records, oldest first (the diagnostics report). */
+export function recentEntries(n = 20) {
+    const all = load();
+    return all.slice(-n);
+}
+
 export function handleStats(req, res) {
     const chat = typeof req.query?.chat === 'string' && /^[0-9a-zA-Z_-]{1,40}$/.test(req.query.chat) ? req.query.chat : null;
     res.json({ ok: true, ...summarizeStats(Date.now(), { chat }) });

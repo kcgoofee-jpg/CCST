@@ -36,6 +36,7 @@ import { renderTranscript } from './transcript.js';
 import { extractSettings } from '../features/settings.js';
 import { parseModelRequest, effortForModel, isExtendedContextKnownUnavailable, recordExtendedContextUnavailable } from './models.js';
 import { buildSubprocessEnv, pickApiKeyFromAuthHeader } from './env.js';
+import { tapBaseUrl } from '../features/wire-tap.js';
 import { resolveBackendConfig } from '../features/backend-config.js';
 import { BACKEND_LABELS, mapModelId } from '../../shared/backends.js';
 import { buildSystemPrompt, extractSystemText } from './system-prompt.js';
@@ -701,6 +702,11 @@ async function completeChat(req, res, body, settings, conn) {
 
     // Retry ladder state.
     let oneMActive = modelInfo.oneM && !isExtendedContextKnownUnavailable();
+    // Diagnostics (panel → 状态 → 诊断): route the CLI through the in-process wire
+    // capture. Anthropic's own endpoint only — other backends keep their URL.
+    const tapUrl = settings.diagCapture && (billedAs === 'subscription' || billedAs === 'apikey')
+        ? await tapBaseUrl().catch((err) => { console.warn(`${PLUGIN_TAG} 诊断抓包没能启动，本轮不记录：${err.message}`); return null; })
+        : null;
     let didTokenRefresh = false;
     let rateLimitRetries = 0;
 
@@ -712,6 +718,7 @@ async function completeChat(req, res, body, settings, conn) {
             conn.controller = abortController;
             partialUsage = null;
             const env = buildSubprocessEnv({ envPins: modelInfo.envPins, maxTokens: settings.maxTokens, apiKey, backend });
+            if (tapUrl) env.ANTHROPIC_BASE_URL = tapUrl;
             const cfg = buildQueryConfig({
                 messages, modelInfo, oneMActive, settings,
                 abortController, stream: wantStream, env, sdk,

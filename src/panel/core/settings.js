@@ -26,6 +26,7 @@ export const defaultSettings = {
     useResume: true,
     inlineSystem: true,
     debugDump: false,
+    diagCapture: false,      // 诊断：让 Claude Code 经过代理内部的转发口，记录原始请求（状态 → 诊断）
     heuristicChecks: false,  // 5.0：体检（实验）总开关（字数/段落/禁词/重复/隐藏设定/角色卡自动检查）；新老用户都默认关
     checkupToast: true,      // 本轮体检发现问题时弹提示
     leakWords: {},           // 角色卡 → 隐藏设定关键词（逗号分隔）

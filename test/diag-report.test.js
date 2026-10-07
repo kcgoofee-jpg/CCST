@@ -1,0 +1,59 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+
+import { shapeOf, firstDifference } from '../src/proxy/features/diag-report.js';
+import { usageOf } from '../src/proxy/features/wire-tap.js';
+
+const billing = (v) => ({ type: 'text', text: `x-anthropic-billing-header: cc_version=2.1.285.${v}; cc_entrypoint=sdk-ts;` });
+const rem = (t) => ({ type: 'text', text: `<system-reminder>\n${t}\n</system-reminder>\n` });
+const body = (sysV, messages) => ({
+    model: 'claude-opus-4-6', max_tokens: 100,
+    system: [billing(sysV), { type: 'text', text: '角色卡'.repeat(100), cache_control: { type: 'ephemeral', ttl: '1h' } }],
+    messages,
+});
+
+test('shape carries sizes, hashes and breakpoints, never the text', () => {
+    const s = shapeOf(body('abc', [{ role: 'user', content: [rem('环境'), { type: 'text', text: '秘密台词', cache_control: { type: 'ephemeral', ttl: '1h' } }] }]));
+    assert.equal(s.cliVersion, '2.1.285');
+    assert.equal(s.system[0].kind, 'billing');
+    assert.equal(s.system[1].cc, '1h');
+    assert.equal(s.messages[0].blocks[0].kind, 'reminder');
+    assert.ok(!JSON.stringify(s).includes('秘密台词'));
+    assert.ok(!JSON.stringify(s).includes('角色卡'));
+});
+
+test('billing header changes are ignored; a history message that lost its reminder is named', () => {
+    const t1 = shapeOf(body('aaa', [{ role: 'user', content: [rem('环境'), { type: 'text', text: '你好' }] }]));
+    const t2 = shapeOf(body('bbb', [
+        { role: 'user', content: '你好' },
+        { role: 'assistant', content: [{ type: 'text', text: '嗯' }] },
+        { role: 'user', content: [rem('环境'), { type: 'text', text: '再见' }] },
+    ]));
+    assert.match(firstDifference(t1, t2), /逐轮还原没生效/);
+    const t2b = shapeOf(body('ccc', [
+        { role: 'user', content: [rem('环境'), { type: 'text', text: '你好' }] },
+        { role: 'assistant', content: [{ type: 'text', text: '嗯' }] },
+        { role: 'user', content: [rem('环境'), { type: 'text', text: '再见' }] },
+    ]));
+    assert.match(firstDifference(t1, t2b), /只在末尾新增/);
+});
+
+test('a changed system prompt and a model switch are named', () => {
+    const a = shapeOf(body('a', [{ role: 'user', content: 'x' }]));
+    const b = shapeOf({ ...body('a', [{ role: 'user', content: 'x' }]), system: [billing('a'), { type: 'text', text: '别的预设' }] });
+    assert.match(firstDifference(a, b), /系统提示词第 1 块就不同/);
+    assert.match(firstDifference(a, { ...a, model: 'claude-opus-5-5' }), /模型不同/);
+});
+
+test('usage is read from a streamed reply (message_start + message_delta)', () => {
+    const sse = [
+        'event: message_start',
+        'data: {"type":"message_start","message":{"usage":{"input_tokens":3,"cache_read_input_tokens":900,"cache_creation_input_tokens":20,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":20}}}}',
+        '',
+        'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":7}}',
+    ].join('\n');
+    const u = usageOf(sse);
+    assert.equal(u.cache_read_input_tokens, 900);
+    assert.equal(u.output_tokens, 7);
+    assert.equal(u.cache_creation.ephemeral_1h_input_tokens, 20);
+});

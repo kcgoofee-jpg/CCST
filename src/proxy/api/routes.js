@@ -31,6 +31,7 @@ import { handleQuota } from '../features/oauth.js';
 import { handleStats } from '../features/usage-stats.js';
 import { handleBackendGet, handleBackendPost } from '../features/backend-config.js';
 import { handleDebugLast } from '../features/debug-dump.js';
+import { handleDiagFull, handleDiagReport } from '../features/diag-report.js';
 import { handleCancelReply, handleKeptReply } from '../features/reply-keeper.js';
 import { countInFlight, handleControlAction, handleControlLog, handleControlStatus, handleDiagRequest, handleDiagResult } from '../platform/control.js';
 import { asyncRoute, allowCors, allowCorsGet, allowCorsGetTrusted, guardPostOrigin } from './guards.js';
@@ -41,6 +42,9 @@ export const ROUTES = [
     { method: 'get', standalone: '/v1/usage/quota', plugin: '/quota', handler: handleQuota, async: true, cors: 'get' },
     { method: 'get', standalone: '/v1/usage/stats', plugin: '/stats', handler: handleStats, cors: 'get' },
     { method: 'get', standalone: '/v1/debug/last', plugin: '/debug', handler: handleDebugLast, cors: 'get-trusted' },
+    // Diagnostics report (features/diag-report.js): text without chat content; full adds captured bodies.
+    { method: 'get', standalone: '/v1/diag/report', plugin: '/diag/report', handler: handleDiagReport, cors: 'get-trusted' },
+    { method: 'get', standalone: '/v1/diag/full', plugin: '/diag/full', handler: handleDiagFull, cors: 'get-trusted' },
     // countInFlight also catches the handler's rejections.
     { method: 'post', standalone: '/v1/chat/completions', handler: countInFlight(handleChatCompletions), origin: true },
     // Kept replies (features/reply-keeper.js): fetch one back, or cancel (the panel's Stop).

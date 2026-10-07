@@ -26,6 +26,7 @@
 //   CLAUDE_SUBSCRIPTION_DEBUG_DIR=…     where debug dumps go (default data/debug)
 //   CLAUDE_SUBSCRIPTION_CONTEXT_PIN_FILE=…|off  CLI context pin file (off = memory only)
 
+import './features/diag-log.js'; // first: keep the proxy's log lines for the diagnostics report
 import express from 'express';
 import { cpSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
