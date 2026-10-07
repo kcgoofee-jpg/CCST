@@ -332,8 +332,18 @@ const k = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
  * quota accounting is not public; this is for comparing turns, presets and settings.
  */
 export function equivalentTokens(e) {
-    const write = cacheWriteMultiplier(e.cacheTtl);
-    return Math.round((e.inputTokens ?? 0) + 0.1 * (e.cacheReadTokens ?? 0) + write * (e.cacheCreationTokens ?? 0) + 5 * (e.outputTokens ?? 0));
+    const p = costParts(e);
+    return Math.round(p.write + p.output + p.read + p.input);
+}
+
+/** equivalentTokens split by what it paid for (the panel's 「花在」). Output includes thinking. */
+export function costParts(e) {
+    return {
+        write: Math.round(cacheWriteMultiplier(e.cacheTtl) * (e.cacheCreationTokens ?? 0)),
+        output: 5 * (e.outputTokens ?? 0),
+        read: Math.round(0.1 * (e.cacheReadTokens ?? 0)),
+        input: e.inputTokens ?? 0,
+    };
 }
 
 /**
@@ -462,8 +472,8 @@ export function explainCache(entry, prevEntry = null) {
     }
     const equiv = equivalentTokens(entry);
     const noCache = equivalentTokens({ inputTokens: total, outputTokens: entry.outputTokens });
-    reasons.push(`这一轮约合 ${k(equiv)} 等效输入 token；完全不用缓存约 ${k(noCache)}。按官方价格比例折算，订阅额度怎么算官方未公开，适合前后对比。`);
-    return { read, wrote, hitPct, equiv, firstTurn: !d || !!d.firstTurn, headline: `读取缓存 ${k(read)} · 重新写入 ${k(wrote)} · 命中 ${hitPct}% · 约 ${k(equiv)} 等效`, reasons };
+    reasons.push(`「花在」按 API 价格比例折算成等效输入 token：读缓存 0.1 倍、写缓存 ${entry.cacheTtl === '5m' ? '1.25' : '2'} 倍、输出（含思考）5 倍；完全不用缓存约 ${k(noCache)}。订阅额度怎么扣官方未公开，适合前后对比。`);
+    return { read, wrote, hitPct, equiv, cost: costParts(entry), firstTurn: !d || !!d.firstTurn, headline: `读取缓存 ${k(read)} · 重新写入 ${k(wrote)} · 命中 ${hitPct}% · 约 ${k(equiv)} 等效`, reasons };
 }
 
 /** Test seam. */
