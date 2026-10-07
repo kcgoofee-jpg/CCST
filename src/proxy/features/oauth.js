@@ -14,10 +14,11 @@
 // /v1/usage/quota so the UI extension can show "5h window: 62%, resets 18:40"
 // and prevent mid-scene lockouts.
 
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { readFileSync, writeFileSync, renameSync } from 'node:fs';
-import { join } from 'node:path';
-import { homedir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { homedir, tmpdir } from 'node:os';
 
 
 const PLUGIN_TAG = '[claude-subscription]';
@@ -136,6 +137,28 @@ export function isStaleSessionError(text) {
 
 let inflightRefresh = null;
 
+/** The CLI binary the SDK runs (its per-platform package), or the configured one. */
+function cliBinary() {
+    if (process.env.CLAUDE_SUBSCRIPTION_CLAUDE_PATH) return process.env.CLAUDE_SUBSCRIPTION_CLAUDE_PATH;
+    try {
+        const pkg = createRequire(import.meta.url).resolve(`@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}/package.json`);
+        return join(dirname(pkg), process.platform === 'win32' ? 'claude.exe' : 'claude');
+    } catch {
+        return null;
+    }
+}
+
+/** One minimal Haiku call, so the CLI refreshes and stores its own login token. */
+async function refreshViaCli() {
+    const bin = cliBinary();
+    if (!bin) return false;
+    const { buildSubprocessEnv } = await import('../core/env.js');
+    const env = buildSubprocessEnv({ envPins: {} });
+    return new Promise((resolve) => {
+        execFile(bin, ['-p', 'ok', '--model', 'haiku'], { env, cwd: tmpdir(), timeout: 60_000 }, (err) => resolve(!err));
+    });
+}
+
 export function refreshOAuthToken() {
     if (inflightRefresh) return inflightRefresh;
     inflightRefresh = doRefresh().finally(() => { inflightRefresh = null; });
@@ -145,8 +168,18 @@ export function refreshOAuthToken() {
 async function doRefresh() {
     const path = credentialsPath();
     const { source, creds } = loadCredentials();
+    if (source === 'keychain') {
+        // The keychain token belongs to the CLI. A chat's CLI process sent the
+        // expired token and failed instead of refreshing it (seen 2026-10-07,
+        // CLI 2.1.285), while a plain `claude -p` refreshed it at once — so
+        // run one tiny call and let the CLI write the new token itself.
+        credentialCache = null;
+        const ok = await refreshViaCli();
+        console.warn(ok ? `${PLUGIN_TAG} 登录已过期：已让 Claude CLI 刷新，重试这一条` : `${PLUGIN_TAG} 登录已过期，Claude CLI 也没能刷新：在终端运行 npm run login`);
+        return ok;
+    }
     if (source !== 'file') {
-        // Keychain/env tokens are owned by the CLI — it refreshes them itself.
+        // Env tokens (CLAUDE_CODE_OAUTH_TOKEN) are long-lived; nothing to refresh here.
         credentialCache = null;
         if (source) console.warn(`${PLUGIN_TAG} token refresh skipped: ${source} credentials are refreshed by the Claude CLI on the next chat`);
         return false;
