@@ -1,10 +1,13 @@
 //! CCST 下一代后端——CLI 入口。
 //!
-//! P0 子命令：
+//! 子命令：
 //!   ccst login            浏览器 OAuth 登录（订阅）
 //!   ccst auth-status      凭据状态（是否登录 / 是否需要刷新）
 //!   ccst probe            直连发一条最小订阅请求，验证通道（P0 验收）
 //!   ccst serve            启动反代（P1 起逐步落地）
+
+mod serve;
+mod state;
 
 use anyhow::{bail, Context};
 use std::io::{BufRead, Write};
@@ -17,7 +20,7 @@ async fn main() -> anyhow::Result<()> {
         "login" => login().await,
         "auth-status" => auth_status().await,
         "probe" => probe().await,
-        "serve" => bail!("serve 尚未实现：P1 落地（当前处于 P0 协议尖兵阶段）"),
+        "serve" => serve::serve().await,
         _ => {
             println!("用法: ccst <login [--import-cli]|auth-status|probe|serve>");
             println!("  login --import-cli  从本机已登录的 Claude CLI 导入凭据（免浏览器授权）");

@@ -246,6 +246,16 @@ pub fn save_credentials(creds: &Credentials) -> Result<(), AuthError> {
     write_private(&path, &serde_json::to_string_pretty(creds)?).map_err(AuthError::Io)
 }
 
+/// 强制刷新（上游 401 时重试前调用），无论剩余寿命。
+pub async fn force_refresh() -> Result<Credentials, AuthError> {
+    let creds = load_credentials()?;
+    let rt = creds.refresh_token.clone().ok_or(AuthError::RefreshImpossible)?;
+    let resp = refresh(&rt).await?;
+    let fresh = Credentials::from_response(&resp, Some(&rt));
+    save_credentials(&fresh)?;
+    Ok(fresh)
+}
+
 /// 取可用 access token：没过期直接用；快过期且有 refresh token 则刷新并落盘。
 pub async fn ensure_fresh() -> Result<Credentials, AuthError> {
     let creds = load_credentials()?;

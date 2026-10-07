@@ -8,6 +8,14 @@
 use serde::{Deserialize, Serialize};
 
 pub const ANTHROPIC_BASE: &str = "https://api.anthropic.com";
+
+/// 测试/诊断可覆盖上游地址（CCST_ANTHROPIC_BASE）。
+pub fn base_url() -> String {
+    std::env::var("CCST_ANTHROPIC_BASE")
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .unwrap_or_else(|| ANTHROPIC_BASE.to_string())
+}
 pub const API_VERSION: &str = "2023-06-01";
 /// 订阅（OAuth 走 Claude Code 通道）必需的 beta 头。
 pub const BETA_OAUTH: &str = "oauth-2025-04-20";
@@ -42,6 +50,28 @@ impl SubscriptionClient {
         h
     }
 
+    /// 发送 Messages 请求，返回原始响应（状态码与流由调用方处理）。
+    pub async fn post_messages(
+        &self,
+        body: &serde_json::Value,
+        extra_beta: &[String],
+    ) -> anyhow::Result<reqwest::Response> {
+        let mut headers = self.headers();
+        if !extra_beta.is_empty() {
+            let joined = format!("{BETA_OAUTH},{}", extra_beta.join(","));
+            if let Ok(v) = reqwest::header::HeaderValue::from_str(&joined) {
+                headers.insert(reqwest::header::HeaderName::from_static("anthropic-beta"), v);
+            }
+        }
+        self.http
+            .post(format!("{}/v1/messages", base_url()))
+            .headers(headers)
+            .json(body)
+            .send()
+            .await
+            .map_err(Into::into)
+    }
+
     /// 非流式最小探测：验证凭据与通道是否可用（P0 验收用）。
     pub async fn probe(&self, model: &str) -> anyhow::Result<ProbeOutcome> {
         let body = serde_json::json!({
@@ -49,13 +79,7 @@ impl SubscriptionClient {
             "max_tokens": 32,
             "messages": [{"role": "user", "content": "Reply with exactly: ok"}],
         });
-        let resp = self
-            .http
-            .post(format!("{ANTHROPIC_BASE}/v1/messages"))
-            .headers(self.headers())
-            .json(&body)
-            .send()
-            .await?;
+        let resp = self.post_messages(&body, &[]).await?;
         let status = resp.status().as_u16();
         let payload = resp.text().await?;
         Ok(match status {
