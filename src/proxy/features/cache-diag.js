@@ -389,10 +389,10 @@ export function explainCache(entry, prevEntry = null) {
         const expired = prevEntry?.ok ? cacheExpired(entry, prevEntry) : null;
         if (expired) {
             reasons.push(expired.ttl === '5m'
-                ? `距上一轮开始已过 ${expired.gapMin} 分钟，上一轮的缓存只按 5 分钟写入，已经过期，这一轮整段重写。5.2.1 起代理固定要求 1 小时缓存；更新后仍看到这条，说明环境变量 CLAUDE_CODE_PROMPT_CACHE_TTL 或 FORCE_PROMPT_CACHING_5M 被设成了 5 分钟。`
+                ? `距上一轮开始已过 ${expired.gapMin} 分钟，上一轮的缓存只按 5 分钟写入（订阅额度用超、开始扣额外用量时 Claude Code 会这样做），已经过期，这一轮整段重写。5.2.1 起代理固定要求 1 小时；更新后仍看到这条，检查环境变量 CLAUDE_CODE_PROMPT_CACHE_TTL / FORCE_PROMPT_CACHING_5M。`
                 : `距上一轮开始已过 ${expired.gapMin} 分钟，超过了 1 小时的缓存有效期，这一轮整段重写，属正常现象。`);
         } else if (entry.cacheTtl === '5m') {
-            reasons.push('这一轮的缓存只按 5 分钟写入：下一轮若在 5 分钟后才发（长回复加阅读时间通常会超过），就读不到了。5.2.1 起代理固定要求 1 小时；仍看到这条请检查环境变量 CLAUDE_CODE_PROMPT_CACHE_TTL / FORCE_PROMPT_CACHING_5M。');
+            reasons.push('这一轮的缓存只按 5 分钟写入（多半是订阅额度用超、在扣额外用量）：下一轮若在 5 分钟后才发（长回复加阅读时间通常会超过），就读不到了。5.2.1 起代理固定要求 1 小时；仍看到这条请检查环境变量 CLAUDE_CODE_PROMPT_CACHE_TTL / FORCE_PROMPT_CACHING_5M。');
         }
         if (cacheAnomaly(entry, prevEntry)) {
             reasons.push('异常：系统提示词和聊天记录都没变、也没过缓存有效期，聊天记录却没读到缓存，代理的「逐轮还原」可能失效了（连着两轮会自动重置一次）。持续出现的话，在 CCST 文件夹运行 node scripts/wire-diagnosis.mjs，把输出发给维护者。刚重启过代理的第一轮除外。');

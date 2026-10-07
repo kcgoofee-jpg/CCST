@@ -124,7 +124,7 @@ The panel has four tabs; you mostly need the first. The first time, click **一�
 ## FAQ
 
 **Cache hit stays at 0%; only rerolls hit.**
-Update to **5.2.1** and restart SillyTavern. The cache was expiring: the Claude Code CLI sometimes writes the cache for only 5 minutes, and a 3–4 minute reply plus reading time outlasts that, while a reroll is sent right away. From 5.2.1 the proxy always asks for a 1-hour cache. No downgrade and no file deletion needed.
+Update to **5.2.1** and restart SillyTavern. Once a subscription goes over its plan's usage and draws on extra usage, Claude Code keeps the cache for only 5 minutes, so a long reply plus reading time lets it expire while a quick reroll still hits; from 5.2.1 the proxy always asks for 1 hour. Still 0% after updating: read the Status tab details, or send the data as described below.
 
 **The Status tab says the system prompt / history differs from message N on.**
 Your preset or world info changes the content every turn (keyword-triggered world info, random macros, regexes that rewrite old messages). The details line says where and what to do.

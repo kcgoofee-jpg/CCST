@@ -8,7 +8,7 @@
 //   1. 起一个本地 tap（127.0.0.1 随机端口），把 CLI 发往 Anthropic 的请求和回复
 //      逐字节记录后原样转发（凭据照带）。
 //   2. 在测试端口起一个临时代理（用量记到临时目录，不碰你的 data/），把 CLI 指到
-//      tap，自动跑 3 轮对话（系统提示词约 2 万 token，够得上所有模型的缓存下限）。
+//      tap，自动跑 4 轮对话（系统提示词约 2 万 token，够得上所有模型的缓存下限）。
 //   3. 输出每轮：CLI 要求的缓存有效期（5m / 1h）、Anthropic 回的缓存读 / 写，以及
 //      相邻两轮请求的前缀在哪里分叉。
 //
@@ -104,15 +104,16 @@ const chat = async (turns) => {
     const res = await fetch(`http://127.0.0.1:${proxyPort}/v1/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: MODEL, max_tokens: 2000, messages: [{ role: 'system', content: system }, ...turns] }),
+        // 带上面板参数：不带的请求会被当成后台调用，不做逐轮还原，测不到真实聊天的行为
+        body: JSON.stringify({ claude_subscription: {}, model: MODEL, max_tokens: 2000, messages: [{ role: 'system', content: system }, ...turns] }),
     });
     return res.json().catch(() => ({}));
 };
 
-console.log(`${TAG} 代理（测试端口 ${proxyPort}）与 tap（${tapPort}）已就绪，用 ${MODEL} 跑 3 轮对话……`);
+console.log(`${TAG} 代理（测试端口 ${proxyPort}）与 tap（${tapPort}）已就绪，用 ${MODEL} 跑 4 轮对话……`);
 await sleep(3000);
 const h = [];
-for (const line of ['请只回答：好的', '再回答一次', '最后再回答一次']) {
+for (const line of ['请只回答：好的', '再回答一次', '第三次回答', '最后再回答一次']) {
     h.push({ role: 'user', content: line });
     const r = await chat(h);
     const reply = r?.choices?.[0]?.message?.content;
@@ -180,6 +181,8 @@ for (let i = 1; i < turns.length; i++) {
         verdicts.push(`第 ${i}→${i + 1} 轮：前缀逐字一致，只在末尾新增 ✅`);
     } else if (broke.at === a.messages.length - 1 && /system-reminder/.test(a.messages[broke.at].blocks.join(''))) {
         verdicts.push(`第 ${i}→${i + 1} 轮：断在上一轮最后一条消息——CLI 只给当前轮附带 <system-reminder> 环境块，历史里不带。这是 CLI 的设计，只损失最后一小段 ✅`);
+    } else if (broke.at === 0 && /system-reminder/.test(b.messages[0].blocks.join('')) && !/system-reminder/.test(a.messages[0].blocks.join(''))) {
+        verdicts.push(`第 ${i}→${i + 1} 轮：断在第 1 条消息——代理第一次把 CLI 的上下文钉到首条消息上（之后每轮固定不变），一次性的 ✅`);
     } else {
         verdicts.push(`第 ${i}→${i + 1} 轮：前缀断在${broke.where} ❌\n    ${broke.detail}`);
     }
