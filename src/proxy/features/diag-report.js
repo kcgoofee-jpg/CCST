@@ -148,7 +148,11 @@ export function stChanges(e, prev) {
     const added = (b.wi ?? []).filter((x) => !(a.wi ?? []).includes(x));
     const gone = (a.wi ?? []).filter((x) => !(b.wi ?? []).includes(x));
     if (added.length || gone.length) out.push(`世界书${added.length ? ` +${added.join(',')}` : ''}${gone.length ? ` −${gone.join(',')}` : ''}`);
-    return out.length ? `酒馆变化: ${out.join('；')}` : '';
+    if (out.length) return `酒馆变化: ${out.join('；')}`;
+    // Nothing changed in SillyTavern yet the prompt did: a script / regex of the preset or card.
+    const d = e.cacheDiag ?? {};
+    const changed = d.systemChanged || d.replyChanged || (d.historyDiffAt != null);
+    return changed && !d.reroll && b.mut?.length ? `酒馆没改设置，可能是: ${b.mut.join(',')}` : '';
 }
 
 function usageEntryLine(e, prev) {
@@ -192,7 +196,11 @@ export function buildReport({ usageCount = 20, exchangeCount = 12, logCount = 12
     const entries = recentEntries(usageCount);
     out.push('', `## 最近 ${entries.length} 次请求（用量记录，不含内容）`);
     out.push('时间 | 类型 | 模型 | 路径 | 形状 | 缓存 | 耗时 | 间隔 | 诊断 | 提示');
-    entries.forEach((e, i) => out.push(usageEntryLine(e, entries.slice(0, i).reverse().find((p) => !p.auxiliary && p.ok && !e.auxiliary))));
+    // Each line against the previous successful request of the same chat (any chat if unknown).
+    entries.forEach((e, i) => {
+        const before = entries.slice(0, i).reverse().filter((p) => !p.auxiliary && p.ok && !e.auxiliary);
+        out.push(usageEntryLine(e, before.find((p) => e.chatKey && p.chatKey === e.chatKey) ?? before[0]));
+    });
 
     const ex = capturedExchanges().slice(-exchangeCount);
     out.push('', `## 抓包：CLI 实际发给 Anthropic 的请求（${ex.length ? `最近 ${ex.length} 条` : '没有记录——面板「状态 → 诊断」里打开「记录原始请求」后再聊几轮（代理环境变量里有 socks 等非 http 代理时不记录）'}）`);

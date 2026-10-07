@@ -153,7 +153,9 @@ test('explainCache flags history that stopped caching although nothing changed',
 
 test('equivalentTokens uses list-price ratios', async () => {
     const { equivalentTokens } = await import('../src/proxy/features/cache-diag.js');
-    assert.equal(equivalentTokens({ inputTokens: 2, cacheReadTokens: 50000, cacheCreationTokens: 2800, outputTokens: 5000 }), 2 + 5000 + 3500 + 25000);
+    // 1-hour writes (what CCST asks for) at 2×, 5-minute writes at 1.25×.
+    assert.equal(equivalentTokens({ inputTokens: 2, cacheReadTokens: 50000, cacheCreationTokens: 2800, outputTokens: 5000 }), 2 + 5000 + 5600 + 25000);
+    assert.equal(equivalentTokens({ inputTokens: 2, cacheReadTokens: 50000, cacheCreationTokens: 2800, outputTokens: 5000, cacheTtl: '5m' }), 2 + 5000 + 3500 + 25000);
 });
 
 test('a reroll (same conversation sent again) is marked', () => {

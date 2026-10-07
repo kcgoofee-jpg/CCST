@@ -203,7 +203,10 @@ function aggregate(list) {
     const cacheWrite = sum('cacheCreationTokens');
     // The hit rate describes new turns: rerolls read back everything and
     // would flatter it.
-    const fresh = ok.filter((e) => !e.cacheDiag?.reroll);
+    // A resend right after a failed request is the turn itself, not a reroll.
+    const failedBefore = new Set();
+    for (let i = 1; i < list.length; i++) if (!list[i - 1].ok && list[i - 1].chatKey === list[i].chatKey) failedBefore.add(list[i]);
+    const fresh = ok.filter((e) => !e.cacheDiag?.reroll || failedBefore.has(e));
     const freshRead = sum('cacheReadTokens', fresh);
     const promptTotal = sum('inputTokens', fresh) + freshRead + sum('cacheCreationTokens', fresh);
     const timed = ok.filter((e) => e.durationMs > 0);
@@ -260,7 +263,8 @@ export function summarizeStats(now = Date.now(), { chat = null } = {}) {
         const ex = explainError(lastFailure.errorRaw);
         lastError = { at: lastFailure.at, model: lastFailure.model, code: lastFailure.errorCode, message: ex.message, hint: ex.hint, raw: lastFailure.errorRaw, background: !!lastFailure.auxiliary };
     }
-    const prevRequest = mine.length > 1 ? mine[mine.length - 2] : null;
+    // Compared with the previous request that went through (a failed one wrote nothing).
+    const prevRequest = mine.slice(0, -1).reverse().find((e) => e.ok) ?? null;
     const lastCache = explainCache(lastRequest, prevRequest);
     const bgToday = bg.filter((e) => e.at >= startOfDay.getTime());
     const background = { today: aggregate(bgToday), week: aggregate(bg) };

@@ -146,3 +146,21 @@ test('user-facing failure texts: no preset names, no English sentences, plugin-f
     assert.ok(login.hint.indexOf('npm run login') < login.hint.indexOf('酒馆工具'));
     assert.match(explainError('???').message, /原因不明/);
 });
+
+test('the last-turn card compares with the previous successful request, and a resend after a failure is no reroll', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ccst-stats-'));
+    process.env.CLAUDE_SUBSCRIPTION_STATS_FILE = join(dir, 'usage.jsonl');
+    const stats = await import(`../src/proxy/features/usage-stats.js?fail=${Date.now()}`);
+    const log = console.log; console.log = () => {};
+    const usage = { input_tokens: 3, output_tokens: 100, cache_read_input_tokens: 9000, cache_creation_input_tokens: 1000 };
+    const base = { backend: 'subscription', path: 'resume', stream: true, chatKey: 'k1', textChars: 10, finish: 'stop' };
+    try {
+        stats.recordRequest({ ...base, model: 'claude-opus-4-6', effort: 'low', startedAt: Date.now() - 3000, usage, cacheDiag: { chat: 'c', firstTurn: false } });
+        stats.recordRequest({ ...base, model: 'claude-opus-4-6', effort: 'high', startedAt: Date.now() - 2000, error: 'API Error: 401 OAuth access token has expired' });
+        stats.recordRequest({ ...base, model: 'claude-opus-4-6', effort: 'low', startedAt: Date.now() - 1000, usage, cacheDiag: { chat: 'c', firstTurn: false, reroll: true } });
+    } finally { console.log = log; }
+    const s = stats.summarizeStats(Date.now(), { chat: 'k1' });
+    assert.equal(s.week.rerolls, 0, 'the resend after the failed request is the turn itself');
+    assert.ok(!s.lastCache.reasons.some((r) => /思考深度和上一轮不同/.test(r)), 'compared with the last successful request, not the failed one');
+    delete process.env.CLAUDE_SUBSCRIPTION_STATS_FILE;
+});

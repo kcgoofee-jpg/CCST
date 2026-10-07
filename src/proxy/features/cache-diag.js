@@ -310,7 +310,9 @@ const k = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
  * not public; this is for comparing turns, presets and settings.
  */
 export function equivalentTokens(e) {
-    return Math.round((e.inputTokens ?? 0) + 0.1 * (e.cacheReadTokens ?? 0) + 1.25 * (e.cacheCreationTokens ?? 0) + 5 * (e.outputTokens ?? 0));
+    // Cache writes: 2× input for the 1-hour cache CCST asks for, 1.25× for 5 minutes.
+    const write = e.cacheTtl === '5m' ? 1.25 : 2;
+    return Math.round((e.inputTokens ?? 0) + 0.1 * (e.cacheReadTokens ?? 0) + write * (e.cacheCreationTokens ?? 0) + 5 * (e.outputTokens ?? 0));
 }
 
 /**

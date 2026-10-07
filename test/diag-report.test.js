@@ -67,3 +67,11 @@ test('stChanges names what changed in SillyTavern between two turns of a chat', 
     assert.match(stChanges({ chatKey: 'k', st: st({ order: 'bb' }) }, a), /预设条目改动/);
     assert.equal(stChanges({ chatKey: 'other', st: st({ pp: 'strict' }) }, a), '', 'another chat is not compared');
 });
+
+test('report line names the scripts when the prompt changed with no SillyTavern change', async () => {
+    const { stChanges } = await import('../src/proxy/features/diag-report.js');
+    const st = { preset: 'Izumi', pp: 'none', order: 'aa', wi: [], mut: ['脚本「泉此方悬浮窗」'] };
+    const line = stChanges({ chatKey: 'k', st, cacheDiag: { systemChanged: true } }, { chatKey: 'k', st });
+    assert.match(line, /酒馆没改设置，可能是: 脚本「泉此方悬浮窗」/);
+    assert.equal(stChanges({ chatKey: 'k', st, cacheDiag: { reroll: true } }, { chatKey: 'k', st }), '');
+});

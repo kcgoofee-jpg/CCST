@@ -14,6 +14,7 @@ import { notify } from '../core/notify.js';
 import { copyText } from '../core/external.js';
 import { refreshAll, refreshQuota, refreshStats } from '../core/live.js';
 import { getSettings, saveSettingsDebounced } from '../core/settings.js';
+import { promptMutators } from '../core/inject.js';
 
 /** What /status's self-checks say needs telling (#30, #36). Pure: the status
  *  block from the store plus the endpoint the panel is set to. */
@@ -346,6 +347,9 @@ export async function clientSection(ctx = SillyTavern.getContext()) {
         return extra ? `${extra.length} 字` : '无';
     });
     await safe('聊天楼层数', () => ctx.chat?.length);
+    await safe('角色卡', () => ctx.characters?.[ctx.characterId]?.name);
+    // Scripts / depth regexes that can rewrite the prompt by themselves (Izumi's 悬浮窗 …).
+    await safe('会在发送时改提示词的脚本 / 正则', () => promptMutators(ctx).join('、') || '无');
     await safe('扩展', async () => {
         const r = await fetch('/api/extensions/discover', { method: 'POST', headers: ctx.getRequestHeaders?.() ?? {} });
         const list = await r.json();
