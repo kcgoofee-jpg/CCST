@@ -16,6 +16,7 @@
 // Only the custom form is used: SillyTavern's system prompt replaces the
 // coding preamble entirely (6.1 dropped the opt-in "identity mode" that kept it).
 
+// 审: 把酒馆的系统提示词包成 SDK 的 custom systemPrompt（替换掉默认的 28KB 编程提示词），chat.js 每次请求都用。
 /**
  * @param {string|undefined} clientSystemPrompt joined system-message text from the request
  * @returns {{ type: 'custom', prompt: string, snapshot: false }}
@@ -33,6 +34,7 @@ export function buildSystemPrompt(clientSystemPrompt) {
     return { type: 'custom', prompt: clientSystemPrompt ?? '', snapshot: false };
 }
 
+// 审: 取出并拼接所有 system 消息的文本；chat 用来作系统提示词，last-request 也用。
 /** Extract and join system-role messages from an OpenAI messages array. */
 export function extractSystemText(messages) {
     const parts = [];
@@ -44,6 +46,7 @@ export function extractSystemText(messages) {
     return parts.length ? parts.join('\n\n') : undefined;
 }
 
+// 审: 把 OpenAI content（字符串或分段数组）压成纯文本，丢掉图片等；system-placement / cache-diag 也用，transcript.js 复用它。
 /** Flatten OpenAI content (string or multi-part array) to plain text. */
 export function contentToText(content) {
     if (typeof content === 'string') return content;

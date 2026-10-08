@@ -21,8 +21,8 @@
 //                        (GET, POST, OPTIONS); also answers the OPTIONS preflight
 //   origin               standalone only: POST endpoints. No Origin (SillyTavern's
 //                        server-side forward) and the TauriTavern / listed origins
-//                        pass; a page on this machine needs the access key, any
-//                        other browser origin is refused (guards.js)
+//                        pass; any other browser origin, a page on this machine
+//                        included, is refused (guards.js)
 
 import { handleChatCompletions, rejectEmbeddings } from '../core/chat.js';
 import { listModelsHandler } from '../core/models.js';
@@ -36,6 +36,7 @@ import { countInFlight } from '../platform/control.js';
 import { forwardToShared, sharingWith } from './shared-proxy.js';
 import { asyncRoute, allowCors, allowCorsGet, allowCorsGetTrusted, guardPostOrigin } from './guards.js';
 
+// 审: 全部端点的唯一路由表（standalone 和 plugin 两个挂载共用处理函数），少一行就少一个接口。
 export const ROUTES = [
     { method: 'get', standalone: '/status', plugin: '/status', handler: handleStatus, async: true, cors: 'get' },
     { method: 'get', standalone: '/v1/models', handler: listModelsHandler, cors: 'get' },
@@ -53,14 +54,17 @@ export const ROUTES = [
     { method: 'post', standalone: '/v1/embeddings', handler: rejectEmbeddings, origin: true },
 ];
 
+// 审: 某个挂载提供的「METHOD 路径」列表，仅测试 / 文档用。
 /** Paths one mount serves, as "METHOD path" strings (for tests / docs). */
 export function routeKeys(mount) {
     return ROUTES.filter((r) => r[mount]).map((r) => `${r.method.toUpperCase()} ${r[mount]}`);
 }
 
-/** Register the table on an express app / router. mount = 'standalone' | 'plugin'. */
+// 审: cors 字段取值 → 对应的 CORS 中间件。
 const CORS = { get: allowCorsGet, 'get-trusted': allowCorsGetTrusted, full: allowCors };
 
+// 审: 把路由表注册到 express app / router（含 CORS 预检、来源守卫、共用代理时转发）；listener 和 plugin 用。
+/** Register the table on an express app / router. mount = 'standalone' | 'plugin'. */
 export function registerRoutes(router, mount) {
     const standalone = mount === 'standalone';
     const preflight = new Map();

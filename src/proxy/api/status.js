@@ -18,7 +18,9 @@ import { checkSdkCompat, loadSdk } from '../core/sdk-loader.js';
 import { foldStreak } from '../core/chat.js';
 import { localEndpoint } from './listener.js';
 
+// 审: package.json 版本的缓存。
 let cachedPluginVersion = null;
+// 审: 读 package.json 的版本号（读不到给 0.0.0）；/status 和共用转发用。
 export function getPluginVersion() {
     if (cachedPluginVersion) return cachedPluginVersion;
     try {
@@ -32,11 +34,14 @@ export function getPluginVersion() {
 
 /** 代理是怎么启动的：酒馆插件（plugin.js init 会标记）还是单独运行。面板直连 8901 时请求入口看不出来，所以不看入口。 */
 let pluginHosted = false;
+// 审: plugin.js init 时标记「这个进程是酒馆插件」，/status 的 runtime 靠它区分。
 export function markPluginHosted() { pluginHosted = true; }
+// 审: 判断运行方式 plugin / standalone，面板据此写对更新步骤。
 function runtimeOf(req) {
     return pluginHosted || String(req?.originalUrl ?? '').startsWith('/api/plugins/') ? 'plugin' : 'standalone';
 }
 
+// 审: GET /status：SDK 能不能加载、版本、运行方式、凭据概况，面板的连接检测和版本核对都靠它。
 export async function handleStatus(req, res) {
     const start = Date.now();
     const version = getPluginVersion();
@@ -50,8 +55,6 @@ export async function handleStatus(req, res) {
             runtime: runtimeOf(req),
             // 装在哪个文件夹：本机开了几个酒馆时，面板靠它认出在聊天的是不是自己这一份
             root: ROOT,
-            // 启动器按端口关代理时用来确认「这就是代理」（列不出端口上的进程时只能靠它）
-            pid: process.pid,
             sdk: 'loaded',
             sdkVersion: SDK_VERSION,
             // 代理要用的 SDK 导出还在不在（SDK 换了版本改名时这里是 false）
@@ -61,7 +64,7 @@ export async function handleStatus(req, res) {
             // 这个进程实际在听的本机地址（面板用它核对设置里的端点，#36）
             endpoint: localEndpoint(),
             credential: credentialSummary(),
-            // 最近一次回复里 CLI 报的各额度窗口状态（还没回复过则为空）
+            // 审(存疑): backend / note / latencyMs 面板和脚本都不读（后端切换功能已移除），删了会改 /status 的响应字段，所以没动。
             backend: { id: 'subscription', label: BACKEND_LABELS.subscription },
             note: 'Credential expiry is advisory — the CLI can refresh a stale token on the next chat.',
             latencyMs: Date.now() - start,

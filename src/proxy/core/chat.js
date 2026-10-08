@@ -53,41 +53,52 @@ import { foldTrailingInjections, injectBlocks, injectedTextFor, loreTarget, newL
 import { noteLastRequest, noteLastEntries } from '../features/last-request.js';
 import { keepReply, trackGeneration } from '../features/reply-keeper.js';
 
+// 审: 日志前缀。
 const PLUGIN_TAG = '[claude-subscription]';
 
+// 审: 上一次提示「诊断抓包不启用」的原因，同一原因只提示一次。
 let tapSkipWarned = null;
+// 审: 抓包被跳过时按原因去重打印一次，免得每轮刷屏。
 /** Say once per reason (not every turn) that diagnostics capture is skipped. */
 function warnTapSkippedOnce(reason) {
     if (tapSkipWarned === reason) return;
     tapSkipWarned = reason;
     console.warn(`${PLUGIN_TAG} 诊断抓包不启用：${reason}。聊天照常直连。`);
 }
+// 审: 限流时最多重试次数（退避 1s / 2s）。
 const MAX_RATE_LIMIT_RETRIES = 2;
+// 审: 非自适应模型开思考所需的最小 max_tokens，低于它 API 会 400。
 // Below this max_tokens, the CLI's derived thinking budget violates the
 // API's >= 1024 floor on non-adaptive models (verified live).
 const MIN_MAX_TOKENS_FOR_THINKING = 2048;
+// 审: 非流式请求的绝对超时（中途没有心跳，只能整体计时）。
 // Absolute deadline for non-streaming queries (no heartbeat exists between
 // init and the finished assistant message, so idle-based detection is
 // impossible; this only reaps a truly hung subprocess).
 const NONSTREAM_DEADLINE_MS = 10 * 60 * 1000;
+// 审: 流式时上游多久没有真消息就中止（下游心跳会掩盖子进程挂死）。
 // No real upstream message for this long → abort (downstream keep-alives can
 // mask a hung subprocess forever otherwise). Meridian uses the same figure.
 const UPSTREAM_IDLE_MS = 90000;
 
 // CLAUDE_SUBSCRIPTION_MAX_TURNS: a whole number from 1 to this (default 1).
+// 审: MAX_TURNS 环境变量的上限。
 const MAX_TURNS_LIMIT = 20;
 
+// 审: 解析 MAX_TURNS 环境变量成 1~20 的整数（默认 1）；buildSdkOptions 用，测试直接用。
 export function maxTurnsFrom(value) {
     const n = Math.floor(Number(value));
     return Number.isFinite(n) && n >= 1 ? Math.min(n, MAX_TURNS_LIMIT) : 1;
 }
 
+// 审: 读布尔环境变量（空 = 默认值，0/false/no/off = 关）；resume / 固定上下文 / 逐轮还原 / 原样提示词开关共用。
 const envFlag = (name, fallback) => {
     const v = process.env[name];
     if (v === undefined || v === '') return fallback;
     return !/^(0|false|no|off)$/i.test(v);
 };
 
+// 审: 组装 SDK query 选项：模型、系统提示词、隔离配方（无工具 / 无设置）、思考与强度、cwd 与 resume；每次尝试都调用。
 function buildSdkOptions({ modelInfo, oneMActive, settings, systemText, abortController, stream, env, resume }) {
     const options = {
         abortController,
@@ -114,9 +125,11 @@ function buildSdkOptions({ modelInfo, oneMActive, settings, systemText, abortCon
         // file into the prompt), no slash-command dispatch, and none of the
         // CLI's turn-start reminders, which the model kept noticing and
         // "skipping as irrelevant" in its thinking. CLI ≥ 2.1.248.
+        // 审(存疑): VERBATIM 环境变量只写在使用指南里，默认开；关掉会让 @路径展开等恢复，属于行为开关，没动。
         verbatimPrompts: envFlag('CLAUDE_SUBSCRIPTION_VERBATIM', true),
     };
 
+    // 审: 用户指定 claude 可执行文件路径（optional 依赖没装上时的出路），使用指南有写。
     if (process.env.CLAUDE_SUBSCRIPTION_CLAUDE_PATH) {
         options.pathToClaudeCodeExecutable = process.env.CLAUDE_SUBSCRIPTION_CLAUDE_PATH;
     }
@@ -137,6 +150,7 @@ function buildSdkOptions({ modelInfo, oneMActive, settings, systemText, abortCon
     // block (verified live on 0.2.141) — 'summarized' streams real
     // thinking_delta events; 'omitted' saves the bandwidth when the user
     // hides reasoning.
+    // 审: 下面按模型能力决定 thinking 选项；display 决定要不要真的收到思考内容。
     const display = settings.showReasoning ? 'summarized' : 'omitted';
     if (modelInfo.adaptiveOnly) {
         options.thinking = { type: 'adaptive', display };
@@ -147,6 +161,7 @@ function buildSdkOptions({ modelInfo, oneMActive, settings, systemText, abortCon
             ? { type: 'disabled' }
             : { type: 'adaptive', display };
     } else {
+        // 审(存疑): 'on' 和 thinkingBudget 分支面板已不发（始终思考已移除），只有直接调 API 的请求体 claude_subscription.thinking='on' / thinking_budget 才到；settings.js 与 test/settings.test.js 仍解析 'on'，要删需一起动，没动。
         const wantsThinking = settings.thinking === 'adaptive' || settings.thinking === 'on';
         const roomForThinking = !settings.maxTokens || settings.maxTokens >= MIN_MAX_TOKENS_FOR_THINKING;
         if (wantsThinking && roomForThinking) {
@@ -167,12 +182,14 @@ function buildSdkOptions({ modelInfo, oneMActive, settings, systemText, abortCon
             options.thinking = { type: 'disabled' };
         }
     }
+    // 审: 推理强度按模型能力降级；没选强度又要「不思考」的总在思考模型，退到最低强度。
     // 「不思考」 on a model that always thinks: the lowest depth is the closest it gets.
     const effort = effortForModel(modelInfo.baseId, settings.effort ?? (settings.thinking === 'off' && modelInfo.adaptiveOnly ? 'low' : undefined));
     if (effort) {
         options.effort = effort;
     }
 
+    // 审: 子进程固定在暂存目录运行，泄漏的会话记录落在插件自己的项目目录。
     // Always run the subprocess in the scratch bucket so any live-turn
     // transcript that escapes the best-effort sweep lands in the plugin's
     // own project dir instead of intermingling with the user's real
@@ -181,6 +198,7 @@ function buildSdkOptions({ modelInfo, oneMActive, settings, systemText, abortCon
         options.cwd = resume ? resume.cwd : resumeScratchCwd();
     } catch { /* unwritable scratch dir — fall back to process cwd */ }
 
+    // 审: 走逐轮还原路径时把合成会话和会话存储交给 SDK。
     if (resume) {
         options.resume = resume.sessionId;
         options.sessionStore = resume.store;
@@ -189,10 +207,7 @@ function buildSdkOptions({ modelInfo, oneMActive, settings, systemText, abortCon
     return options;
 }
 
-/**
- * Build the query configuration. Tries the resume path; falls back to the
- * v1 transcript fold when disabled or when scratch-dir setup fails.
- */
+// 审: 取玩家本轮自己的消息（放置合并注入之前的原文），用来给本轮记录定 key；没有则 null。
 /** The player's own message of this turn, before any placement merged
  *  injections into it (the first of the trailing user messages). */
 function plainPlayerText(rawMessages) {
@@ -201,13 +216,16 @@ function plainPlayerText(rawMessages) {
     return i >= 0 && typeof hist[i]?.content === 'string' ? hist[i].content : null;
 }
 
+// 审: 连续走了「折叠回退」的请求数；resume 一轮就清零。
 // How many requests in a row had to fall back to the transcript fold (#30): one is
 // normal (a chat's first turn), a long run means the resume path stopped working.
 let foldRounds = 0;
+// 审: 读折叠回退连续次数，/status 的 foldStreak 给面板提示用。
 export function foldStreak() {
     return foldRounds;
 }
 
+// 审: 每个请求结束时登记走了哪条路径，更新连续回退计数。
 /** Called once per finished request with the path it took. */
 export function noteFoldOutcome(path, settings) {
     if (path === 'resume') foldRounds = 0;
@@ -215,15 +233,23 @@ export function noteFoldOutcome(path, settings) {
     return foldRounds;
 }
 
+// 审: 测试接缝：清零回退计数。
 /** Test seam. */
 export function __resetFoldStreakForTesting() {
     foldRounds = 0;
 }
 
-function buildQueryConfig({ messages: rawMessages, modelInfo, oneMActive, settings, abortController, stream, env, sdk }) {
+/**
+ * Build the query configuration. Tries the resume path; falls back to the
+ * v1 transcript fold when disabled or when scratch-dir setup fails.
+ */
+// 审: 决定本次请求走哪条路（resume 合成会话 / 仅图片的流式输入 / 折叠回退）并给出 prompt + 选项；sdk 参数从未被用到，已删。
+function buildQueryConfig({ messages: rawMessages, modelInfo, oneMActive, settings, abortController, stream, env }) {
+    // 审: 内联放置时把深度注入的 system 消息放回对话里（和 completeChat 里的同一函数，这里是给最终提示词用的版本）。
     const messages = settings.systemPlacement === 'inline' ? inlineLateSystemMessages(rawMessages, { late: settings.lateSnippets }) : rawMessages;
     const systemText = extractSystemText(messages);
 
+    // 审: 主路径：把历史合成成 Claude Code 会话文件再 resume，模型才看到真实多轮并能命中缓存；关掉 / 失败才走折叠回退。
     if (settings.useResume && envFlag('CLAUDE_SUBSCRIPTION_USE_RESUME', true)) {
         try {
             const cwd = resumeScratchCwd();
@@ -238,8 +264,11 @@ function buildQueryConfig({ messages: rawMessages, modelInfo, oneMActive, settin
             };
             // CLI context pinned after the first entry (see turn-capture.js): keyed by the
             // model as served, since the context names it.
+            // 审(存疑): CONTEXT_PIN 环境变量没有任何文档，只是出问题时关掉固定上下文的排查开关，删掉等于去掉排查手段，没动。
             const pinKey = envFlag('CLAUDE_SUBSCRIPTION_CONTEXT_PIN', true) ? `${modelInfo.baseId}${oneMActive ? '[1m]' : ''}` : null;
+            // 审: 取之前各轮「当时实际发出」的原文（逐轮还原）和固定的 CLI 上下文，让重发历史与上次一字不差。
             const { replay, pinned } = historyReplay(pinKey, { replay: envFlag('CLAUDE_SUBSCRIPTION_TURN_REPLAY', true) });
+            // 审: 末尾是助手消息（预填 / 续写）的形状。
             const prefill = split.shape === 'trailing-assistant-continue';
             const entries = assembleEntries(split.history, meta, modelInfo.baseId, { replay, pinned, trimLast: prefill });
             // A prefill turn sends [player message, placeholder reply, continuation instruction]; the
@@ -255,6 +284,7 @@ function buildQueryConfig({ messages: rawMessages, modelInfo, oneMActive, settin
                 entries.push(buildAssistantEntry({ message: { role: 'assistant', content: NO_RESPONSE_FILLER }, parentUuid: entries.at(-1).uuid, meta, model: modelInfo.baseId }));
                 if (settings.genType !== 'continue' && lastUserEntry > 0) lead = entries.slice(lastUserEntry);
             }
+            // 审: 有历史才走 resume（空列表 SDK 会拒绝）。
             // Empty entry lists make the SDK reject the resume with "No
             // conversation found" — first turns can't resume.
             if (entries.length > 0) {
@@ -279,6 +309,7 @@ function buildQueryConfig({ messages: rawMessages, modelInfo, oneMActive, settin
                 const options = buildSdkOptions({ modelInfo, oneMActive, settings, systemText, abortController, stream, env, resume });
                 return { prompt, options, path: 'resume', sessionId, shape: split.shape, collector, currentText, hasHistory: split.history.length > 0 };
             }
+            // 审: 第一轮就带图片：字符串折叠会丢图，改用不带 resume 的流式输入。
             // No replayable history, but a string fold would drop image
             // blocks — use streaming-input mode without resume so images
             // survive turn one.
@@ -289,34 +320,26 @@ function buildQueryConfig({ messages: rawMessages, modelInfo, oneMActive, settin
                 const options = buildSdkOptions({ modelInfo, oneMActive, settings, systemText, abortController, stream, env, resume: null });
                 return { prompt, options, path: 'stream-input', sessionId: null, shape: split.shape };
             }
+        // 审: 合成会话任何一步失败都退回折叠，保证能出回复。
         } catch (err) {
             console.warn(`${PLUGIN_TAG} resume path unavailable, folding transcript:`, err instanceof Error ? err.message : err);
         }
     }
 
-    // Fold fallback: renderTranscript extracts the same system text we
-    // already have in systemText (its systemPrompt return is redundant here)
-    // and folds the non-system turns into a labelled string prompt.
-    const { prompt } = renderTranscript(messages);
+    // Fold fallback: renderTranscript folds the non-system turns into a
+    // labelled string prompt (the system text is already in systemText).
+    const prompt = renderTranscript(messages);
     const options = buildSdkOptions({ modelInfo, oneMActive, settings, systemText, abortController, stream, env, resume: null });
     return { prompt, options, path: 'fold', sessionId: null, shape: 'fold' };
 }
 
-/**
- * Run one SDK query attempt, normalizing SDK messages into simple events:
- *   { kind: 'text', text }        visible output delta (stream only)
- *   { kind: 'reasoning', text }   thinking delta (stream only)
- *   { kind: 'blocks', blocks }    full assistant content (non-stream)
- *   { kind: 'done', usage, stopReason }  success terminator
- *   { kind: 'refusal', fallback, category }  the model stopped with stop_reason "refusal"
- * Throws Error with .sdkErrorText on failure (classified by the caller).
- */
 /** Served-model guard: refuse to silently substitute another model for an
  *  explicit Fable request. If Anthropic gates/disables Fable (it has been
  *  toggled off before), the CLI can resolve the request to its default Opus
  *  instead — a silent style/capability switch mid-roleplay is exactly what
  *  the user must NOT get. Checked against the resolved model on the init
  *  message (before any output) and each main-thread assistant message. */
+// 审: 服务端把「明确要 Fable 却被换成别的模型」当错误拒绝（静默换模型会毁掉角色扮演）；init 消息和每条助手消息都查；测试 errors-stats.test.js 直接用。
 export function assertServedModel(guardTier, servedModel, requestedModel) {
     if (guardTier !== 'fable') return;
     const served = String(servedModel ?? '').toLowerCase();
@@ -336,7 +359,18 @@ export function assertServedModel(guardTier, servedModel, requestedModel) {
     }
 }
 
+// 审: 跑一次 SDK query 并把消息归一成简单事件（文本 / 思考 / 用量 / 完成 / 拒答），含空闲超时和已服务模型检查。
+/**
+ * Run one SDK query attempt, normalizing SDK messages into simple events:
+ *   { kind: 'text', text }        visible output delta (stream only)
+ *   { kind: 'reasoning', text }   thinking delta (stream only)
+ *   { kind: 'blocks', blocks }    full assistant content (non-stream)
+ *   { kind: 'done', usage, stopReason }  success terminator
+ *   { kind: 'refusal', fallback, category }  the model stopped with stop_reason "refusal"
+ * Throws Error with .sdkErrorText on failure (classified by the caller).
+ */
 async function* runQuery({ sdk, prompt, options, stream, guardTier, requestedModel, timing = {} }) {
+    // 审: 空闲 / 绝对超时的计时器句柄，finally 里清掉。
     let idleTimer = null;
     const abort = options.abortController;
     // Idle guard: with includePartialMessages (stream) the SDK emits a
@@ -347,11 +381,13 @@ async function* runQuery({ sdk, prompt, options, stream, guardTier, requestedMod
     // instead. Idle aborts are tagged on the controller so the caller can
     // distinguish them from client-close / stop-sequence aborts.
     const idleMs = stream ? UPSTREAM_IDLE_MS : NONSTREAM_DEADLINE_MS;
+    // 审: 超时触发：打日志、在控制器上标 idleAbort（让调用方区分于客户端断开），然后中止。
     const fireIdleAbort = () => {
         console.warn(`${PLUGIN_TAG} upstream ${stream ? 'idle' : 'deadline exceeded'} after ${idleMs}ms — aborting query`);
         abort.idleAbort = true;
         abort.abort();
     };
+    // 审: 流式时每收到一条消息重置空闲计时；非流式只用一开始的绝对期限。
     const armIdleGuard = () => {
         if (!stream) return; // absolute deadline armed once below
         if (idleTimer) clearTimeout(idleTimer);
@@ -370,6 +406,7 @@ async function* runQuery({ sdk, prompt, options, stream, guardTier, requestedMod
             // A safety stop mid-reply: the text so far is kept but the reply
             // is cut off. With a fallback configured the CLI retries the
             // turn on another model — the reply then comes from that model.
+            // 审: 安全拒答事件（可能带回退模型）转成 refusal 事件，由调用方提示面板。
             if (message.type === 'system' && (message.subtype === 'model_refusal_no_fallback' || message.subtype === 'model_refusal_fallback')) {
                 yield { kind: 'refusal', fallback: message.subtype === 'model_refusal_fallback' ? message.fallback_model ?? '?' : null, category: message.api_refusal_category ?? null };
                 continue;
@@ -379,6 +416,7 @@ async function* runQuery({ sdk, prompt, options, stream, guardTier, requestedMod
                 // Resolved model is known BEFORE any generation — the guard
                 // fires here so a substituted request dies with zero output.
                 assertServedModel(guardTier, message.model, requestedModel);
+                // 审: 把 CLI 自己的会话 id 交出去，折叠 / 流式输入路径的隐私清理要用。
                 if (message.session_id) {
                     // The CLI-minted session id — needed to privacy-sweep the
                     // live-turn transcript on the fold/stream-input paths
@@ -387,11 +425,13 @@ async function* runQuery({ sdk, prompt, options, stream, guardTier, requestedMod
                 }
             } else if (message.type === 'stream_event') {
                 const event = message.event;
+                // 审: 记录首字耗时分段（面板「首字去哪了」），只记一次。
                 if (event?.type === 'message_start') timing.messageStartAt ??= Date.now();
                 if (event?.type === 'content_block_delta') timing.firstDeltaAt ??= Date.now();
                 // parent_tool_use_id != null would be subagent traffic; with
                 // tools:[] there are no subagents, but filter defensively.
                 if (message.parent_tool_use_id) continue;
+                // 审: 流式中的实时用量，调用方在没收到 result 时兜底。
                 // Running usage: kept by the caller in case the attempt ends
                 // before the result message (stop sequence, abort).
                 if (event?.type === 'message_start' && event.message?.usage) {
@@ -399,6 +439,7 @@ async function* runQuery({ sdk, prompt, options, stream, guardTier, requestedMod
                 } else if (event?.type === 'message_delta' && event.usage) {
                     yield { kind: 'usage', usage: event.usage };
                 }
+                // 审: 正文 / 思考增量转成事件。
                 if (event?.type === 'content_block_delta' && event.delta) {
                     if (event.delta.type === 'text_delta' && event.delta.text) {
                         yield { kind: 'text', text: event.delta.text };
@@ -413,6 +454,7 @@ async function* runQuery({ sdk, prompt, options, stream, guardTier, requestedMod
                 if (!message.parent_tool_use_id) {
                     assertServedModel(guardTier, message.message?.model, requestedModel);
                 }
+                // 审: 助手消息自带 error：撞最大长度当正常结束，其余抛出让重试阶梯分类。
                 // Assistant-level errors (auth failures, API 4xx) surface here
                 // with the useful text in the content blocks, not in the enum —
                 // extract both so the retry ladder can classify them.
@@ -433,6 +475,7 @@ async function* runQuery({ sdk, prompt, options, stream, guardTier, requestedMod
                     err.sdkErrorText = `${message.error} ${text}`;
                     throw err;
                 }
+                // 审: 非流式拿整条助手内容；流式只补发整块思考（摘要思考不走 thinking_delta）。
                 if (!stream) {
                     yield { kind: 'blocks', blocks: message.message?.content ?? [] };
                 } else {
@@ -449,6 +492,7 @@ async function* runQuery({ sdk, prompt, options, stream, guardTier, requestedMod
                         }
                     }
                 }
+            // 审: 结果消息：success 即完成；撞输出上限当正常结束；其余抛错。
             } else if (message.type === 'result') {
                 if (message.subtype === 'success') {
                     yield { kind: 'done', usage: message.usage ?? null, stopReason: message.stop_reason ?? null };
@@ -467,6 +511,7 @@ async function* runQuery({ sdk, prompt, options, stream, guardTier, requestedMod
             // is bookkeeping; prompt_suggestion can arrive after result but
             // we return at result.
         }
+        // 审: SDK 流结束但没有 result 消息时按完成处理（用量由调用方用实时用量兜底）。
         // Generator ended without a result message.
         yield { kind: 'done', usage: null };
     } finally {
@@ -475,7 +520,9 @@ async function* runQuery({ sdk, prompt, options, stream, guardTier, requestedMod
 }
 
 // The CLI raises this as an error when a reply (thinking included) runs past max_tokens.
+// 审: CLI 报「超过输出 token 上限」的错误文本匹配；runQuery 两处和 isOutputLimitText 用。
 const OUTPUT_LIMIT_RE = /exceeded the \d+ output token maximum/i;
+// 审: 助手内容是不是「超过输出上限」错误。
 function isOutputLimitText(content) {
     const text = Array.isArray(content) ? content.map((b) => b?.text ?? '').join(' ') : String(content ?? '');
     return OUTPUT_LIMIT_RE.test(text);
@@ -483,8 +530,10 @@ function isOutputLimitText(content) {
 
 // Upstream failures the client can act on get their own status code (a
 // retrying client backs off on 429; 401 says "log in again"); the rest are 500.
+// 审: 错误类别 → HTTP 状态码表。
 const ERROR_STATUS = { usage_limit: 429, not_logged_in: 401 };
 
+// 审: 上游错误文本 → HTTP 状态码（限额 429 / 未登录 401 / 其余 500），让客户端按状态处理；测试用。
 export function statusForError(raw) {
     return ERROR_STATUS[explainError(raw).code] ?? 500;
 }
@@ -503,8 +552,11 @@ export function statusForError(raw) {
  * one the CLI is stopped. POST …/replies/<slot>/cancel (the panel's Stop)
  * always stops it, and nothing is kept.
  */
+// 审: 监听客户端断开和面板的停止键，决定中止还是继续写完暂存；handleChatCompletions 每请求一个。
 export function watchClient(res, { keep, slot }) {
+    // 审: 连接状态：keep 要暂存 / gone 客户端已走 / aborted 已中止 / cancelled 面板停止 / controller 当前尝试的中止器。
     const conn = { keep, gone: false, aborted: false, cancelled: false, controller: null };
+    // 审: 响应关闭时：封住写入，有暂存槽就让回复继续写，否则中止 CLI。
     const onClose = () => {
         if (res.writableFinished || conn.gone) return;
         conn.gone = true;
@@ -519,6 +571,7 @@ export function watchClient(res, { keep, slot }) {
         conn.controller?.abort();
     };
     res.on('close', onClose);
+    // 审: 登记到面板停止键的回调表，按停止就中止且不暂存。
     const untrack = slot ? trackGeneration(slot, () => {
         if (conn.cancelled) return;
         conn.cancelled = true;
@@ -526,6 +579,7 @@ export function watchClient(res, { keep, slot }) {
         console.log(`${PLUGIN_TAG} 面板按了停止：这条回复中止，不再暂存`);
         conn.controller?.abort();
     }) : () => {};
+    // 审: 请求结束时撤销监听和登记。
     conn.dispose = () => {
         res.off('close', onClose);
         untrack();
@@ -533,6 +587,7 @@ export function watchClient(res, { keep, slot }) {
     return conn;
 }
 
+// 审: POST /v1/chat/completions 入口：校验请求、建客户端监听，再交给 completeChat。
 export async function handleChatCompletions(req, res) {
     const body = req.body || {};
     let messages = body.messages;
@@ -553,12 +608,15 @@ export async function handleChatCompletions(req, res) {
     }
 }
 
+// 审: 一次聊天请求的完整流程：缓存诊断与放置改写、重试阶梯、流式 / 非流式输出、统计与暂存。
 async function completeChat(req, res, body, settings, conn) {
+    // 审: 本函数里 messages 会被放置 / 世界书改写后重新赋值，所以用 let。
     let messages = body.messages;
     const requestedModel = body.model;
     // OpenAI's default is a single JSON response; SillyTavern always says which it wants.
     const wantStream = body.stream === true;
     // The proxy only runs on the subscription (API-key users use SillyTavern's own Claude source).
+    // 审: 计费来源常量，只用作统计里的 backend 字段（recordRequest 需要）；API-key 路径已移除。
     const billedAs = 'subscription';
     const modelInfo = parseModelRequest(requestedModel);
 
@@ -571,8 +629,10 @@ async function completeChat(req, res, body, settings, conn) {
         });
     }
 
+    // 审: 开始时间与请求形状，进统计。
     const startedAt = Date.now();
     const shape = promptShape(messages);
+    // 审: 缓存诊断结果；出错 / 世界书移动都要读，诊断失败时保持 null。
     let cacheDiag = null;
     // Background calls (another extension's tag writer, a summary) are not
     // turns of the conversation: they leave the per-chat state alone — cache
@@ -580,7 +640,9 @@ async function completeChat(req, res, body, settings, conn) {
     // turn captures / context pin (buildQueryConfig). They may still READ
     // captured turns, which only helps their prompt match the chat's cache.
     // Preset entries before / after the chat history (system-placement.js applyHistoryBounds).
+    // 审: 预设里「聊天记录前 / 后」的条目归位。
     if (settings.systemPlacement === 'inline') messages = applyHistoryBounds(messages, settings.hist, settings.genType);
+    // 审: 缓存诊断 + 放置改写 + 世界书移动整段（背景调用不碰逐聊天的状态），任何一步失败只记警告、按原样发。
     if (!settings.auxiliary) try {
         // Earlier player messages as they were sent (turn captures): an injection
         // already given verbatim there is not repeated (system-placement.js).
@@ -590,6 +652,7 @@ async function completeChat(req, res, body, settings, conn) {
         const earlierSent = rawHist.slice(0, Math.max(0, lastRawUser))
             .map((m, i) => (m?.role === 'user' && typeof m.content === 'string' ? sentTextFor(m.content, rawReplies[i]) ?? '' : ''))
             .join('\n');
+        // 审: 深度注入里和之前某轮一字不差的段落改成一句说明（seen 判重，repeats 计数）。
         let repeats = 0;
         const seen = (t) => t.length >= 200 && earlierSent.includes(t);
         const placed = settings.systemPlacement === 'inline'
@@ -598,12 +661,14 @@ async function completeChat(req, res, body, settings, conn) {
         if (repeats) console.log(`${PLUGIN_TAG} ${repeats} 段深度注入和之前某轮给过的一字不差，本轮改为一句说明`);
         const history = placed.filter((m) => m?.role !== 'system');
         // Keyword-triggered world info inside the system prompt, by its exact text (lore-tail.js).
+        // 审: 精确切出系统提示词里被触发的世界书文本（用于移到发言开头）。
         const exact = settings.loreTail && settings.loreText.length ? cutExactLore(extractSystemText(placed) ?? '', settings.loreText, settings.wiFormat) : null;
         cacheDiag = diagnoseCache(exact ? exact.system : extractSystemText(placed), history, { chatKey: settings.chatKey });
         console.log(`${PLUGIN_TAG} ${describeDiag(cacheDiag)}`);
         // Post-history entries changed (one switched off, edited): earlier
         // turns go out again as sent, so swap their old copy for the new one
         // (lore-tail.js noteTail). Not on a reroll: nothing was changed then.
+        // 审: 预设改过则把之前轮次里旧预设放在聊天记录后面的条目换掉，免得历史前缀变动。
         const preset = settings.stFingerprint?.preset || null;
         const oldTails = cacheDiag?.systemChanged && !cacheDiag.reroll ? tailsOfOldPreset(cacheDiag.chat ?? null, preset) : null;
         if (oldTails) {
@@ -611,6 +676,7 @@ async function completeChat(req, res, body, settings, conn) {
             const n = rewriteCaptured(from, '') + rewriteInjected(from, '');
             if (n) console.log(`${PLUGIN_TAG} 换了预设：之前 ${n} 轮里旧预设放在聊天记录后面的条目一起去掉`);
         }
+        // 审: 预设放在聊天记录后面的 system 条目变了（开关 / 编辑）时，把之前轮次的旧版本一并换成新的。
         const lastUserAt = messages.findLastIndex((m) => m?.role === 'user');
         const trailing = lastUserAt >= 0 ? messages.slice(lastUserAt + 1) : null;
         if (settings.systemPlacement === 'inline' && trailing && trailing.every((m) => m?.role === 'system' && typeof m.content === 'string')) {
@@ -624,6 +690,7 @@ async function completeChat(req, res, body, settings, conn) {
                 if (n) console.log(`${PLUGIN_TAG} 预设放在聊天记录后面的条目变了（开关或编辑）：之前 ${n} 轮里的旧版本一起换成新的，这一轮聊天记录重写一次`);
             }
         }
+        // 审: 最终要发给模型的消息；下面世界书 / 折叠改写时会替换。
         let sent = placed;
         // Inline placement merges this turn's injections into the player's
         // message; next turn ST sends it back as the player wrote it.
@@ -634,6 +701,7 @@ async function completeChat(req, res, body, settings, conn) {
         // filed under that merged text the turn was never found again
         // (history re-written every turn; measured 2026-10-07, 衡 + 军训14天).
         if (typeof plain === 'string') settings.captureKey = plain;
+        // 审: 世界书移动 + 角色卡深度 0 注入折叠（lore-tail.js），保持历史前缀不变以命中缓存。
         if (settings.loreTail || settings.foldTail) {
             const system = exact ? exact.system : extractSystemText(placed) ?? '';
             const blocks = exact?.text ? [{ tag: TRIGGERED_TAG, text: exact.text }] : [];
@@ -644,11 +712,13 @@ async function completeChat(req, res, body, settings, conn) {
             const replies = repliesBefore(history);
             // Earlier player messages that carried lore go out again as they
             // were sent (turn captures replay the current-turn ones).
+            // 审: 之前带过世界书的玩家消息按当时发出的原样还原。
             const restored = history.map((m, i) => {
                 if (i === rawTarget || m?.role !== 'user' || typeof m.content !== 'string' || sentTextFor(m.content, replies[i])) return m;
                 const was = injectedTextFor(m.content, replies[i]);
                 return was ? { ...m, content: was } : m;
             });
+            // 审: 目标消息之前各轮玩家消息当时发出的文本，用来判重。
             const earlierOf = (list, upTo) => {
                 const ctx = repliesBefore(list);
                 return list.slice(0, Math.max(0, upTo))
@@ -660,6 +730,7 @@ async function completeChat(req, res, body, settings, conn) {
             const lastUser = fold.history.findLastIndex((m) => m?.role === 'user');
             const fresh = blocks.length ? newLoreOnly(blocks, earlierOf(fold.history, target)) : [];
             const withLore = injectBlocks(fold.history, fresh);
+            // 审: 有任何改写才重建消息，并记下「酒馆下一轮会怎么发回来」好原样重发。
             if (repeats || blocks.length || fold.folded || restored.some((m, i) => m !== history[i])) {
                 sent = [{ role: 'system', content: system }, ...withLore];
                 messages = sent;
@@ -679,26 +750,29 @@ async function completeChat(req, res, body, settings, conn) {
                 console.log(`${PLUGIN_TAG} 本轮触发的世界书移出系统提示词（${n(blocks)} 字），放在发言开头 ${n(fresh)} 字（最近 ${LORE_WINDOW} 轮给过的不再重复）`);
             }
         }
-        if (!settings.auxiliary) {
-            // Earlier turns go out as they were sent (turn captures): show those, not ST's copy.
-            const ctx = repliesBefore(sent);
-            const asSent = sent.map((m, i) => (m?.role === 'user' && typeof m.content === 'string' ? { ...m, content: sentTextFor(m.content, ctx[i]) ?? m.content } : m));
-            noteLastRequest({ model: requestedModel, placed: asSent, cacheDiag });
-        }
+        // 审: 记下发给模型的内容，供面板「查看发给模型的内容」重放（外层已保证非背景调用）。
+        // Earlier turns go out as they were sent (turn captures): show those, not ST's copy.
+        const ctx = repliesBefore(sent);
+        const asSent = sent.map((m, i) => (m?.role === 'user' && typeof m.content === 'string' ? { ...m, content: sentTextFor(m.content, ctx[i]) ?? m.content } : m));
+        noteLastRequest({ model: requestedModel, placed: asSent, cacheDiag });
     } catch (err) {
         console.warn(`${PLUGIN_TAG} cache diagnostics failed:`, err instanceof Error ? err.message : err);
     }
+    // 审: 首个内容出现的时间，进统计。
     let firstTokenAt = null;
     // Where the time to first token goes (M-opt #4): proxy + CLI start-up,
     // CLI → API until the response starts, then the first content delta.
     const timing = {};
+    // 审: 最后一次尝试走的路径（resume / stream-input / fold），统计和回退计数用。
     let lastPath = null;
     // The collector of the resume turn we just ran, for the replay health check (#26).
     let replayWatch = null;
+    // 审: 本次响应的 id / 时间 / chunk 外壳。
     const completionId = makeCompletionId();
     const created = Math.floor(Date.now() / 1000);
     const shell = chunkShell(completionId, created, modelInfo.requested);
 
+    // 审: 下面这组是跨重试共享的输出状态：是否已出过内容 / SSE 是否已开始 / 用量 / 结束原因 / 拒答 / 已收集文本与思考 / 待清理的会话 id。
     // Stream state shared across retry attempts.
     let didYieldContent = false;
     let sseStarted = false;
@@ -712,6 +786,7 @@ async function completeChat(req, res, body, settings, conn) {
     let collectedReasoning = '';
     const sweepIds = [];
 
+    // 审: 第一次真有输出时才发 SSE 头和角色 chunk（之前出错还能回正常状态码）。
     const startSse = () => {
         firstTokenAt ??= Date.now();
         if (sseStarted) return;
@@ -729,18 +804,22 @@ async function completeChat(req, res, body, settings, conn) {
     // current (conn.controller, see watchClient).
 
     // Retry ladder state.
+    // 审: 本次是否真用 1M（冷却中或失败后降为基础模型）。
     let oneMActive = modelInfo.oneM && !isExtendedContextKnownUnavailable();
     // Diagnostics (panel → 状态 → 诊断): route the CLI through the in-process wire
     // capture.
     // Never with a non-http proxy in the environment (socks5:// …): the forwarder would bypass it.
+    // 审: 诊断抓包（面板开了才有）：能起则把 CLI 指到本地抓包地址，起不来 / 有不兼容代理就跳过、聊天照常。
     const tapSkip = settings.diagCapture ? tapSkipReason() : null;
     if (tapSkip) warnTapSkippedOnce(tapSkip);
     const tapUrl = settings.diagCapture && !tapSkip
         ? await tapBaseUrl().catch((err) => { console.warn(`${PLUGIN_TAG} 诊断抓包没能启动，本轮不记录：${err.message}`); return null; })
         : null;
+    // 审: 重试阶梯状态：登录过期只刷新一次、限流次数。
     let didTokenRefresh = false;
     let rateLimitRetries = 0;
 
+    // 审: 尝试循环：一次尝试 = 新建中止器 + 子进程环境 + 查询配置 + 消费事件流；失败按阶梯决定重试，成功 break。
     try {
         // eslint-disable-next-line no-constant-condition
         while (true) {
@@ -752,11 +831,12 @@ async function completeChat(req, res, body, settings, conn) {
             if (tapUrl) env.ANTHROPIC_BASE_URL = tapUrl;
             const cfg = buildQueryConfig({
                 messages, modelInfo, oneMActive, settings,
-                abortController, stream: wantStream, env, sdk,
+                abortController, stream: wantStream, env,
             });
             if (cfg.sessionId) sweepIds.push(cfg.sessionId);
             lastPath = cfg.path;
             replayWatch = cfg.path === 'resume' && cfg.hasHistory ? cfg.collector : null;
+            // 审: 开发用 dry_run：不真调 Claude，只把会发出去的内容留给 /v1/debug/last（缓存模拟测试用）。
             if (settings.dryRun) {
                 // Cache simulation (tests, scripts/cache-matrix.mjs): what would go out is in /v1/debug/last.
                 // Stand in for the CLI's own user entry so next turn replays this message as sent
@@ -773,6 +853,7 @@ async function completeChat(req, res, body, settings, conn) {
                 // Per-attempt scanner — a shared one would leak held-back
                 // text from a failed attempt into the retry's output.
                 const scanner = new StopScanner(settings.stops);
+                // 审: 事件分发：会话 id / 用量 / 正文（过停止序列）/ 思考 / 整块思考 / 非流式整块 / 拒答 / 完成。
 
                 for await (const ev of runQuery({
                     sdk, prompt: cfg.prompt, options: cfg.options, stream: wantStream,
@@ -845,6 +926,7 @@ async function completeChat(req, res, body, settings, conn) {
                     }
                 }
 
+                // 审: 没命中停止序列时放出扣住的尾部。
                 if (!stopMatched) {
                     const tail = scanner.flush();
                     if (tail) {
@@ -856,6 +938,7 @@ async function completeChat(req, res, body, settings, conn) {
                         collectedText += tail;
                     }
                 }
+                // 审: 撞上长度上限且没有任何正文（思考吃光）→ 报可操作的错误，不当成空回复。
                 if (finishReason === 'length' && !collectedText) {
                     // Thinking used the whole budget (or nothing came out): no text to keep.
                     const err = new Error(`回复超过了『最大回复长度』${settings.maxTokens ? `（${settings.maxTokens} token）` : ''}被截断，没有产出可用的文字（思考也计入长度）。到酒馆『AI 回复配置』把最大回复长度调大。`);
@@ -864,6 +947,7 @@ async function completeChat(req, res, body, settings, conn) {
                 }
                 break; // success
             } catch (err) {
+                // 审: 失败分类：不可重试 / 用户中止当正常结束 / 没出内容时按阶梯重试（1M 额外用量、登录过期、限流、会话失效），否则抛出。
                 const errText = err?.sdkErrorText ?? (err instanceof Error ? err.message : String(err));
 
                 // Guard violations (served-model) are terminal by design —
@@ -884,7 +968,7 @@ async function completeChat(req, res, body, settings, conn) {
                         oneMActive = false;
                         continue;
                     }
-                    if (isExpiredTokenError(errText) && !didTokenRefresh && billedAs === 'subscription') {
+                    if (isExpiredTokenError(errText) && !didTokenRefresh) {
                         didTokenRefresh = true;
                         console.warn(`${PLUGIN_TAG} auth expired — attempting OAuth refresh + one retry`);
                         await refreshOAuthToken();
@@ -917,6 +1001,7 @@ async function completeChat(req, res, body, settings, conn) {
             }
         }
     } catch (err) {
+        // 审: 终局失败：登记回退计数、丢弃诊断、记统计，再按流是否已开始用 SSE 错误事件或 JSON 错误回复。
         const raw = err instanceof Error ? err.message : String(err);
         const described = err?.sdkErrorText === 'served-model-guard' ? `served-model guard: ${raw}` : raw;
         noteFoldOutcome(lastPath, settings);
@@ -935,11 +1020,13 @@ async function completeChat(req, res, body, settings, conn) {
         }
         return res.status(statusForError(described)).json({ error: { message, type: 'server_error' } });
     } finally {
+        // 审: 隐私清理：无论成败都删掉本次 CLI 写下的会话记录。
         for (const id of sweepIds) sweepSessionTranscript(loadSdk, id);
     }
 
     // Ended without a result message (stop sequence, client gone, Stop):
     // the tokens were still spent — count what the stream reported.
+    // 审: 没有 result 消息时用流里的实时用量兜底。
     usage ??= partialUsage;
     noteFoldOutcome(lastPath, settings);
 
@@ -947,6 +1034,7 @@ async function completeChat(req, res, body, settings, conn) {
     const notices = [];
     if (modelInfo.oneM && !oneMActive) notices.push('no-1m');
     if (refusal) notices.push(refusal.fallback ? `fallback:${refusal.fallback}` : 'refusal');
+    // 审: 回复中途的状态通知，面板据此弹提示。
     if (conn.cancelled) notices.push('cancelled');
     else if (conn.gone && conn.keep) notices.push('kept');
     if (replayWatch && noteReplayHealth(replayWatch.captured)) notices.push('replay-reset');
@@ -961,10 +1049,12 @@ async function completeChat(req, res, body, settings, conn) {
         finish: finishReason, clientClosed: conn.aborted, notices,
     });
 
+    // 审: 客户端已走但回复写完了：暂存起来，重新打开聊天时补回。
     if (conn.keep && !conn.cancelled && collectedText) {
         keepReply(settings.replySlot, { text: collectedText, reasoning: collectedReasoning, finish: finishReason });
     }
 
+    // 审: 收尾：按流式 / 非流式输出最终响应。
     const openAiUsage = toOpenAiUsage(usage);
 
     if (wantStream) {
@@ -987,6 +1077,7 @@ async function completeChat(req, res, body, settings, conn) {
     return res.json(response);
 }
 
+// 审: POST /v1/embeddings 固定回 501，让酒馆给出清楚的提示而不是 404。
 // Embeddings are not supported on the subscription path.
 export function rejectEmbeddings(_req, res) {
     return res.status(501).json({
