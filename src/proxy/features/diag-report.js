@@ -203,7 +203,7 @@ function usageEntryLine(e, prev) {
 /** The text report (no chat text). */
 function buildReport({ usageCount = 20, exchangeCount = 12, logCount = 120 } = {}) {
     const out = [];
-    out.push('## CCST 代理');
+    out.push('## 代理');
     out.push(`版本 ${pluginVersion()} · SDK ${SDK_VERSION} · Node ${process.version} · ${platform()} ${release()} ${arch()}`);
     // 审(存疑): 列表里 ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN 对应的 API-key 路径已移除，但用户环境里设了它们会影响 CLI，仍是有用的诊断信息，且不能改报告数据，故保留。
     const env = ['CLAUDE_CODE_PROMPT_CACHE_TTL', 'FORCE_PROMPT_CACHING_5M', 'ENABLE_PROMPT_CACHING_1H', 'DISABLE_PROMPT_CACHING', 'CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY', 'HTTPS_PROXY', 'https_proxy', 'ALL_PROXY']
@@ -212,7 +212,7 @@ function buildReport({ usageCount = 20, exchangeCount = 12, logCount = 120 } = {
     out.push(`相关环境变量：${env.length ? env.join(' ') : '无'}`);
 
     const entries = recentEntries(usageCount);
-    out.push('', `## 最近 ${entries.length} 次请求（用量记录，不含内容）`);
+    out.push('', `## 用量记录（最近 ${entries.length} 次请求，不含内容）`);
     out.push('时间 | 类型 | 模型 | 路径 | 形状 | 缓存 | 耗时 | 间隔 | 诊断 | 提示');
     // Each line against the previous successful request of the same chat (any chat if unknown).
     entries.forEach((e, i) => {

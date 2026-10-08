@@ -462,10 +462,10 @@ export function buildStatusTab(pane) {
 // plus what only the browser knows: SillyTavern's version, the connection's prompt post-processing,
 // the preset, the extensions that can change the prompt. The raw data holds chat text.
 
-// 审: 诊断报告里「酒馆这边」那段（浏览器才知道的事实），逐项尽力而为、失败就跳过。
+// 审: 诊断报告里「酒馆」那段（浏览器才知道的事实），逐项尽力而为、失败就跳过。
 /** SillyTavern-side facts for the report (each one best-effort). */
 async function clientSection(ctx = SillyTavern.getContext()) {
-    const lines = ['## 酒馆这边'];
+    const lines = ['## 酒馆'];
     const safe = async (label, fn) => {
         try { const v = await fn(); if (v !== undefined && v !== null && v !== '') lines.push(`${label}：${v}`); } catch { /* skip */ }
     };
@@ -510,6 +510,12 @@ async function proxyText(path, direct) {
     return r;
 }
 
+// 审: 诊断包文件名 CCST诊断-YYYYMMDD-HHMM-v<版本>.txt（全年份、带版本、无空格）；版本取已连上的代理版本，没连上则用 'unknown'。
+function diagFileName(d, version) {
+    const p2 = (n) => String(n).padStart(2, '0');
+    return `CCST诊断-${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}-v${version || 'unknown'}.txt`;
+}
+
 // 审: 「反馈」分区：唯一的「导出日志」按钮（报告 + 原始数据一个文件）。
 function buildDiagGroup() {
     const g = group('反馈');
@@ -526,7 +532,7 @@ function buildDiagGroup() {
             const text = `# CCST 诊断报告 ${stamp.toLocaleString()}\n\n${await clientSection()}\n\n${report}\n\n## 原始数据\n\n${JSON.stringify({ ...full, report: undefined }, null, 1)}\n`;
             const a = el('a');
             a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
-            a.download = `ccst-诊断-${stamp.getMonth() + 1}${String(stamp.getDate()).padStart(2, '0')}-${String(stamp.getHours()).padStart(2, '0')}${String(stamp.getMinutes()).padStart(2, '0')}.txt`;
+            a.download = diagFileName(stamp, store.get().status?.version ?? store.get().status?.panelVersion);
             a.click();
             setTimeout(() => URL.revokeObjectURL(a.href), 10000);
             notify('ok', '已下载', '含聊天原文，别公开发', { ms: 10000 });
