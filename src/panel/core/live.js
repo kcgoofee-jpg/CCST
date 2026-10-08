@@ -7,26 +7,28 @@
 
 import { store } from './store.js';
 import { getSettings } from './settings.js';
-import { normalizeEndpoint } from './capabilities.js';
 import { fetchProxy, timeoutSignal } from './proxy.js';
-import { IS_TAURI } from './capabilities.js';
 import { connectionInfo } from './connection.js';
 import { notify, clearNotice } from './notify.js';
 import { F } from './registry.js';
 import { chatKeyOf } from './chat-key.js';
-import { quotaGate, QUOTA_MIN_GAP_MS } from './quota-gate.js';
+import { quotaGate } from './quota-gate.js';
 import { usagePace } from '../tabs/status.js';
 
 // ── Version: panel and proxy update through different channels ──
 // (SillyTavern's extension manager for the panel; git pull / ZIP + a restart for the proxy),
 // so they drift apart. Same major.minor = compatible; otherwise say which side is behind and how to update it.
 
+// 审: 面板自己的版本号，启动时读 manifest.json；读不到（副本缺 manifest）则为 null，版本比对随之跳过。
 let panelVersion = null;
 fetch(new URL('../../../manifest.json', import.meta.url).href)
     .then((r) => r.json()).then((m) => { panelVersion = m.version ?? null; }).catch(() => { /* copy without a manifest */ });
+// 审: 取主次版本号（同主次版本视为兼容）。
 const majorMinor = (v) => String(v ?? '').split('.').slice(0, 2).map(Number);
+// 审: 同一对版本只弹一次「版本不配」，避免每次刷新都弹。
 let warnedVersions = null;
 
+// 审: 哪一边旧（proxy / panel / null=一致）；shell 的版本不配卡片用。
 /** 哪一边旧：'proxy' | 'panel' | null（主次版本相同算一致）。 */
 export function mismatchSide(proxyVersion, panelV = panelVersion) {
     if (!panelV || !proxyVersion) return null;
@@ -36,8 +38,9 @@ export function mismatchSide(proxyVersion, panelV = panelVersion) {
     return xa < pa || (xa === pa && xb < pb) ? 'proxy' : 'panel';
 }
 
+// 审: 版本不配时的一句话说明（卡片上的具体步骤在 connect-help.js）。
 /** 一句话的情况 + 影响；具体步骤在面板卡片里（connect-help.js 的 mismatchHelp）。 */
-export function versionMismatch(proxyVersion, panelV = panelVersion) {
+function versionMismatch(proxyVersion, panelV = panelVersion) {
     const side = mismatchSide(proxyVersion, panelV);
     if (!side) return null;
     return side === 'proxy'
@@ -45,10 +48,12 @@ export function versionMismatch(proxyVersion, panelV = panelVersion) {
         : `面板 v${panelV} 比服务 v${proxyVersion} 旧，请更新`;
 }
 
+// 审: 更新顶栏概览数字（额度、缓存）的快捷方式。
 const glancePatch = (partial) => store.merge('glance', partial);
 
 // ── Proxy status ──
 
+// 审: 向代理问 /status 并写入 store：在线/未登录/被拒/离线，附带版本、运行方式、健康提示；面板没建好则跳过。
 export async function refreshStatus() {
     if (!document.getElementById('claude_max_status_title') || !document.getElementById('claude_max_status_sub')) return;
     store.set({ status: { phase: 'pending' } });
@@ -57,7 +62,7 @@ export async function refreshStatus() {
         const data = await res.json().catch(() => ({}));
         if (res.status === 401 || res.status === 403) {
             // Reached the proxy, which turned us away (another device: the proxy is for its own computer)
-            store.set({ proxyState: 'offline', status: { phase: 'denied', code: res.status, message: data.error?.message ?? `HTTP ${res.status}` } });
+            store.set({ proxyState: 'offline', status: { phase: 'denied', message: data.error?.message ?? `HTTP ${res.status}` } });
             return;
         }
         if (!res.ok || !data.ok) throw new Error(data.message || `HTTP ${res.status}`);
@@ -88,19 +93,18 @@ export async function refreshStatus() {
             },
         });
     } catch {
-        const where = normalizeEndpoint(getSettings().endpoint);
-        store.set({
-            proxyState: 'offline', proxyOnline: false,
-            status: { phase: 'offline', where, remote: !/\/\/(127\.0\.0\.1|localhost)[:/]/.test(where) },
-        });
+        store.set({ proxyState: 'offline', proxyOnline: false, status: { phase: 'offline' } });
     }
 }
 
 // ── Heartbeat: notice a dropped proxy and its return ──
 
-export const HEARTBEAT_MS = 20000;
+// 审: 心跳间隔 20 秒。
+const HEARTBEAT_MS = 20000;
+// 审: 已经为「代理断了」弹过提示，恢复时才弹「已恢复」。
 let heartbeatDown = false;
 
+// 审(存疑): 首行 getSettings().enabled 自 6.1 起恒为 undefined（'enabled' 在 REMOVED_KEYS 里每次被删、defaultSettings 也没有），函数永远在首行返回，整个心跳（断线/恢复提示）实际从未生效；属 6.1 精简遗留 bug，修它会让心跳复活（行为变化），故未动，请主人定夺。
 export async function heartbeat() {
     if (!getSettings().enabled || document.hidden) return;
     let up = false;
@@ -132,18 +136,20 @@ export async function heartbeat() {
     }
 }
 
+// 审: 启动心跳定时器（boot 调用）；因上一条存疑，目前每 20 秒空转。
 export function startHeartbeat() {
     return setInterval(heartbeat, HEARTBEAT_MS);
 }
 
 // ── Quota meter ──
 
-export { QUOTA_MIN_GAP_MS };
+// 审: 额度请求的节流状态：上次请求时间、上游限流的禁问时间、是否在途、退避后的自动重试计时器。
 let quotaAskedAt = 0;      // last time this panel actually asked the proxy
 let quotaNotBefore = 0;    // upstream rate limit: no ask before this
 let quotaInFlight = false;
 let quotaTimer = null;
 
+// 审: 读额度并更新顶栏与额度卡；每个面板至多 60 秒问一次（Anthropic 会限流），force 仅用于用户点刷新。
 /** Ask for the quota — at most once per 60 s per panel, however often the tab / drawer / heartbeat
  *  path calls this (Anthropic rate-limits the endpoint). `force` skips the gap for the one case where
  *  the user asked (刷新); it still respects an upstream rate limit. */
@@ -183,6 +189,7 @@ export async function refreshQuota({ force = false } = {}) {
 
 // ── Usage stats ──
 
+// 审: 读「本聊天上一轮」用量并写入 store，同时更新顶栏缓存数字。
 export async function refreshStats() {
     if (!document.getElementById('claude_max_stats')) return;
     store.set({ stats: { phase: 'loading' } });
@@ -200,9 +207,10 @@ export async function refreshStats() {
     }
 }
 
+// 审: 整页刷新用的用量读取：读完无论成败都更新「更新于」时间（refreshStats 只在成功时更新）。
 // The quota is NOT fetched when the panel opens (Anthropic rate-limits it, and a fresh install has
 // nothing to show): it is asked for after each reply and by the 刷新 button.
-export async function refreshStatsPage() {
+async function refreshStatsPage() {
     await refreshStats();
     store.set({ statsAt: Date.now() });
 }
@@ -211,10 +219,13 @@ export async function refreshStatsPage() {
 // Local renders (connect note, cache card, check-up) listen to `pulse`;
 // the fetches start here.
 
+// 审: 最新版本号的来源：GitHub main 的 package.json（一键安装装的就是它）。
 // 最新版本：GitHub 上 main 的 package.json（一键安装装的就是它），6 小时查一次，记在本机
 const LATEST_URL = 'https://raw.githubusercontent.com/kcgoofee-jpg/CCST/main/package.json';
+// 审: 最新版本号在本机 localStorage 的缓存键，6 小时内不重复查。
 const LATEST_KEY = 'claude_max_latest';
-export async function checkLatest(now = Date.now()) {
+// 审: 查 GitHub 上的最新版本并写入 store（更新卡片用）；读缓存优先，连不上静默。
+async function checkLatest(now = Date.now()) {
     try {
         const saved = JSON.parse(localStorage.getItem(LATEST_KEY) ?? 'null');
         if (saved?.version && now - saved.at < 6 * 3600_000) { store.set({ latestVersion: saved.version }); return; }
@@ -227,6 +238,7 @@ export async function checkLatest(now = Date.now()) {
     } catch { /* 连不上 GitHub：不提示 */ }
 }
 
+// 审: 整页刷新（开抽屉、点重新检测）：脉冲 + 状态 + 用量 + 额度 + 最新版本；boot/shell/状态页共用。
 export function refreshAll() {
     store.set({ pulse: store.get().pulse + 1 });
     refreshStatus();

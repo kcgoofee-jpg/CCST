@@ -6,6 +6,7 @@
 // re-subscribing.
 // ──────────────────────────────────────────────
 
+// 审: 极简状态仓库；面板实时数据放这里，live.js 写、各标签页订阅重画。导出是为了测试单独建仓库。
 /**
  * @param {Record<string, any>} initial
  */
@@ -33,11 +34,13 @@ export function createStore(initial = {}) {
             }
         },
 
+        // 审: 合并进某个对象值的键（如 glance）。
         /** Merge into one object-valued key: `merge('glance', { quota: 5 })`. */
         merge(key, partial) {
             this.set({ [key]: { ...(state[key] ?? {}), ...partial } });
         },
 
+        // 审(存疑): '*' 通配与返回的退订函数生产代码都没用到，只有 test/panel-store.test.js 用；是测试覆盖的通用能力，未删。
         /**
          * `keys`: a key, an array of keys, or '*' for everything. Returns the unsubscribe function.
          * `fn(state, changedKeys)`.
@@ -50,6 +53,7 @@ export function createStore(initial = {}) {
     };
 }
 
+// 审: 面板全局仓库及其初始值；gen 是生成进度条，pulse 是整页刷新的脉冲。
 /** The panel's store. `proxyState` / `proxyOnline` describe the proxy; `status`, `quota`, `stats`
  *  carry {phase: 'pending' | 'loading' | 'ok' | 'error' …} plus the data; `pulse` bumps on a full refresh. */
 export const store = createStore({

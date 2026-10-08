@@ -1,8 +1,10 @@
 // When the panel may ask the proxy for the quota, and what the quota line shows when it does not.
 // Pure: core/live.js passes its clock and flags in.
 
+// 审: 额度请求最小间隔 60 秒；测试引用。
 export const QUOTA_MIN_GAP_MS = 60000;
 
+// 审: 纯函数：现在能不能问额度、不问时屏幕上该显示什么（已有数字保留，否则回到「点刷新」），避免占位符卡住。
 /**
  * @param {{ now: number, phase: string, force?: boolean, inFlight?: boolean,
  *           askedAt?: number, notBefore?: number, gapMs?: number }} s

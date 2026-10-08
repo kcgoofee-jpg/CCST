@@ -5,6 +5,7 @@
 
 import { F } from '../core/registry.js';
 
+// 审: 一键连接在酒馆没有 Claude 模型时，给代理连接设模型（优先改界面控件，没有则直接写设置）。
 /** Switch SillyTavern's model on the proxy connection (its custom model field). `id` is canonical
  *  (claude-opus-4-6), optionally with [1m]. */
 export function setModel(id) {

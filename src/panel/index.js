@@ -35,6 +35,7 @@
 // Injection is scoped: it only fires when the active connection actually points at this plugin's
 // endpoint, so other Custom endpoints (Meridian, llama.cpp, etc.) are untouched.
 
+// 审: 可选功能清单 [注册名, features/ 下的文件名]；某项加载失败只跳过它，面板其余照常；test/panel-files 核对这里与目录一一对应。
 // [name it registers under (F.<name>), file in features/]
 const FEATURES = [
     ['keeper', 'reply-keeper'], ['checkup', 'checkup'],
@@ -42,15 +43,19 @@ const FEATURES = [
     ['debug', 'debug-request'],
 ];
 
+// 审: 以本文件位置为基准的动态 import，面板装在任何位置（全局/用户目录/插件自动装的副本）都能找到兄弟文件。
 const load = (path) => import(new URL(path, import.meta.url).href);
 
+// 审: 防重复加载：扩展可能同时有手动装的和插件自动装的两份，后加载的那份什么都不做。
 if (window.__claudeMaxUiLoaded) {
     console.log('[claude-max] another copy of the CCST extension is already active — this one will stay dormant');
 } else {
     window.__claudeMaxUiLoaded = true;
     try {
+        // 审: 必需模块（核心、共享库加载器、注册表）；缺任何一个面板都跑不了，所以一起 await，失败只打一条错误。
         // Required: the core and the shell. A copy that is missing them cannot run at all.
         const [boot, libs, registry] = await Promise.all([load('./core/boot.js'), load('./core/libs.js'), load('./core/registry.js')]);
+        // 审: 可选功能各自 try/catch 并行加载；失败的功能不进注册表，调用方经 F 代理拿到空操作。
         // Optional: each feature on its own.
         await Promise.all(FEATURES.map(async ([name, file]) => {
             try {
@@ -59,7 +64,9 @@ if (window.__claudeMaxUiLoaded) {
                 console.warn(`[claude-max] feature "${file}" unavailable`, err);
             }
         }));
+        // 审: 异步加载 src/shared 的可选 helper，到位后触发 libHooks 里对应的重画/刷新。
         libs.loadLibs(boot.libHooks);
+        // 审: 真正的启动（建面板、订阅、心跳、接酒馆事件）都在 core/boot.js。
         boot.boot();
     } catch (err) {
         console.error('[claude-max] failed to start', err);

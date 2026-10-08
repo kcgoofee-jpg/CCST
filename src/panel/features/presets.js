@@ -10,6 +10,7 @@ import { connectionInfo, shortModel, modelKey } from '../core/connection.js';
 import { notify } from '../core/notify.js';
 import { rebuildPanel } from '../shell.js';
 
+// 审(存疑): 只为收编 v2.5.0 应用推荐时没留记录的老用户而存在，新用户基本用不上（仍可达：预设带推荐且设置恰好等于推荐时会补记）；若不再支持 2.x 升级可整体删，但会让极老用户切预设时无法还原，故未动。
 // Recommendations applied by v2.5.0 left no record, so switching away
 // couldn't undo them. If the active preset's recommendation is in effect
 // and differs from the defaults, record it once (restore target: default).
@@ -35,6 +36,7 @@ export function adoptUnrecordedReco() {
 
 // ── Preset-recommended settings ──
 
+// 审: 预设可推荐的设置项（条目后移、缓存时长）及校验；其余旧字段忽略。
 // A preset can ship `extensions.claude_max = { loreTail, cacheTtl }`; switching to it applies those
 // values (and switching away restores them). Fields of older versions (effort, thinking, …) are ignored.
 const PRESET_FIELDS = {
@@ -42,11 +44,13 @@ const PRESET_FIELDS = {
     cacheTtl: { label: '缓存时长', valid: (v) => v === '1h' || v === '5m' },
 };
 
+// 审: 切预设后的总入口：应用推荐设置 + 按模型的条目开关。
 export function applyPresetRecommendation() {
     applyPresetRecoCore();
     applyModelProfile();
 }
 
+// 审: 按当前模型开关预设里指定的条目（如 4.6 开思维链条目、5.5 关）；换模型/切预设/启动时调用，有改动才提示。
 // A preset can switch its own entries per model: extensions.claude_max.byModel =
 //   { "claude-opus-4-6": { prompts: { "<entry id>": true } }, "claude-opus-5-5": { prompts: { "<entry id>": false } } }
 // Applied on every model change and preset switch — e.g. on Opus 4.6 turn on an entry that writes
@@ -77,6 +81,7 @@ export async function applyModelProfile() {
     if (done.length) notify('info', '随模型调', `${shortModel(model)}：${done.join('；')}`, { ms: 5000 });
 }
 
+// 审: 应用或还原预设带的推荐设置（切走时还原到之前的值），改了就重建面板并提示。
 function applyPresetRecoCore() {
     const ctx = SillyTavern.getContext();
     const rec = ctx.chatCompletionSettings?.extensions?.claude_max;
