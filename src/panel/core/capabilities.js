@@ -62,12 +62,6 @@ export function proxyDirectOnly({ tauri, endpoint }) {
     return !!tauri || normalizeEndpoint(endpoint) !== normalizeEndpoint(DEFAULT_ENDPOINT);
 }
 
-// 审: 云端酒馆却配着本机回环地址时为真，shell 据此提示；host.js 没加载就不提示。
-/** Cloud-hosted SillyTavern with a loopback proxy address (needs shared/host.js; without it, no note). */
-export function cloudHosted(hostCheck, { hostname, endpoint, tauri }) {
-    return !!hostCheck?.cloudNeedsNote({ hostname, endpoint, tauri });
-}
-
 // 审: 把酒馆当前的来源/URL/模型归纳成「是否连着本代理」，面板所有「已连接」判断的唯一来源。
 /**
  * Where SillyTavern sends chat requests, from its settings.

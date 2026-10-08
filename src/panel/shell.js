@@ -6,9 +6,9 @@
 
 import { store } from './core/store.js';
 import { getSettings, saveSettingsDebounced, EFFORT_LABEL } from './core/settings.js';
-import { connectHelp, mismatchHelp, hostKind, loginHelp, updateHelp, isNewerVersion } from './core/connect-help.js';
+import { connectHelp, mismatchHelp, hostKind, loginHelp, updateHelp, isNewerVersion, awayHelp } from './core/connect-help.js';
 import { stepItem, downloadItem } from './core/help-items.js';
-import { IS_TAURI, COARSE, cloudHosted, isOurEndpoint } from './core/capabilities.js';
+import { IS_TAURI, COARSE, isOurEndpoint } from './core/capabilities.js';
 import { libs } from './core/libs.js';
 import { F } from './core/registry.js';
 import { connectionInfo, shortModel } from './core/connection.js';
@@ -268,6 +268,10 @@ function describeCard() {
     const base = { setup };
     const phase = status.phase;
 
+    if (hostNow() === 'away') {
+        const help = awayHelp({ touch: COARSE });
+        return { ...base, setup: true, tone: 'info', dot: 'offline', key: 'away', title: help.title, sub: help.sub };
+    }
     if (phase === 'denied') {
         return { ...base, tone: 'error', dot: 'offline', key: 'denied', title: '只能本机用', sub: status.message || '只给装 CCST 的那台电脑用' };
     }
@@ -370,11 +374,6 @@ export function renderConnect() {
     // The bar is for a working connection; during first-run the card is the only thing to look at.
     const bar = document.getElementById('claude_max_bar');
     if (bar) bar.hidden = !!view?.setup;
-    // Cloud SillyTavern + loopback address + proxy unreachable: say why instead of "start the proxy".
-    const cloud = document.getElementById('claude_max_cloud');
-    if (cloud) {
-        cloud.hidden = proxyState !== 'offline' || !cloudHosted(libs.hostCheck, { hostname: location.hostname, endpoint: getSettings().endpoint, tauri: IS_TAURI });
-    }
     renderGlance();
 }
 
@@ -417,12 +416,7 @@ function buildStatusBar(showTab) {
     row.append(action, action2);
     card.append(head, sub, steps, downloads, dlHint, row);
 
-    const cloud = note('info', '连不上');
-    cloud.id = 'claude_max_cloud';
-    cloud.hidden = true;
-    cloud.append(el('small', 'cm-hint', 'CCST 要和酒馆在同一台电脑'));
-
-    block.append(bar, buildGuideCard(), card, cloud);
+    block.append(bar, buildGuideCard(), card);
     return block;
 }
 

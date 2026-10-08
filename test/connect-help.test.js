@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { connectHelp, mismatchHelp, hostKind, installHelp, loginHelp, MAC_PLUGIN_CMD, DOCS_URL } from '../src/panel/core/connect-help.js';
+import { connectHelp, mismatchHelp, hostKind, installHelp, loginHelp, awayHelp, MAC_PLUGIN_CMD, DOCS_URL } from '../src/panel/core/connect-help.js';
 import { openExternal, copyText } from '../src/panel/core/external.js';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -8,9 +8,15 @@ import { fileURLToPath } from 'node:url';
 const allText = (h) => [h.sub, h.hint, ...h.steps.flatMap((s) => [s.text, s.cmd ?? ''])].join('\n');
 
 test('hostKind: facts only', () => {
-    assert.equal(hostKind({ tauri: true, elsewhere: true }), 'tauri');
-    assert.equal(hostKind({ elsewhere: true }), 'elsewhere');
+    assert.equal(hostKind({ tauri: true, elsewhere: true }), 'away', 'TauriTavern on a phone cannot use CCST');
+    assert.equal(hostKind({ elsewhere: true }), 'away');
+    assert.equal(hostKind({ tauri: true }), 'tauri');
     assert.equal(hostKind({}), 'desktop');
+});
+
+test('phone / cloud SillyTavern: one card, no install or login steps', () => {
+    assert.match(awayHelp({ touch: true }).sub, /手机/);
+    assert.match(awayHelp({ touch: false }).sub, /同一台电脑/);
 });
 
 test('desktop: Mac gets a terminal line (downloaded .command files are blocked), Windows gets the .bat from the extension folder', () => {
@@ -32,8 +38,8 @@ test('desktop: Mac gets a terminal line (downloaded .command files are blocked),
 const noLoopback = (h) => assert.doesNotMatch(JSON.stringify(h), /127\.0\.0\.1|localhost/);
 const cardText = (h) => [h.title, h.sub, h.hint, ...h.downloads.map((d) => d.label)].join('');
 
-test('TauriTavern / elsewhere: one sentence and a docs link; no 127.0.0.1, no steps, no form', () => {
-    for (const host of ['tauri', 'elsewhere']) {
+test('TauriTavern: one sentence and a docs link; no 127.0.0.1, no steps, no form', () => {
+    for (const host of ['tauri']) {
         const h = connectHelp({ host });
         assert.equal(h.title, '连不上');
         assert.match(h.sub, /npm start/);
@@ -62,18 +68,18 @@ test('first-run guide: step 1 reuses the same install data, step 2 is one comman
     assert.equal(d.win.download, true);
     assert.ok(existsSync(fileURLToPath(d.win.href)));
     assert.equal(d.docs, null);
-    for (const host of ['tauri', 'elsewhere']) {
+    for (const host of ['tauri']) {
         const r = installHelp({ host });
         assert.equal(r.mac, null);
         assert.equal(r.win, null);
         assert.equal(r.docs, DOCS_URL);
     }
-    for (const host of ['desktop', 'tauri', 'elsewhere']) assert.equal(loginHelp({ host }).cmd, 'npm run login');
+    for (const host of ['desktop', 'tauri']) assert.equal(loginHelp({ host }).cmd, 'npm run login');
     assert.match(loginHelp({ host: 'desktop' }).where, /plugins\/CCST/);
 });
 
 test('every link the cards offer has a URL to copy', () => {
-    for (const host of ['desktop', 'tauri', 'elsewhere']) {
+    for (const host of ['desktop', 'tauri']) {
         const h = connectHelp({ host });
         for (const d of h.downloads) assert.match(d.copy, /^https:\/\/|^zsh -c "\$\(curl -fsSL https:\/\//, `${host}: ${d.key} has a URL or command to copy`);
     }

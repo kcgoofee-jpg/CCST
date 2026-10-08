@@ -9,7 +9,7 @@ const REPO_URL = 'https://github.com/kcgoofee-jpg/CCST';
 // 审: 安装程序文件在扩展自己的 installer/ 目录，用相对地址下载，离线/镜像环境也能用。
 // 一键安装程序（装成酒馆服务器插件）只给「本机浏览器里的原版酒馆」：Windows 的 .bat 在扩展自己的文件夹里（installer/），
 // 用相对地址下载，离线 / 镜像环境也能用。Mac 不给下载文件：下载来的 .command 在 macOS 15 以上会被系统拦住，改给终端一行命令。
-// TauriTavern / 手机 / 别处打开的酒馆都装不了这个插件，给的是别的路：见 hostKind。
+// TauriTavern 装不了酒馆插件，给单独运行的路；手机和不在这台电脑上打开的酒馆用不了 CCST（见 hostKind、awayHelp；手机支持留在 todo/mobile 分支）。
 const INSTALLER_BASE = new URL('../../../installer/', import.meta.url);
 // 审: 桌面端可下载的安装程序（只剩 Windows 的 .bat；Mac 给终端命令不给文件）。
 const INSTALLERS = [
@@ -23,13 +23,18 @@ export const MAC_PLUGIN_CMD = 'zsh -c "$(curl -fsSL https://raw.githubuserconten
 // 审: 面板跑在哪（tauri / elsewhere / desktop），决定给安装卡片哪套内容；只用已知事实不探测。
 /**
  * 面板在哪儿运行，只用已知的事实（不探测）：
- *   tauri     窗口里有 __TAURITAVERN__（TauriTavern，电脑或手机）
- *   elsewhere 不是 TauriTavern，但是触屏设备，或页面不是从本机 / 局域网打开的（云端酒馆、手机浏览器）：
- *             这台设备只是个浏览器，酒馆和代理在别的机器上
+ *   away      触屏设备（手机，含 TauriTavern 手机版），或页面不是从本机 / 局域网打开的（云端酒馆）：用不了 CCST
+ *   tauri     电脑上的 TauriTavern
  *   desktop   电脑浏览器里打开本机的原版酒馆
  */
 export function hostKind({ tauri = false, elsewhere = false } = {}) {
-    return tauri ? 'tauri' : elsewhere ? 'elsewhere' : 'desktop';
+    return elsewhere ? 'away' : tauri ? 'tauri' : 'desktop';
+}
+
+// 审: 手机 / 云端酒馆只给这一张卡片，不给安装登录步骤。
+/** 这台设备用不了 CCST 时的卡片。touch：手机（触屏）；否则是云端或别处打开的酒馆。 */
+export function awayHelp({ touch = false } = {}) {
+    return { title: '这里用不了 CCST', sub: touch ? '手机上用不了；在电脑上打开酒馆就行' : 'CCST 要和酒馆在同一台电脑上' };
 }
 
 // 审: 只有链接没有下载文件的条目（装不了插件的环境给安装说明）。
@@ -71,10 +76,10 @@ export function isNewerVersion(a, b) {
  */
 export function connectHelp({ host = 'desktop' } = {}) {
     const base = { key: 'offline', host, title: '连不上', steps: [] };
-    if (host === 'tauri' || host === 'elsewhere') {
+    if (host === 'tauri') {
         return {
             ...base,
-            sub: '到运行酒馆的电脑上运行 npm start',
+            sub: '在 CCST 文件夹里运行 npm start',
             downloads: [remoteItem('docs', '安装说明', DOCS_URL)],
             hint: '',
         };
@@ -94,8 +99,8 @@ export function connectHelp({ host = 'desktop' } = {}) {
  * @returns {{ sub: string, mac: string|null, win: object|null, docs: string|null }}
  */
 export function installHelp({ host = 'desktop' } = {}) {
-    if (host === 'tauri' || host === 'elsewhere') {
-        return { sub: '在运行酒馆的电脑上装好 CCST', mac: null, win: null, docs: DOCS_URL };
+    if (host === 'tauri') {
+        return { sub: 'TauriTavern 装不了插件：照安装说明单独运行 CCST', mac: null, win: null, docs: DOCS_URL };
     }
     const [win] = desktopDownloads().filter((d) => d.key === 'win');
     return {
@@ -110,7 +115,7 @@ export function installHelp({ host = 'desktop' } = {}) {
 /** 首次引导第 2 步「登录」：要运行的那一条命令和它在哪儿运行。 */
 export function loginHelp({ host = 'desktop' } = {}) {
     return {
-        where: host === 'desktop' ? '在酒馆文件夹的 plugins/CCST 里运行：' : '在运行酒馆的电脑上，进 CCST 文件夹运行：',
+        where: host === 'desktop' ? '在酒馆文件夹的 plugins/CCST 里运行：' : '在 CCST 文件夹里运行：',
         cmd: 'npm run login',
     };
 }
@@ -149,14 +154,9 @@ export function mismatchHelp({ side, proxyVersion, panelVersion, runtime = null,
         { text: '关掉运行 npm start 的窗口，再运行一次。' },
     ];
     // 审: 这两种环境没有插件安装器，代理必然是别处单独运行的那份，只列单独运行的步骤。
-    if (isTT || host === 'elsewhere') {
-        // No plugin installer on these hosts: the proxy is the standalone one on another machine.
-        return {
-            sub,
-            steps: [...(host === 'elsewhere' ? [{ text: '到运行酒馆的电脑上操作。' }] : []), ...standaloneSteps, { text: REFRESH_STEP }],
-            downloads: isTT ? [] : [remoteItem('docs', '使用指南', DOCS_URL)],
-            hint: '',
-        };
+    if (isTT) {
+        // TauriTavern has no plugin installer: the proxy is the standalone one.
+        return { sub, steps: [...standaloneSteps, { text: REFRESH_STEP }], downloads: [], hint: '' };
     }
     // 审: 装成酒馆插件的代理的更新步骤（再装一次）。
     const pluginSteps = [

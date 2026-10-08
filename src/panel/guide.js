@@ -178,6 +178,8 @@ export function renderGuide() {
     const settings = getSettings();
     const phase = store.get().status.phase;
     const facts = guideFacts(connectionInfo(), phase);
+    // 手机 / 云端酒馆：连接卡片说「这里用不了」，不走安装引导。
+    if (hostNow() === 'away') { card.hidden = true; drawn = ''; return off; }
     // Not known yet (first check at start-up): keep whatever is drawn; draw nothing before the first answer.
     if (facts.checking) return drawn ? { hideConnectCard: true } : off;
     if (facts.connected && !settings.everConnected) {

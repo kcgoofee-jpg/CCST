@@ -37,20 +37,4 @@ export function isLocalHost(hostname) {
     return false;
 }
 
-// 审: 端点是否指向本机（localhost/127.x/::1）；cloudNeedsNote 的子判断，测试也直接用。
-/** The endpoint points at the machine SillyTavern's server runs on (127.0.0.1 / localhost). */
-export function isLoopbackUrl(url) {
-    let host;
-    try { host = new URL(String(url)).hostname.toLowerCase().replace(/^\[|\]$/g, ''); } catch { return false; }
-    return host === 'localhost' || host === '::1' || /^127\./.test(host);
-}
 
-// 审: 云端酒馆 + 回环端点 = 连不上用户电脑上的代理；面板 capabilities 用它显示一次性说明。
-/**
- * A cloud-hosted SillyTavern pointed at a loopback proxy address: the proxy on
- * the user's computer is out of its reach.
- * @param {{ hostname: string, endpoint: string, tauri?: boolean }} p
- */
-export function cloudNeedsNote({ hostname, endpoint, tauri = false }) {
-    return !tauri && !isLocalHost(hostname) && isLoopbackUrl(endpoint);
-}
