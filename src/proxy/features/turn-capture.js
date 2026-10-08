@@ -99,8 +99,13 @@ export function repliesBefore(list) {
  * the proxy changed it before sending (lore-tail.js puts moving world info
  * on top of it): the capture is filed under that text, so next turn replays
  * the message exactly as it was sent and the cached prefix still matches.
+ *
+ * `lead`: entries of this turn that come before the current user entry and are not written by the
+ * CLI — a prefill turn's player message (as sent) and the placeholder reply after it. The turn is
+ * kept as lead + continuation instruction (+ its attachments), filed under the player's text, so
+ * next turn the player's message is replayed as the CLI saw it, not bare.
  */
-export function createTurnCollector(currentText, keyText = currentText, model = null, context = '') {
+export function createTurnCollector(currentText, keyText = currentText, model = null, context = '', lead = null) {
     let collecting = null;
     let done = false;
     return {
@@ -127,7 +132,7 @@ export function createTurnCollector(currentText, keyText = currentText, model = 
                     // of this turn only and stays with it on replay.
                     const becomesPin = !!model && attachments.length > 0 && !hasPinnedContext(model);
                     if (becomesPin) pinContext(model, attachments);
-                    remember(keyText ?? currentText, context, collecting, becomesPin);
+                    remember(keyText ?? currentText, context, lead?.length ? [...lead, ...collecting] : collecting, becomesPin);
                     done = true;
                 }
             }
@@ -220,21 +225,35 @@ export function replayTurn(text, parentUuid, meta, { pinOn = false, context = ''
 }
 
 /**
- * Replace `from` with `to` in the text of every captured user entry; returns
- * how many entries changed. Used when the preset's post-history entries were
- * changed (an entry switched off): earlier turns were replayed as sent, so
- * without this the switched-off entry stayed in every one of them.
+ * `text` with every copy of any of `from` (one text or several versions)
+ * replaced by `to`, in one pass: where one version contains another the
+ * longest wins, and replaced text is never matched again. A text that already
+ * carries `to` is up to date and left alone (a turn rerolled after the edit:
+ * an old version that is part of the new one would be swapped twice).
+ */
+export function swapVersions(text, from, to) {
+    const list = [...new Set([from].flat().filter((f) => f && f !== to))].sort((a, b) => b.length - a.length);
+    if (typeof text !== 'string' || !list.length || (to && text.includes(to)) || !list.some((f) => text.includes(f))) return text;
+    const re = new RegExp(list.map((f) => f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'g');
+    return text.replace(re, () => to);
+}
+
+/**
+ * Replace `from` (one text or several versions) with `to` in the text of every
+ * captured user entry; returns how many entries changed. Used when the preset's
+ * post-history entries were changed (an entry switched off): earlier turns were
+ * replayed as sent, so without this the switched-off entry stayed in every one of them.
  */
 export function rewriteCaptured(from, to) {
-    if (!from || from === to) return 0;
     let n = 0;
-    const swap = (s) => (typeof s === 'string' && s.includes(from) ? s.split(from).join(to) : s);
     for (const { entries } of captures.values()) {
         const msg = entries[0]?.message;
         if (!msg) continue;
         const before = JSON.stringify(msg.content);
-        if (typeof msg.content === 'string') msg.content = swap(msg.content);
-        else if (Array.isArray(msg.content)) for (const b of msg.content) if (b?.type === 'text') b.text = swap(b.text);
+        if (typeof msg.content === 'string') msg.content = swapVersions(msg.content, from, to);
+        else if (Array.isArray(msg.content) && !(to && msg.content.some((b) => b?.type === 'text' && b.text?.includes?.(to)))) {
+            for (const b of msg.content) if (b?.type === 'text') b.text = swapVersions(b.text, from, to);
+        }
         if (JSON.stringify(msg.content) !== before) n++;
     }
     return n;

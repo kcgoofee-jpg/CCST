@@ -117,12 +117,56 @@ test('noteTail: a tail that was stable and then changed is a settings change; pe
     const old = '规则'.repeat(200);
     assert.equal(noteTail('c', old), null);
     assert.equal(noteTail('c', old), null);
-    assert.deepEqual(noteTail('c', '新规则'.repeat(100)), { from: old, to: '新规则'.repeat(100) });
+    assert.deepEqual(noteTail('c', '新规则'.repeat(100)), { from: [old], to: '新规则'.repeat(100) });
     // Changes every turn (variables in the tail): never rewritten.
     __resetInjected();
     noteTail('d', 'x'.repeat(300) + 1);
     assert.equal(noteTail('d', 'x'.repeat(300) + 2), null);
     assert.equal(noteTail('d', 'x'.repeat(300) + 3), null);
+});
+
+test('noteTail: edited preset entries replace the old tail at once, every earlier version of it', async () => {
+    const { noteTail, __resetInjected } = await import('../src/proxy/features/lore-tail.js');
+    __resetInjected();
+    const v1 = '日记番外'.repeat(100);
+    const v2 = '直白肉欲'.repeat(100);
+    const v3 = '双人直播'.repeat(100);
+    assert.equal(noteTail('c', v1, { order: 'o1' }), null);
+    // Seen one turn only, but the entries' fingerprint changed: a settings change (灰烬之桥 #66).
+    assert.deepEqual(noteTail('c', v2, { order: 'o2' }), { from: [v1], to: v2 });
+    assert.equal(noteTail('c', v2, { order: 'o2' }), null);
+    // Per-turn churn with the same entries collects versions; the next edit replaces all of them.
+    __resetInjected();
+    noteTail('d', v1 + 1, { order: 'o1' });
+    assert.equal(noteTail('d', v1 + 2, { order: 'o1' }), null);
+    assert.deepEqual(noteTail('d', v3, { order: 'o2' }), { from: [v1 + 1, v1 + 2], to: v3 });
+    // A reroll learns nothing: the change still shows on the next turn.
+    __resetInjected();
+    noteTail('e', v1, { order: 'o1' });
+    assert.equal(noteTail('e', v2, { order: 'o2', reroll: true }), null);
+    assert.deepEqual(noteTail('e', v2, { order: 'o2' }), { from: [v1], to: v2 });
+});
+
+test('noteTail: only the end of the old tail with the same entries is a missed history end, not a change', async () => {
+    const { noteTail, __resetInjected } = await import('../src/proxy/features/lore-tail.js');
+    __resetInjected();
+    const full = `${'写作规则'.repeat(100)}\n\n${'思维链锁'.repeat(60)}`;
+    noteTail('c', full, { order: 'o1' });
+    noteTail('c', full, { order: 'o1' });
+    assert.equal(noteTail('c', '思维链锁'.repeat(60), { order: 'o1' }), null, 'a short 「继续」 lost the history end');
+    assert.equal(noteTail('c', full, { order: 'o1' }), null, 'and the full tail is still the known one');
+    // Entries switched off at the front: the fingerprint changed, so it is a change.
+    assert.deepEqual(noteTail('c', '思维链锁'.repeat(60), { order: 'o2' }), { from: [full], to: '思维链锁'.repeat(60) });
+});
+
+test('rewriteInjected replaces any of several old versions in one pass', async () => {
+    const { rememberInjected, injectedTextFor, rewriteInjected, __resetInjected } = await import('../src/proxy/features/lore-tail.js');
+    __resetInjected();
+    rememberInjected('甲', '甲\n\n旧A', 'r1');
+    rememberInjected('乙', '乙\n\n旧A\n\n旧B', 'r2');
+    assert.equal(rewriteInjected(['\n\n旧A', '\n\n旧A\n\n旧B'], '\n\n新'), 2);
+    assert.equal(injectedTextFor('甲', 'r1'), '甲\n\n新');
+    assert.equal(injectedTextFor('乙', 'r2'), '乙\n\n新', 'the longer version wins, nothing left over');
 });
 
 test('cutExactLore lifts triggered entries out of the system prompt by their text', async () => {
@@ -162,4 +206,18 @@ test('cutExactLore: the world-info wrapper left empty goes too, so the prompt eq
     const constant = 'The glade is protected by old wards that no beast can cross.';
     const both = `${card}\n\n[Details of the fictional world the RP is set in:\n${constant}\n${entry}]\n\n${end}`;
     assert.equal(cutExactLore(both, [entry], fmt).system, `${card}\n\n[Details of the fictional world the RP is set in:\n${constant}]\n\n${end}`);
+});
+
+test('tailsOfOldPreset: after a switch, the post-history versions noted under the old preset, once', async () => {
+    const { noteTail, tailsOfOldPreset, __resetInjected } = await import('../src/proxy/features/lore-tail.js');
+    __resetInjected();
+    const v1 = '灰烬规则一'.repeat(60);
+    const v2 = '灰烬规则二'.repeat(60);
+    noteTail('c', v1, { order: 'o1', preset: '灰烬之桥' });
+    noteTail('c', v2, { order: 'o1', preset: '灰烬之桥' });
+    assert.equal(tailsOfOldPreset('c', '灰烬之桥'), null, 'same preset: nothing');
+    assert.deepEqual(tailsOfOldPreset('c', '果实V6.3'), [v1, v2]);
+    assert.equal(tailsOfOldPreset('c', '果实V6.3'), null, 'taken out once');
+    noteTail('d', 'x'.repeat(300), { order: 'o1' });
+    assert.equal(tailsOfOldPreset('d', '果实V6.3'), null, 'no preset name known: nothing');
 });

@@ -8,7 +8,7 @@ import { store } from './core/store.js';
 import { getSettings, saveSettingsDebounced, EFFORT_LABEL } from './core/settings.js';
 import { connectHelp, mismatchHelp, hostKind, loginHelp, updateHelp, isNewerVersion } from './core/connect-help.js';
 import { stepItem, downloadItem } from './core/help-items.js';
-import { IS_TAURI, APP_NAME, COARSE, cloudHosted, isOurEndpoint } from './core/capabilities.js';
+import { IS_TAURI, COARSE, cloudHosted, isOurEndpoint } from './core/capabilities.js';
 import { libs } from './core/libs.js';
 import { F } from './core/registry.js';
 import { connectionInfo, shortModel } from './core/connection.js';
@@ -70,21 +70,21 @@ export async function connect(settings) {
             const ctx = SillyTavern.getContext();
             const box = document.createElement('div');
             for (const line of [
-                `一键连接会把${APP_NAME}现在的连接改成 CCST 代理：`,
+                '连到 CCST？',
                 `现在：${currentConnectionText() || '（未连接）'}`,
-                `改成：自定义来源 · ${settings.endpoint}`,
-                '同时会新建（或更新）一个叫「CCST」的连接配置并选中它；已选的 Claude 模型不变，没有就选 Opus 4.6。你别的连接配置不会被改，想切回在「API 连接」顶部选回来即可。继续吗？',
+                `改成：CCST · ${settings.endpoint}`,
+                '会存一个「CCST」配置，别的不动',
             ]) { const p = document.createElement('p'); p.textContent = line; box.append(p); }
             const ok = await ctx.callGenericPopup(box, ctx.POPUP_TYPE.CONFIRM);
             if (!ok) return;
         }
         applyConnection(settings);
-        notify('info', '正在保存连接配置『CCST』…', `${APP_NAME}在等模型列表，大约要十秒，请稍候。`, { ms: 0, replace: 'connect-profile' });
+        notify('info', '保存中…', '在等模型列表，约 10 秒', { ms: 0, replace: 'connect-profile' });
         await connectProfile(settings, keepModel);
         setTimeout(refreshAll, 800);
     } catch (err) {
         console.error('[claude-max] connect failed', err);
-        notify('bad', '一键连接没成功', `${String(err?.message ?? err)}。可以到「API 连接」手动选「自定义」来源，地址填上面的代理地址。`, { replace: 'connect' });
+        notify('bad', '连接失败', `到「API 连接」手动选自定义（${String(err?.message ?? err)}）`, { replace: 'connect' });
     }
 }
 
@@ -133,11 +133,11 @@ async function connectProfile(settings, keepModel = '') {
                 notify('warn', '提示', a.text, { ms: 12000, replace: a.key });
             }
         }
-        else if (res.reason === 'no-connection-manager') notify('warn', '已连上代理，但没保存连接配置', `${APP_NAME}的「连接管理器」扩展没开，存不了「CCST」配置。不影响聊天；模型请到「API 连接」里选。`, { ms: 10000, replace: 'connect-profile' });
-        else notify('warn', '已连上代理，但没保存连接配置', `${APP_NAME}没接受「CCST」配置。不影响聊天；想保留的话，到「API 连接」核对后自己存一个。`, { ms: 10000, replace: 'connect-profile' });
+        else if (res.reason === 'no-connection-manager') notify('warn', '没存配置', '能聊天；连接管理器没开', { ms: 10000, replace: 'connect-profile' });
+        else notify('warn', '没存配置', '能聊天；配置没存上', { ms: 10000, replace: 'connect-profile' });
     } catch (err) {
         console.error('[claude-max] connection profile failed', err);
-        notify('warn', '已连上代理，但没保存连接配置', `保存「CCST」配置时出错：${String(err?.message ?? err)}。不影响聊天。`, { ms: 10000, replace: 'connect-profile' });
+        notify('warn', '没存配置', `能聊天；保存出错（${String(err?.message ?? err)}）`, { ms: 10000, replace: 'connect-profile' });
     }
 }
 
@@ -147,7 +147,7 @@ function setDot(state) {
     }
 }
 
-export const SOURCE_LABELS = { keychain: '钥匙串', file: '凭据文件', env: '环境变量' };
+export const SOURCE_LABELS = { keychain: '钥匙串', file: '登录文件', env: '环境变量' };
 
 /** The header summary of the collapsed drawer and the status bar say the same thing:
  *  dot · model · where/billing · 5h quota. Clicking the bar opens 状态. */
@@ -216,7 +216,7 @@ let flashUntil = 0;      // the success card shows until then
 /** 版本不一致：情况 → 影响 → 编号步骤（内容见 connect-help.js 的 mismatchHelp）。 */
 function mismatchCard(base, status) {
     const help = mismatchHelp({ side: status.mismatchSide, proxyVersion: status.version, panelVersion: status.panelVersion, runtime: status.runtime, tauri: IS_TAURI, host: hostNow() });
-    return { ...base, tone: 'warn', dot: 'warning', key: `mismatch-${status.mismatchSide}-${status.runtime ?? 'unknown'}`, title: '面板和代理版本不一致',
+    return { ...base, tone: 'warn', dot: 'warning', key: `mismatch-${status.mismatchSide}-${status.runtime ?? 'unknown'}`, title: '版本不配',
         sub: help.sub, steps: help.steps, showSteps: true, downloads: help.downloads, hint: help.hint };
 }
 
@@ -228,7 +228,7 @@ function updateCard(base, status) {
     const help = updateHelp({ latest, host: hostNow() });
     if (!help) return null;
     return { ...base, tone: 'info', dot: 'online', key: `update-${latest}`, title: help.title, sub: help.sub, downloads: help.downloads, showSteps: true, steps: [],
-        action: { label: '这一版不再提醒', run: () => { getSettings().skipVersion = latest; saveSettingsDebounced(); renderConnect(); } } };
+        action: { label: '不再提醒', run: () => { getSettings().skipVersion = latest; saveSettingsDebounced(); renderConnect(); } } };
 }
 
 /** What the card should say right now: null = no card. */
@@ -240,7 +240,7 @@ function describeCard() {
     const phase = status.phase;
 
     if (phase === 'denied') {
-        return { ...base, tone: 'error', dot: 'offline', key: 'denied', title: '代理拒绝连接', sub: status.message };
+        return { ...base, tone: 'error', dot: 'offline', key: 'denied', title: '被拒绝', sub: status.message };
     }
     if (phase === 'offline') {
         const help = connectHelp({ host: hostNow() });
@@ -251,25 +251,25 @@ function describeCard() {
         };
     }
     if (status.phase === 'nologin') {
-        return { ...base, tone: 'warn', dot: 'warning', key: 'login', title: setup ? '代理在线，还差登录 Claude' : '代理在线，但没登录 Claude',
-            sub: '登录一次后，聊天走你的订阅额度。', steps: STEPS.login(hostNow()),
-            action: { label: '登录说明', again: '我登录好了，重新检测', run: refreshAll } };
+        return { ...base, tone: 'warn', dot: 'warning', key: 'login', title: '还没登录',
+            sub: '登录一次，就用你的订阅', steps: STEPS.login(hostNow()),
+            action: { label: '怎么登录', again: '登好了', run: refreshAll } };
     }
     if (status.phase === 'pending' || status.phase === 'idle') {
-        return setup ? { ...base, tone: 'info', dot: 'pending', key: 'checking', title: '正在检测代理…', sub: '' } : null;
+        return setup ? { ...base, tone: 'info', dot: 'pending', key: 'checking', title: '检测中…', sub: '' } : null;
     }
     if (status.phase === 'online') {
         const mismatch = status.mismatch;
         if (connected) {
             if (Date.now() < flashUntil) {
-                return { ...base, tone: 'ok', dot: 'online', key: 'ok', title: model ? `已连接 · ${shortModel(model)}` : '已连接 · 请选 Claude 模型', sub: '' };
+                return { ...base, tone: 'ok', dot: 'online', key: 'ok', title: model ? `已连接 · ${shortModel(model)}` : '请选模型', sub: '' };
             }
             return mismatch ? mismatchCard(base, status) : updateCard(base, status);
         }
         // Proxy is fine, SillyTavern isn't on it (yet).
-        const sub = '会选好模型，并存成「CCST」连接配置。';
-        return { ...base, tone: 'info', dot: mismatch ? 'warning' : 'online', key: 'connect', title: `代理已就绪，${APP_NAME}还没接上`,
-            sub: mismatch ? `${sub}\n${mismatch}` : sub, action: { label: '一键连接', icon: 'fa-plug', primary: true, run: () => connect(getSettings()) } };
+        const sub = '点一下，自动选好模型';
+        return { ...base, tone: 'info', dot: mismatch ? 'warning' : 'online', key: 'connect', title: '差一步',
+            sub: mismatch ? `${sub}\n${mismatch}` : sub, action: { label: '连接', icon: 'fa-plug', primary: true, run: () => connect(getSettings()) } };
     }
     return null;
 }
@@ -343,7 +343,7 @@ function buildStatusBar(showTab) {
     const bar = el('button', 'cm-bar');
     bar.type = 'button';
     bar.id = 'claude_max_bar';
-    bar.title = '打开「状态」';
+    bar.title = '看状态';
     const sum = el('div', 'cm-bar-sum');
     sum.id = 'claude_max_bar_sum';
     bar.append(el('span', 'cm-dot'), sum, el('i', 'fa-solid fa-chevron-right cm-bar-go'));
@@ -371,10 +371,10 @@ function buildStatusBar(showTab) {
     row.append(action);
     card.append(head, sub, steps, downloads, dlHint, row);
 
-    const cloud = note('info', '酒馆在云端，连不到你电脑上的代理');
+    const cloud = note('info', '连不上');
     cloud.id = 'claude_max_cloud';
     cloud.hidden = true;
-    cloud.append(el('small', 'cm-hint', '云端酒馆里的 127.0.0.1 是服务器自己，CCST 代理要和酒馆在同一台机器上运行。'));
+    cloud.append(el('small', 'cm-hint', 'CCST 要和酒馆在同一台电脑'));
 
     block.append(bar, buildGuideCard(), card, cloud);
     return block;

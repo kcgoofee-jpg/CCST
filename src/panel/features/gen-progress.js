@@ -41,11 +41,13 @@ export function genStart(type, _opts, dryRun) {
 /**
  * Word count the way Word / WPS 字数 does for mixed text: each CJK character (Chinese, Japanese kana,
  * Korean) is one, a run of other letters or digits (an English / Russian word, a number) is one;
- * punctuation, emoji, markdown marks and HTML tags count nothing.
+ * punctuation, emoji, markdown marks and HTML tags count nothing. Thinking a preset has the model write
+ * into the reply (<thinking>…</thinking>, <think>; one still open while streaming) is not the reply.
  */
 const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/gu;
+const THINKING = /<(thinking|think)(?:\s[^<>]*)?>[\s\S]*?(?:<\/\1\s*>|$)/gi;
 export function countWords(text) {
-    const plain = String(text ?? '').replace(/<[^>]*>/g, ' ');
+    const plain = String(text ?? '').replace(THINKING, ' ').replace(/<[^>]*>/g, ' ');
     const cjk = plain.match(CJK)?.length ?? 0;
     const words = plain.replace(CJK, ' ').match(/[\p{L}\p{N}]+(?:['’.-][\p{L}\p{N}]+)*/gu)?.length ?? 0;
     return cjk + words;

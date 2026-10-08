@@ -70,12 +70,12 @@ export function detectRefusal(mes) {
 export function refusalNotice(last) {
     if (!last || !(last.notices?.includes('refusal') || last.finish === 'content_filter')) return null;
     if ((last.textChars ?? 0) < 300) {
-        return { declined: true, title: '模型拒绝了这一轮', text: `Claude 的安全机制没有让这一轮写出来（接口返回 stop_reason: refusal）。${REFUSAL_HINT}` };
+        return { declined: true, title: '被拒绝了', text: REFUSAL_HINT };
     }
-    return { declined: false, title: '回复被安全机制截断', text: '这条回复写到一半被安全机制拦下，结尾缺了内容（变量、状态栏可能出错）。重新生成，或改一下上一条再发。' };
+    return { declined: false, title: '被拦一半', text: '结尾缺了，重新生成试试' };
 }
 
-export const REFUSAL_HINT ='多半是角色卡或世界书里的内容触发了 Anthropic 使用政策（例如未成年人相关）。';
+export const REFUSAL_HINT = '多半是卡里内容触发了政策';
 
 /**
  * The reliable checks of the latest reply (always on, no switch): the model refused, the reply was cut
@@ -88,13 +88,13 @@ export function replyFlags(mes, last = null) {
     const req = last && !last.auxiliary ? last : null;
     const notice = refusalNotice(req);
     if (notice) {
-        out.push({ code: 'refusal', text: notice.declined ? '模型拒绝了这一轮' : '回复被安全机制截断，结尾缺内容', short: notice.declined ? '模型拒绝了这一轮' : '被截断' });
+        out.push({ code: 'refusal', text: notice.declined ? '被拒绝了' : '被拦一半，结尾缺了', short: notice.declined ? '被拒绝了' : '被拦一半' });
     } else if (mes != null) {
         const excerpt = detectRefusal(mes);
-        if (excerpt) out.push({ code: 'refusal', text: `模型拒绝了这一轮：「${excerpt}」`, short: '模型拒绝了这一轮' });
+        if (excerpt) out.push({ code: 'refusal', text: `被拒绝了：「${excerpt}」`, short: '被拒绝了' });
     }
-    if (req?.finish === 'length') out.push({ code: 'length', text: '写到最大长度被截断，调大酒馆的「最大回复长度」', short: '被截断' });
-    if (mes != null && String(mes).trim() === '') out.push({ code: 'empty', text: '回复是空的', short: '回复是空的' });
+    if (req?.finish === 'length') out.push({ code: 'length', text: '写满了：调大「最大回复长度」', short: '写满了' });
+    if (mes != null && String(mes).trim() === '') out.push({ code: 'empty', text: '空回复', short: '空回复' });
     return out;
 }
 

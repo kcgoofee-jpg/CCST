@@ -36,7 +36,7 @@ import { presetRegexCount, presetRegexNote } from '../src/shared/preset-reco.js'
 test('preset regex note: only for enabled regex scripts in the preset data', () => {
     const on = { extensions: { regex_scripts: [{ scriptName: 'a' }, { scriptName: 'b', disabled: true }] } };
     assert.equal(presetRegexCount(on), 1);
-    assert.equal(presetRegexNote(on), '预设带正则脚本：先点酒馆提示里的『点击此处立即刷新』，正则才生效。');
+    assert.equal(presetRegexNote(on), '点酒馆的「立即刷新」让正则生效');
     for (const none of [null, undefined, {}, { extensions: {} }, { extensions: { regex_scripts: [] } }, { extensions: { regex_scripts: [{ disabled: true }] } }]) {
         assert.equal(presetRegexNote(none), '');
     }
@@ -57,7 +57,7 @@ test('preset family comes from the ENABLED entries, not the name (#2)', () => {
     // a preset with a bland name whose entries are written for Gemini does
     const gem = mkPreset([['a', 'Gemini 破限', '...'], ['b', '文风', '细腻']]);
     assert.equal(presetFamilyFromEntries(gem), 'gemini');
-    assert.match(mismatchNote('我的预设', gem), /看起来是给 Gemini 用的/);
+    assert.match(mismatchNote('我的预设', gem), /^「我的预设」是给 Gemini 的预设$/);
 });
 
 test('preset family: disabled entries count for nothing; weak evidence needs two entries; unsure falls back to the name', () => {
@@ -71,4 +71,48 @@ test('preset family: disabled entries count for nothing; weak evidence needs two
     assert.equal(presetFamilyFromEntries(null), null);
     assert.match(mismatchNote('智脑-Z(3.1P)', mkPreset([['a', '文风', '细腻']])), /Gemini/, 'entries say nothing: the name still counts');
     assert.match(mismatchNote('智脑-Z(3.1P)'), /Gemini/, 'preset data unreadable: the name');
+});
+
+import { presetTraits } from '../src/shared/preset-reco.js';
+
+test('presetTraits: 果实 and 灰烬之桥 recognised by what they contain, not by name', () => {
+    const order = (ids) => [{ character_id: 100001, order: ids.map(([identifier, enabled = true]) => ({ identifier, enabled })) }];
+    const guoshi = {
+        prompts: [
+            { identifier: 'main', name: '🍎 开头', role: 'system', content: '规则' },
+            { identifier: 'chatHistory', name: 'Chat History' },
+            { identifier: 'farmer', name: '👨🌾 果农来了|必开', role: 'assistant', content: '[任务确认]' },
+            ...['盲盒', '日常', '论坛', '网黄', '后台'].map((n) => ({ identifier: n, name: `💡 ${n}剧场`, role: 'system', injection_position: 1, injection_depth: 3, content: n })),
+        ],
+        prompt_order: order([['main'], ['chatHistory'], ['farmer']]),
+        extensions: {
+            regex_scripts: [
+                { scriptName: 'MoM必选-[3]3楼外伏笔不发送给AI(0927)', promptOnly: true, minDepth: 3, findRegex: '/(?<=<meow_FM>[\\s\\S]*?)seeds/i' },
+                { scriptName: 'MoM必选-[2]5楼外只发送摘要和角色表(0927)', promptOnly: true, minDepth: 5, findRegex: '/^[\\s\\S]*(<meow_FM>[\\s\\S]*$)/i' },
+                { scriptName: 'MoM美化-[11]摘要幽灵模式', markdownOnly: true, minDepth: null },
+                { scriptName: '关着的', promptOnly: true, minDepth: 4, disabled: true },
+            ],
+            tavern_helper: { scripts: [{ type: 'folder', name: '果实之心', enabled: true, scripts: [{ type: 'script', name: '果实之心丨Git正式版', enabled: true }] }] },
+        },
+    };
+    assert.deepEqual(presetTraits(guoshi), {
+        family: 'guoshi',
+        prefill: true,
+        depthRegexes: [{ name: 'MoM必选-[3]3楼外伏笔不发送给AI(0927)', minDepth: 3 }, { name: 'MoM必选-[2]5楼外只发送摘要和角色表(0927)', minDepth: 5 }],
+    });
+    const ashen = {
+        prompts: [
+            { identifier: 'chatHistory' },
+            { identifier: 'a', name: '🌈思考开始', role: 'user', content: '<thinking>' },
+            { identifier: 'b', name: '✨思维链锁', role: 'system', content: '首段必须是<thinking>' },
+            { identifier: 'c', name: '🐕收尾标记', role: 'system', content: '☽ 灰烬里仍有余温☾' },
+        ],
+        prompt_order: order([['chatHistory'], ['a'], ['b'], ['c']]),
+        extensions: { regex_scripts: [{ scriptName: '（3）保留4层正文', promptOnly: true, minDepth: 4 }] },
+    };
+    assert.deepEqual(presetTraits(ashen), { family: 'ashen', prefill: false, depthRegexes: [{ name: '（3）保留4层正文', minDepth: 4 }] });
+    // An assistant entry switched off, or before the history, is no prefill; two markers are not enough.
+    const off = { ...guoshi, prompt_order: order([['farmer'], ['chatHistory'], ['main']]), extensions: {} };
+    assert.deepEqual(presetTraits(off), { family: null, prefill: false, depthRegexes: [] });
+    for (const odd of [null, {}, { prompts: 'x', prompt_order: [{}] }]) assert.deepEqual(presetTraits(odd), { family: null, prefill: false, depthRegexes: [] });
 });

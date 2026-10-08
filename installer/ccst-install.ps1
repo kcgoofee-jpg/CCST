@@ -118,7 +118,22 @@ if ($env:CCST_ST_DIR) {
 Ok "酒馆在：$St"
 if (-not (Has-Ext $St)) { Warn '这个酒馆里还没装 CCST 面板。先在酒馆里 扩展 → 安装扩展，粘贴 https://github.com/kcgoofee-jpg/CCST ；不装也能继续，只是面板不会出现。' }
 
-# 酒馆正在运行：先关掉（换插件文件、移走旧插件时它不能占着），装完再打开
+# 已经是最新版（插件和面板都没有新提交、依赖在）：酒馆开着也不用关
+function Test-UpToDate([string]$dir) {
+    if (-not (Test-Path -LiteralPath (Join-Path $dir '.git')) -or -not (Get-Command git -ErrorAction SilentlyContinue)) { return $false }
+    if ((Run-Native { git -C $dir fetch --quiet }) -ne 0) { return $false }
+    $here = (git -C $dir rev-parse HEAD 2>$null)
+    $up = $null; foreach ($ref in @('@{u}', 'origin/HEAD', 'origin/main')) { $up = (git -C $dir rev-parse $ref 2>$null); if ($LASTEXITCODE -eq 0 -and $up) { break } }
+    return ($here -and $here -eq $up)
+}
+$Current = (Test-Path -LiteralPath (Join-Path $St 'plugins\CCST\node_modules')) -and (Test-UpToDate (Join-Path $St 'plugins\CCST'))
+if ($Current) {
+    foreach ($d in @((Join-Path $St 'public\scripts\extensions\third-party\CCST')) + @(Get-ChildItem -Path (Join-Path $St 'data\*\extensions\CCST') -Directory -ErrorAction SilentlyContinue | ForEach-Object FullName)) {
+        if ((Test-Path -LiteralPath (Join-Path $d '.git')) -and -not (Test-UpToDate $d)) { $Current = $false }
+    }
+}
+
+# 酒馆正在运行：要更新就先关掉（换插件文件、移走旧插件时它不能占着），装完再打开
 $StPort = 8000
 try { $m = Select-String -LiteralPath (Join-Path $St 'config.yaml') -Pattern '^port:\s*(\d+)' | Select-Object -First 1; if ($m) { $StPort = [int]$m.Matches[0].Groups[1].Value } } catch { }
 $StRunning = $false; $Stopped = $false
@@ -130,9 +145,11 @@ if ($env:CCST_NO_PROCESS_SCAN -ne '1') {
             $p -and $p.Name -eq 'node.exe' -and $p.CommandLine -match 'server\.js'
         })
     } catch { }
-    if ($stPids.Count) {
+    if ($stPids.Count -and $Current) {
+        $StRunning = $true; Ok 'CCST 已经是最新版，酒馆不用关'
+    } elseif ($stPids.Count) {
         $StRunning = $true
-        $yes = $AssumeYes -or ((Read-Host '酒馆正在运行。先关掉它（聊天记录都已保存），装完再帮你打开？[Y/n]') -notmatch '^[nN]')
+        $yes = $AssumeYes -or ((Read-Host '有新版本，要先关掉酒馆（聊天记录都已保存），装完在新窗口里重新打开。现在关？[Y/n]') -notmatch '^[nN]')
         if (-not $yes) { Warn '没关。装完要自己关掉酒馆再打开。' }
         else {
             foreach ($id in $stPids) { Stop-Process -Id $id -Force -ErrorAction SilentlyContinue }
@@ -331,8 +348,12 @@ Write-Host '══════════════════════�
 $reopened = $false
 if ($Stopped) { try { Start-Process -FilePath (Join-Path $St 'Start.bat') -WorkingDirectory $St; $reopened = $true } catch { } }
 if ($reopened) {
-    Write-Host '装好了。酒馆已经在新窗口里重新打开，面板会自动连上。' -ForegroundColor Green
-    Write-Host '（浏览器里按 Ctrl+F5 刷新一下。）'
+    Write-Host '装好了。酒馆已经在新弹出的黑窗口里运行：' -ForegroundColor Green
+    Write-Host '  · 那个窗口就是酒馆，聊天时一直开着，关掉它酒馆和 CCST 就都停了。'
+    Write-Host '  · 现在这个窗口可以关了。'
+    Write-Host '  · 浏览器里按 Ctrl+F5 刷新酒馆页面。'
+} elseif ($Current -and $StRunning) {
+    Write-Host '已经是最新版，酒馆照常用，不用重启。' -ForegroundColor Green
 } else {
     Write-Host '装好了。关掉酒馆再打开，面板会自动连上。' -ForegroundColor Green
     Write-Host '（酒馆的黑窗口关掉再重新启动；浏览器里按 Ctrl+F5 刷新一下。）'

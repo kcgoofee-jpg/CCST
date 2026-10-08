@@ -39,7 +39,7 @@ try {
     // this copy while the phone talks to the other one (possibly older code).
     if (await probeExistingProxy({ port, host: host === '0.0.0.0' || host === '::' ? '127.0.0.1' : host })) {
         console.error(`${TAG} 端口 ${port} 上已经有一个 CCST 代理在运行，本次启动退出，免得两个代理共用一个端口。` +
-            `先停掉在跑的那个（「酒馆工具」里选「重启代理」，或到它的终端窗口按 Ctrl+C），再重新运行 npm start。`);
+            `先到它的终端窗口按 Ctrl+C 停掉，再运行 npm start。`);
         process.exit(1);
     }
     await startStandaloneListener({ port, host });

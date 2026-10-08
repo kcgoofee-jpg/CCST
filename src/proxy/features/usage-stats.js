@@ -14,7 +14,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSy
 import { dirname, join } from 'node:path';
 
 import { explainError } from './errors-zh.js';
-import { apiValueUsd, cacheAnomaly, costParts, explainCache } from './cache-diag.js';
+import { apiValueUsd, cacheAnomaly, cacheState, costParts, explainCache, quotaParts } from './cache-diag.js';
 import { resetReplayState } from './turn-capture.js';
 import { SDK_VERSION } from './sdk-version.js';
 import { DATA_DIR } from '../paths.js';
@@ -217,6 +217,15 @@ function aggregate(list, resent = resentAfterFailure(list)) {
     const fresh = ok.filter((e) => !isReroll(e, resent));
     const freshRead = sum('cacheReadTokens', fresh);
     const promptTotal = sum('inputTokens', fresh) + freshRead + sum('cacheCreationTokens', fresh);
+    // Share of new turns whose cache was healthy (first turns, rerolls and expired caches don't count).
+    const prevOf = new Map();
+    let healthy = 0, judged = 0;
+    for (const e of ok) {
+        const key = e.chatKey ?? e.cacheDiag?.chat;
+        const { state } = cacheState(e.cacheDiag ? { ...e, cacheDiag: { ...e.cacheDiag, reroll: isReroll(e, resent) } } : e, key ? prevOf.get(key) : null);
+        if (key) prevOf.set(key, e);
+        if (state === 'ok' || state === 'part' || state === 'full') { judged++; if (state === 'ok') healthy++; }
+    }
     const timed = ok.filter((e) => e.durationMs > 0);
     const ttft = ok.filter((e) => e.ttftMs != null);
     const models = {};
@@ -230,6 +239,9 @@ function aggregate(list, resent = resentAfterFailure(list)) {
         cacheReadTokens: cacheRead,
         cacheCreationTokens: cacheWrite,
         cacheHitRate: promptTotal > 0 ? freshRead / promptTotal : null,
+        cacheOkRate: judged ? healthy / judged : null,
+        // Subscription-weighted parts (cache-diag QUOTA_WEIGHT), for 「花在」.
+        quota: ok.reduce((c, e) => { const p = quotaParts(e); for (const key in c) c[key] += p[key]; return c; }, { output: 0, write: 0, read: 0 }),
         // Where the equivalent cost went (rerolls included: they cost too).
         cost: ok.reduce((c, e) => { const p = costParts(e); for (const key in c) c[key] += p[key]; return c; }, { write: 0, output: 0, read: 0, input: 0 }),
         // The same requests at API list prices (like a status line's Today $ / Week $); models without a price row are left out.

@@ -39,10 +39,10 @@ function preflightCheck(data) {
     if (!asked && !/<\/?(thinking|cot)>/i.test(system)) return;
     warnedPresets.add(key);
     const where = asked
-        ? `发现这段要求：「${asked[0].slice(0, 60)}」（多半在预设条目或角色卡的世界书里）。`
-        : `预设「${preset}」要求模型把思考（<thinking> / <cot>）写进回复。`;
-    notify('warn', 'Opus 5.5 多半会拦这条',
-        `${where}关掉那一条，或换 Opus 4.6。被拦也照扣额度。`,
+        ? `「${asked[0].slice(0, 40)}」：`
+        : `「${preset}」：`;
+    notify('warn', '可能被拦',
+        `${where}5.x 不许写出思考：关掉或换 4.6`,
         { ms: 20000 });
 }
 
@@ -60,9 +60,8 @@ function postProcessingCheck(data) {
     const mode = String(data.custom_prompt_post_processing ?? '');
     if (!mode || warnedPostProcessing) return;
     warnedPostProcessing = true;
-    notify('warn', '连 CCST 时，提示词后处理建议选「无」',
-        `现在是「${POST_PROCESSING_LABELS[mode] ?? mode}」：酒馆会把预设改成普通用户消息，Claude 对预设指令的遵循会变弱，长聊天的缓存也更容易整段失效。` +
-        'CCST 代理会自己整理消息角色，所以选「无」更好。改法：API 连接 → 提示词后处理 → 无。用别的 API 时按预设作者的建议来。',
+    notify('warn', '改后处理',
+        `「API 连接」里提示词后处理选无（现在是「${POST_PROCESSING_LABELS[mode] ?? mode}」）`,
         { ms: 20000 });
 }
 
@@ -95,15 +94,20 @@ export function noteActivatedLore(entries) {
 
 /** Opening text of the first and last chat messages in this prompt: where the chat history starts
  *  and ends. Presets put user / assistant entries before the history (Kemini, Izumi) and after it;
- *  without these the proxy took the first user message for the start of the chat. */
+ *  without these the proxy took the first user message for the start of the chat. Thinking written
+ *  into a reply is skipped (a prompt regex strips it, 灰烬之桥). A short last message (「继续」) is
+ *  sent whole in `exact`: the proxy matches it as the whole message, so it can't hit an old turn. */
 export function historyMarks(ctx = SillyTavern.getContext()) {
     const sub = (t) => { try { return ctx.substituteParams ? ctx.substituteParams(t) : t; } catch { return t; } };
-    const snip = (m) => sub(String(m?.mes ?? '')).trim().slice(0, 40);
+    const body = (m) => sub(String(m?.mes ?? '')).replace(/^(?:\s*<(thinking|think)(?:\s[^<>]*)?>[\s\S]*?<\/\1\s*>)+/i, '').trim();
+    const snip = (m) => body(m).slice(0, 40);
     const shown = (ctx.chat ?? []).filter((m) => !m?.is_system);
     const ok = (s) => s.length >= 8;
+    const last = shown.length ? body(shown[shown.length - 1]) : '';
     return {
         start: shown.slice(0, 3).map(snip).filter(ok),
         end: shown.slice(-2).map(snip).filter(ok),
+        ...(last && !ok(last) ? { exact: [last] } : {}),
     };
 }
 
@@ -140,7 +144,14 @@ function fnv(text) {
  *  only when allowed) — they rewrite older messages as they age. Named in the cache explanation when the
  *  prompt changed but no setting did (Izumi's 悬浮窗). Unknown shapes are skipped, never thrown on. */
 export function promptMutators(ctx = SillyTavern.getContext()) {
+    return promptScan(ctx).mut;
+}
+
+/** promptMutators, plus the depth regexes among them as [name, minDepth] (minDepth ≥ 2): the proxy
+ *  names the one that cut an old reply short (cache-diag.js depthRegexAt). */
+function promptScan(ctx) {
     const out = [];
+    const rx = [];
     const arr = (v) => (Array.isArray(v) ? v : []);
     const obj = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
     const safe = (fn) => { try { fn(); } catch { /* unexpected shape: skip */ } };
@@ -182,11 +193,19 @@ export function promptMutators(ctx = SillyTavern.getContext()) {
         if (avatar && arr(ext.character_allowed_regex).includes(avatar)) lists.push(cardExt.regex_scripts);
         for (const list of lists) {
             for (const r of arr(list)) {
-                if (r && typeof r === 'object' && !r.disabled && r.promptOnly && (deep(r.minDepth) || deep(r.maxDepth))) out.push(`正则「${String(r.scriptName ?? '').slice(0, 24)}」`);
+                if (r && typeof r === 'object' && !r.disabled && r.promptOnly && (deep(r.minDepth) || deep(r.maxDepth))) {
+                    out.push(`正则「${String(r.scriptName ?? '').slice(0, 24)}」`);
+                    if (deep(r.minDepth)) rx.push([String(r.scriptName ?? '').slice(0, 24), Number(r.minDepth)]);
+                }
             }
         }
     });
-    return [...new Set(out)].slice(0, 12);
+    return { mut: [...new Set(out)].slice(0, 12), rx: rx.slice(0, 12) };
+}
+
+function scanFields(ctx) {
+    const { mut, rx } = promptScan(ctx);
+    return rx.length ? { mut, rx } : { mut };
 }
 
 export function stFingerprint(data, ctx = SillyTavern.getContext()) {
@@ -197,7 +216,7 @@ export function stFingerprint(data, ctx = SillyTavern.getContext()) {
         pp: String(data?.custom_prompt_post_processing ?? '') || 'none',
         order: fnv(JSON.stringify([oai.prompt_order ?? [], prompts])),
         wi: activatedLore,
-        mut: promptMutators(ctx),
+        ...scanFields(ctx),
         // No WORLD_INFO_ACTIVATED (old SillyTavern): wi stays empty whatever fired.
         ...(ctx.eventTypes?.WORLD_INFO_ACTIVATED ? {} : { wiOff: true }),
     };

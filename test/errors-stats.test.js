@@ -15,7 +15,7 @@ test('common upstream errors get Chinese explanations', () => {
     assert.equal(explainError('Extra usage is required for 1M context').code, 'extra_usage');
     assert.equal(explainError('something odd').code, 'unknown');
     const text = formatErrorForUser('Not logged in · Please run /login');
-    assert.match(text, /^【CCST】Claude 订阅没登录/);
+    assert.match(text, /^【CCST】没登录。.*npm run login/);
     assert.match(text, /原始错误：Not logged in/);
 });
 
@@ -139,9 +139,10 @@ test('user-facing failure texts: no preset names, no English sentences, plugin-f
     const cot = explainError('safeguards flagged: reasoning_extraction');
     assert.doesNotMatch(cot.hint, /十四行诗/);
     const login = explainError('Not logged in');
-    assert.match(login.hint, /SillyTavern\/plugins\/CCST/);
-    assert.ok(login.hint.indexOf('npm run login') < login.hint.indexOf('酒馆工具'));
-    assert.match(explainError('???').message, /原因不明/);
+    assert.match(login.hint, /plugins\/CCST.*npm run login/);
+    assert.doesNotMatch(login.hint, /酒馆工具/, '6.1 removed the SillyTavern tools menu');
+    assert.equal(explainError('???').message, '失败了');
+    assert.match(explainError('???').hint, /导出日志/);
 });
 
 test('the last-turn card compares with the previous successful request, and a resend after a failure is no reroll', async () => {

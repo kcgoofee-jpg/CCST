@@ -162,7 +162,7 @@ function usageEntryLine(e, prev) {
         d.firstTurn && '首轮',
         d.reroll && '重roll',
         d.systemChanged && `系统@${d.systemDiffAt}${d.systemDiffLabel ? d.systemDiffLabel : ''}`,
-        d.historyDiffAt != null && `${d.replyChanged ? '换回复' : '历史'}@${d.historyDiffAt + 1}/${d.historyLen}`,
+        d.historyDiffAt != null && `${d.replyChanged ? '换回复' : d.summaryReplaced ? `正则改短(深${d.cutDepth})` : '历史'}@${d.historyDiffAt + 1}/${d.historyLen}`,
         d.tailRewritten && `尾部换新${d.tailRewritten}`,
         d.volatileTags?.length && `移位${d.volatileTags.join('/')}`,
         d.chat && `聊天${d.chat.slice(0, 6)}`,

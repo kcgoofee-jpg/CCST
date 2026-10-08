@@ -44,9 +44,9 @@ test('no connection manager, or ST refusing, is reported instead of thrown', asy
 });
 
 test('notice text: one short line', () => {
-    assert.equal(profileNotice({ existed: false, modelLabel: 'Opus 4.6' }), '已连接 CCST · 模型 Opus 4.6');
-    assert.equal(profileNotice({ existed: true, modelLabel: 'Sonnet 5.5 1M' }), '已连接 CCST · 模型 Sonnet 5.5 1M');
-    assert.match(profileNotice({ existed: false, modelOk: false }), /模型没能自动选上/);
+    assert.equal(profileNotice({ existed: false, modelLabel: 'Opus 4.6' }), 'Opus 4.6 已就绪');
+    assert.equal(profileNotice({ existed: true, modelLabel: 'Sonnet 5.5 1M' }), 'Sonnet 5.5 1M 已就绪');
+    assert.match(profileNotice({ existed: false, modelOk: false }), /请到「API 连接」选模型/);
     assert.doesNotMatch(profileNotice({}), /Gemini|正则|核对/);
 });
 

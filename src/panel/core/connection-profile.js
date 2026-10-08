@@ -63,8 +63,8 @@ export function chooseConnectModel(current, canonical = (id) => (/^claude-/i.tes
 /** The one-line toast after a successful connect. `modelLabel` is the model as the user reads it (Opus 4.6). */
 export function profileNotice({ modelOk = true, modelLabel = 'Opus 4.6', name = PROFILE_NAME, existed = false }) {
     return modelOk
-        ? `已连接 ${name} · 模型 ${modelLabel}`
-        : `已连接 ${name}，但模型没能自动选上，请到『API 连接』选一个 Claude 模型。`;
+        ? `${modelLabel} 已就绪`
+        : '请到「API 连接」选模型';
 }
 
 /** Separate advice notices (only the ones that apply), after a successful connect. */

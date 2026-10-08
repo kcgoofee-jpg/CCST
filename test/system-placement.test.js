@@ -129,6 +129,17 @@ test('history bounds: preset user/assistant entries before the chat join the sys
     assert.equal(applyHistoryBounds(msgs, { start: ['不存在的开头'], end: [] }), msgs);
 });
 
+test('history bounds: a short last message (「继续」) is found as the whole message, wrapped or not, never an old turn', async () => {
+    const { applyHistoryBounds } = await import('../src/proxy/features/system-placement.js');
+    // 灰烬之桥: the player's message wrapped by a prompt regex, user-role preset entries after it.
+    const msgs = [S('preset'), A('开场白：木屋里很冷'), U('继续'), A('雪落在门槛上，她没有回头。'), U('<user_input>继续</user_input>'), U('防转述'), S('思维链锁')];
+    const bounded = applyHistoryBounds(msgs, { start: ['开场白：木屋里很冷'], end: ['雪落在门槛上，她没有回头。'], exact: ['继续'] }, 'normal');
+    assert.deepEqual(bounded.map((m) => m.role), ['system', 'assistant', 'user', 'assistant', 'user', 'system', 'system']);
+    // Part of a message is not the whole message.
+    const other = applyHistoryBounds([S('p'), A('开场白：木屋里很冷'), U('继续写下去吧'), U('尾部')], { start: ['开场白：木屋里很冷'], end: [], exact: ['继续'] }, 'normal');
+    assert.deepEqual(other.map((m) => m.role), ['system', 'assistant', 'user', 'user']);
+});
+
 test('a deep injection already given verbatim in an earlier turn becomes a one-line note', async () => {
     const { REPEAT_NOTE } = await import('../src/proxy/features/lore-tail.js');
     const block = '<WorldFrame>' + '世界书内容'.repeat(60) + '</WorldFrame>';

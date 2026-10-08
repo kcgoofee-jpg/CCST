@@ -25,7 +25,7 @@ test('refusal: declined replies are flagged with an excerpt', () => {
     ]) {
         const refusal = replyFlags(mes, null).find((i) => i.code === 'refusal');
         assert.ok(refusal, mes);
-        assert.match(refusal.text, /模型拒绝了这一轮：「/);
+        assert.match(refusal.text, /^被拒绝了：「/);
         assert.doesNotMatch(refusal.text, /换个说法|换模型|绕过/);
     }
 });
@@ -54,16 +54,16 @@ test('replyFlags: refusal / truncated / empty are reliable flags; ordinary repli
     // proxy refusal: nearly empty → declined; with real text → cut off
     const declined = replyFlags('', { notices: ['refusal'], finish: 'content_filter', textChars: 0 });
     assert.equal(declined[0].code, 'refusal');
-    assert.equal(declined[0].short, '模型拒绝了这一轮');
-    assert.equal(replyFlags(fine, { notices: ['refusal'], textChars: 900 })[0].short, '被截断');
+    assert.equal(declined[0].short, '被拒绝了');
+    assert.equal(replyFlags(fine, { notices: ['refusal'], textChars: 900 })[0].short, '被拦一半');
     // text-only refusal (no proxy record)
     const textRefusal = replyFlags("I can't continue with this story. I'm happy to help with other directions instead.", null);
     assert.equal(textRefusal[0].code, 'refusal');
-    assert.match(textRefusal[0].text, /模型拒绝了这一轮/);
+    assert.match(textRefusal[0].text, /^被拒绝了/);
     // length
     const cut = replyFlags(fine, { finish: 'length' });
     assert.deepEqual(cut.map((f) => f.code), ['length']);
-    assert.equal(cut[0].short, '被截断');
+    assert.equal(cut[0].short, '写满了');
     // empty
     assert.deepEqual(replyFlags('  \n', null).map((f) => f.code), ['empty']);
     // a background request never flags this reply; the reply text is not needed for proxy-only flags

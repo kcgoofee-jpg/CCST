@@ -15,7 +15,7 @@
 // ──────────────────────────────────────────────
 
 export const GUIDE_STEPS = [
-    { key: 'install', title: '装代理', done: (f) => f.reachable },
+    { key: 'install', title: '安装', done: (f) => f.reachable },
     { key: 'login', title: '登录', done: (f) => f.loggedIn },
     { key: 'connect', title: '连接', done: (f) => f.connected },
 ];

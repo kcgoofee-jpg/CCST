@@ -12,25 +12,25 @@ export async function showDebugRequest() {
         const res = await fetchProxy('/debug', '/v1/debug/last');
         data = await res.json();
     } catch (err) {
-        notify('bad', '没读到发给模型的请求', String(err instanceof Error ? err.message : err));
+        notify('bad', '读取失败', String(err instanceof Error ? err.message : err));
         return;
     }
     if (!data?.ok) {
-        notify('info', '没有可看的请求', String(data?.error ?? '还没有聊天请求。'), { ms: 8000 });
+        notify('info', '暂无请求', String(data?.error ?? '先聊一句再看'), { ms: 8000 });
         return;
     }
     const wrap = el('div', 'cm-debug-view');
     wrap.append(el('div', 'cm-note-title', `${new Date(data.at).toLocaleString('zh-CN')} · ${data.model}`));
-    wrap.append(el('small', 'cm-hint', `系统提示词 ${data.systemMarked.length.toLocaleString()} 字；聊天记录 ${data.messages.length} 条。`));
+    wrap.append(el('small', 'cm-hint', `设定 ${data.systemMarked.length.toLocaleString()} 字 · 记录 ${data.messages.length} 条`));
     const sys = el('details', 'cm-details');
-    sys.append(el('summary', null, '系统提示词'), el('pre', 'cm-debug-pre', data.systemMarked));
+    sys.append(el('summary', null, '设定部分'), el('pre', 'cm-debug-pre', data.systemMarked));
     wrap.append(sys);
     const hist = el('details', 'cm-details');
-    hist.append(el('summary', null, '聊天记录（代理整理后的顺序）'));
+    hist.append(el('summary', null, '聊天记录'));
     data.messages.forEach((m, i) => {
         const text = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
         const item = el('details', 'cm-details');
-        item.append(el('summary', null, `${i + 1}. ${m.role === 'user' ? '用户' : 'AI'} · ${text.length} 字`), el('pre', 'cm-debug-pre', text));
+        item.append(el('summary', null, `${i + 1}. ${m.role === 'user' ? '你' : 'AI'} · ${text.length} 字`), el('pre', 'cm-debug-pre', text));
         hist.append(item);
     });
     wrap.append(hist);

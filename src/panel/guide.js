@@ -63,7 +63,7 @@ function stepper(step) {
 }
 
 function skipLink() {
-    const b = el('button', 'cm-link-btn', '跳过引导');
+    const b = el('button', 'cm-link-btn', '跳过');
     b.type = 'button';
     b.addEventListener('click', () => apply(finishGuide()));
     return b;
@@ -74,12 +74,12 @@ const waiting = (text) => el('small', 'cm-hint cm-guide-wait', text);
 // Step 1 — 装代理. The only step that knows HOW the proxy is installed: another backend swaps this one.
 function drawInstall(card) {
     const help = installHelp({ host: hostNow() });
-    card.append(el('div', 'cm-note-title', '装 CCST 代理'));
-    if (help.mac) card.append(el('div', 'cm-guide-os', 'Mac：打开「终端」，粘贴这一行回车'), cmdRow(help.mac, '复制命令'));
+    card.append(el('div', 'cm-note-title', '安装 CCST'));
+    if (help.mac) card.append(el('div', 'cm-guide-os', 'Mac：在终端粘贴，回车'), cmdRow(help.mac, '复制命令'));
     if (help.win) {
         const row = el('div', 'cm-btn-row');
         row.append(linkButton(help.win));
-        card.append(el('div', 'cm-guide-os', 'Windows：下载后双击运行'), row);
+        card.append(el('div', 'cm-guide-os', 'Windows：下载后双击'), row);
     }
     if (help.docs) {
         const row = el('div', 'cm-btn-row');
@@ -93,10 +93,10 @@ function drawInstall(card) {
 function drawLogin(card) {
     const help = loginHelp({ host: hostNow() });
     card.append(
-        el('div', 'cm-note-title', '代理已装好，登录 Claude'),
+        el('div', 'cm-note-title', '登录 Claude'),
         el('small', 'cm-hint', help.where),
         cmdRow(help.cmd),
-        waiting('登录后这里会自动进入下一步。'),
+        waiting('登好后自动下一步'),
     );
 }
 
@@ -104,12 +104,12 @@ function drawLogin(card) {
 function drawConnect(card) {
     const { status } = store.get();
     card.append(
-        el('div', 'cm-note-title', `把${APP_NAME}连到 CCST`),
-        el('small', 'cm-hint', '会选好模型，并存成「CCST」连接配置。'),
+        el('div', 'cm-note-title', `连上${APP_NAME}`),
+        el('small', 'cm-hint', '自动选好模型'),
     );
     if (status.mismatch) card.append(el('small', 'cm-hint cm-warn', status.mismatch));
     const row = el('div', 'cm-btn-row');
-    row.append(button('一键连接', () => connect(getSettings()), { icon: 'fa-plug', primary: true }));
+    row.append(button('连接', () => connect(getSettings()), { icon: 'fa-plug', primary: true }));
     card.append(row);
 }
 
@@ -117,7 +117,7 @@ function drawDone(card) {
     const { model } = connectionInfo();
     card.append(
         el('div', 'cm-note-title', model ? `已连接 · ${shortModel(model)}` : '已连接'),
-        el('small', 'cm-hint', '可以聊天了。温度、Top-P 等采样参数不起作用。'),
+        el('small', 'cm-hint', '可以聊了；温度等参数无效'),
     );
     const row = el('div', 'cm-btn-row');
     row.append(button('完成', () => apply(finishGuide()), { icon: 'fa-check', primary: true }));

@@ -36,6 +36,8 @@ function stFingerprint(fp) {
         order: short(fp.order, 16),
         wi: Array.isArray(fp.wi) ? fp.wi.filter((s) => typeof s === 'string').map((s) => s.slice(0, 40)).slice(0, 80) : [],
         mut: Array.isArray(fp.mut) ? fp.mut.filter((s) => typeof s === 'string').map((s) => s.slice(0, 40)).slice(0, 12) : [],
+        // Depth regexes as [name, minDepth] (cache-diag.js depthRegexAt).
+        ...(Array.isArray(fp.rx) && fp.rx.length ? { rx: fp.rx.filter((r) => Array.isArray(r) && typeof r[0] === 'string' && Number.isFinite(r[1])).map((r) => [r[0].slice(0, 40), Math.floor(r[1])]).slice(0, 12) } : {}),
         // SillyTavern too old to report triggered world info: wi is always empty, not "unchanged".
         ...(fp.wiOff === true ? { wiOff: true } : {}),
     };
@@ -135,6 +137,8 @@ export function extractSettings(body) {
         hist: {
             start: strList(ns.hist?.start, 3, 80),
             end: strList(ns.hist?.end, 2, 80),
+            // A short last message (「继续」), whole: matched as the whole message.
+            exact: strList(ns.hist?.exact, 1, 80),
         },
         // Cache lifetime the panel picked (env.js); 1 hour unless it asks for 5 minutes.
         cacheTtl: ns.cache_ttl === '5m' ? '5m' : '1h',

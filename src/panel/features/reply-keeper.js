@@ -188,7 +188,7 @@ export async function recoverKeptReply() {
             await emitRecovered(len - 1, () => c.updateMessageBlock?.(len - 1, last));
         }
         await c.saveChat?.();
-        notify('ok', `第 ${floor} 楼已补回`, `刚才没存上，从代理取回 ${text.length} 字`, { ms: 8000 });
+        notify('ok', '已补回', `第 ${floor} 楼没存上，已找回`, { ms: 8000 });
     } catch { /* proxy unreachable: try again next time */ } finally {
         recovering = false;
     }

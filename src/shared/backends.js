@@ -9,7 +9,7 @@
 export const BACKENDS = ['subscription'];
 
 export const BACKEND_LABELS = {
-    subscription: '订阅（Claude 登录）',
+    subscription: '订阅',
 };
 
 // ── Cost estimate ──

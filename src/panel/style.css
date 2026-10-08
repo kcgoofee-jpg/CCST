@@ -787,13 +787,43 @@
 .claude-max .cm-seg-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
 /* 状态 → 上一轮「花在」：一条按花费比例分段的细条 */
-.claude-max .cm-cost { display: flex; flex-direction: column; gap: 3px; margin-top: 2px; }
-.claude-max .cm-cost-bar { display: flex; height: 5px; border-radius: 3px; overflow: hidden; background: var(--cm-soft); }
-.claude-max .cm-cost-bar span { display: block; height: 100%; }
-.claude-max .cm-cost-write { background: var(--cm-warn); }
-.claude-max .cm-cost-output { background: var(--cm-accent); }
-.claude-max .cm-cost-read { background: var(--cm-ok); }
-.claude-max .cm-cost-input { background: var(--cm-info); }
+/* ── 上一轮: one word for the cache, one line why, two bars. Three fixed hues that differ in lightness
+   (read / write / output), not the theme accent, so a theme change never recolours them. ── */
+.claude-max {
+    --cm-c-read: #4FA36B;
+    --cm-c-write: #D49B2C;
+    --cm-c-out: #6874DC;
+    --cm-c-full: #D6574C;
+}
+.claude-max .cm-cache {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px 14px;
+    border-radius: var(--cm-radius);
+    border: 1px solid var(--cm-line);
+    background: color-mix(in srgb, var(--cm-text) 4%, var(--cm-solid));
+}
+.claude-max .cm-cache-head { display: flex; align-items: center; gap: 8px; }
+.claude-max .cm-cache-head b { font-size: var(--cm-fs-title); }
+.claude-max .cm-cache-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: color-mix(in srgb, var(--cm-text) 45%, transparent); }
+.claude-max .cm-cache[data-state="ok"] .cm-cache-dot { background: var(--cm-c-read); }
+.claude-max .cm-cache[data-state="part"] .cm-cache-dot { background: var(--cm-c-write); }
+.claude-max .cm-cache[data-state="full"] .cm-cache-dot { background: var(--cm-c-full); }
+.claude-max .cm-cache-meta { margin-left: auto; font-size: var(--cm-fs-caption); opacity: 0.6; font-variant-numeric: tabular-nums; }
+.claude-max .cm-cache-sub { margin-top: -6px; opacity: 0.8; }
+.claude-max .cm-meter { display: flex; flex-direction: column; gap: 5px; font-size: var(--cm-fs-caption); }
+.claude-max .cm-meter-top { display: flex; justify-content: space-between; gap: 8px; opacity: 0.65; font-variant-numeric: tabular-nums; }
+.claude-max .cm-meter-bar { display: flex; gap: 2px; height: 7px; border-radius: 4px; overflow: hidden; background: var(--cm-soft); }
+.claude-max .cm-meter-bar span { display: block; height: 100%; }
+.claude-max .cm-meter-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; opacity: 0.85; font-variant-numeric: tabular-nums; }
+.claude-max .cm-meter-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.claude-max .cm-meter-legend i { width: 8px; height: 8px; border-radius: 2px; }
+.claude-max .cm-seg-read { background: var(--cm-c-read); }
+.claude-max .cm-seg-write { background: var(--cm-c-write); }
+.claude-max .cm-seg-output { background: var(--cm-c-out); }
+.claude-max .cm-cache-tip { padding: 6px 9px; border-radius: 6px; background: var(--cm-soft); }
+.claude-max .cm-cache .cm-mini > summary { opacity: 0.65; }
 
 /* 额度：照现在的速度会不会在重置前用完；上一轮：上下文快满 */
 .claude-max .cm-pace { font-size: var(--cm-fs-caption); margin-top: -4px; }

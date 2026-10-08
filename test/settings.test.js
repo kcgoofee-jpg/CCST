@@ -46,6 +46,8 @@ test('st_fp keeps the 「world info list unknown」 mark of an old SillyTavern, 
     assert.equal(fp({ preset: 'p', wi: [], wiOff: true }).wiOff, true);
     assert.equal('wiOff' in fp({ preset: 'p', wi: [], wiOff: 'yes', other: 1 }), false);
     assert.equal('other' in fp({ preset: 'p', other: 1 }), false);
+    assert.deepEqual(fp({ preset: 'p', rx: [['[2]5楼外只发送摘要', 5.5], ['坏的', 'x'], 'y'] }).rx, [['[2]5楼外只发送摘要', 5]]);
+    assert.equal('rx' in fp({ preset: 'p', rx: [] }), false);
 });
 
 test('cache_ttl: only 5m switches away from the 1-hour default', () => {

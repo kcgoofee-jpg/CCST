@@ -64,7 +64,7 @@ export function cloudHosted(hostCheck, { hostname, endpoint, tauri }) {
 export function resolveConnection({ mainApi, oai = {}, settings }) {
     const src = mainApi === 'openai' ? oai.chat_completion_source : null;
     if (src === 'custom' && isOurEndpoint(oai.custom_url, settings)) {
-        return { kind: 'ours', connected: true, model: oai.custom_model, where: '本机代理', billing: '订阅' };
+        return { kind: 'ours', connected: true, model: oai.custom_model, where: '本机', billing: '订阅' };
     }
     return { kind: 'other', connected: false, model: null };
 }
@@ -79,6 +79,6 @@ export function genLine(gen) {
     if (!gen || gen.kind === 'idle') return '';
     const n = (v) => Number(v).toLocaleString('en-US');
     if (gen.kind === 'thinking') return `思考中 ${Math.max(0, Math.round((Date.now() - gen.startedAt) / 1000))} 秒`;
-    if (gen.kind === 'writing') return `写作中 ${n(gen.chars ?? 0)} 字`;
+    if (gen.kind === 'writing') return `在写 ${n(gen.chars ?? 0)} 字`;
     return ['完成', gen.chars != null ? `${n(gen.chars)} 字` : null, gen.seconds != null ? `${gen.seconds} 秒` : null, gen.cache != null ? `缓存 ${Math.round(gen.cache)}%` : null, gen.flag || null].filter(Boolean).join(' · ');
 }

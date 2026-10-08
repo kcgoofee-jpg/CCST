@@ -17,11 +17,12 @@ test('proxy: purpose quiet is auxiliary and carries no chat key, so it can never
 test('proxy refusal signal: an empty refused turn is a decline, partial text is a cut-off', () => {
     const declined = refusalNotice({ notices: ['refusal'], finish: 'content_filter', textChars: 40 });
     assert.equal(declined.declined, true);
-    assert.match(declined.title, /模型拒绝了这一轮/);
-    assert.match(declined.text, /Anthropic 使用政策/);
+    assert.equal(declined.title, '被拒绝了');
+    assert.match(declined.text, /政策/);
     assert.doesNotMatch(declined.text, /重新生成|换/);
     const cut = refusalNotice({ notices: ['refusal'], finish: 'content_filter', textChars: 1500 });
     assert.equal(cut.declined, false);
+    assert.equal(cut.title, '被拦一半');
     assert.equal(refusalNotice({ notices: [], finish: 'stop', textChars: 10 }), null);
     assert.equal(refusalNotice(null), null);
     assert.ok(replyFlags('我不能继续这个故事。', null).some((i) => i.code === 'refusal'));

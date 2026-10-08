@@ -13,9 +13,9 @@ test('a SDK the proxy cannot work with gets the top banner (#30)', () => {
     const lines = statusAdvisories(online({ compat: { ok: false, missing: ['SYSTEM_PROMPT_DYNAMIC_BOUNDARY'] }, via: 'direct' }), 'http://127.0.0.1:8901/v1');
     assert.equal(lines.length, 1);
     assert.equal(lines[0].tone, 'error');
-    assert.match(lines[0].text, /当前 SDK 版本与代理不兼容/);
+    assert.match(lines[0].text, /^组件过旧/);
     assert.match(lines[0].text, /SYSTEM_PROMPT_DYNAMIC_BOUNDARY/);
-    assert.match(lines[0].text, /--save-exact/);
+    assert.match(lines[0].text, /重装 SDK/, 'says how to fix it');
 });
 
 test('a compatible SDK says nothing, a long fold streak says one line (#30)', () => {
@@ -23,14 +23,14 @@ test('a compatible SDK says nothing, a long fold streak says one line (#30)', ()
     assert.deepEqual(statusAdvisories(online({ compat: { ok: true }, foldStreak: 3 }), 'http://127.0.0.1:8901/v1'), [], '3 is still normal');
     const [line] = statusAdvisories(online({ compat: { ok: true }, foldStreak: 7 }), 'http://127.0.0.1:8901/v1');
     assert.equal(line.tone, 'warn');
-    assert.match(line.text, /连续 7 轮/);
+    assert.match(line.text, /^7 轮重写/);
 });
 
 test('the proxy answering over SillyTavern\'s route is checked against the set endpoint (#36)', () => {
     const status = online({ endpoint: 'http://127.0.0.1:8902/v1', via: 'plugin' });
     const lines = statusAdvisories(status, 'http://127.0.0.1:8901/v1');
     assert.equal(lines.length, 1);
-    assert.match(lines[0].text, /代理实际地址与面板设置不一致/);
+    assert.match(lines[0].text, /^地址不对：设置是 http:\/\/127\.0\.0\.1:8901\/v1，实际是 http:\/\/127\.0\.0\.1:8902\/v1/);
     assert.deepEqual(statusAdvisories({ ...status, via: 'direct' }, 'http://127.0.0.1:8901/v1'), [], 'asked the proxy itself: nothing to warn about');
     assert.deepEqual(statusAdvisories(status, 'http://127.0.0.1:8902/v1'), [], 'the same address with a trailing slash is the same address');
     assert.deepEqual(statusAdvisories(online({ endpoint: null, via: 'plugin' }), 'http://127.0.0.1:8901/v1'), [], 'an old proxy that reports nothing');
@@ -46,19 +46,19 @@ test('the status tab draws the advisories at its top, and the store feeds it (#3
 
 test('another CCST answering for this SillyTavern: warn only when it is a different version', () => {
     const shared = (version) => online({ root: '/old/CCST', version, sharedBy: { root: '/st/plugins/CCST', version: '6.0.2' } });
-    assert.match(statusAdvisories(shared('5.2.0'), 'http://127.0.0.1:8901/v1')[0].text, /另一份 CCST v5\.2\.0/);
+    assert.match(statusAdvisories(shared('5.2.0'), 'http://127.0.0.1:8901/v1')[0].text, /有两份 CCST：关掉另一份（v5\.2\.0，\/old\/CCST）/);
     assert.deepEqual(statusAdvisories(shared('6.0.2'), 'http://127.0.0.1:8901/v1'), []);
     assert.deepEqual(statusAdvisories(online({ root: '/st/plugins/CCST', version: '6.0.2' }), 'http://127.0.0.1:8901/v1'), []);
 });
 
-test('cost shares: an 87% hit can still be mostly writes and output', async () => {
-    const { costShares } = await import('../src/panel/tabs/status.js');
-    const { costParts } = await import('../src/proxy/features/cache-diag.js');
-    const shares = costShares(costParts({ inputTokens: 3, cacheReadTokens: 60238, cacheCreationTokens: 9127, outputTokens: 2798, cacheTtl: '1h' }));
-    assert.deepEqual(shares.map((p) => `${p.label} ${p.pct}%`), ['写缓存 48%', '输出 37%', '读缓存 16%']);
-    assert.deepEqual(costShares(costParts({ cacheReadTokens: 1000, cacheCreationTokens: 1000, cacheTtl: '5m' })).map((p) => p.pct), [93, 7]);
-    assert.deepEqual(costShares(null), []);
-    assert.deepEqual(costShares({ write: 0, output: 0, read: 0, input: 0 }), []);
+test('quota shares: an 87% hit can still be mostly writes and output', async () => {
+    const { quotaShares } = await import('../src/panel/tabs/status.js');
+    const { quotaParts } = await import('../src/proxy/features/cache-diag.js');
+    const shares = quotaShares(quotaParts({ inputTokens: 3, cacheReadTokens: 60238, cacheCreationTokens: 9127, outputTokens: 2798, cacheTtl: '1h' }));
+    assert.deepEqual(shares.map((p) => `${p.label} ${p.pct}%`), ['写回复 51%', '写缓存 42%', '读缓存 8%']);
+    assert.deepEqual(quotaShares(quotaParts({ cacheReadTokens: 1000, cacheCreationTokens: 1000 })).map((p) => p.pct), [97, 3]);
+    assert.deepEqual(quotaShares(null), []);
+    assert.deepEqual(quotaShares({ write: 0, output: 0, read: 0 }), []);
 });
 
 test('usage pace: projected to the reset; quiet under 10% or without a reset', async () => {

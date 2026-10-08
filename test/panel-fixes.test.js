@@ -50,9 +50,12 @@ test('TauriTavern named in the connect texts', () => {
     assert.equal(appName(true), 'TauriTavern');
     assert.equal(appName(false), '酒馆');
     const shell = src('panel/shell.js');
-    assert.match(shell, /\$\{APP_NAME\}还没接上/);
-    assert.match(src('panel/tabs/settings.js'), /让\$\{APP_NAME\}改用它/);
-    assert.match(shell, /会把\$\{APP_NAME\}现在的连接/);
+    // The short copy names no app at all, so TauriTavern users never read a hard-coded 「酒馆」 here.
+    assert.match(shell, /key: 'connect', title: '差一步'/);
+    assert.match(src('panel/tabs/settings.js'), /notify\('info', '地址已改', '点「重新连接」生效'/);
+    const confirm = shell.slice(shell.indexOf("'连到 CCST？'"), shell.indexOf('callGenericPopup'));
+    assert.ok(confirm.length > 0);
+    assert.doesNotMatch(confirm, /酒馆/);
 });
 
 test('always-thinking models: disabled 不思考, and the list matches the proxy catalog', () => {
@@ -117,7 +120,24 @@ test('promptMutators lists only scripts / regexes that actually run, and never t
     for (const odd of [{}, { extensionSettings: null, characters: 'x' }, { chatCompletionSettings: { extensions: { tavern_helper: { scripts: 'x' } } }, extensionSettings: { tavern_helper: { script: { enabled: 5, scripts: {} } }, regex: {} } }]) {
         assert.deepEqual(promptMutators(odd), []);
     }
+    // The depth regexes go along as [name, minDepth], for naming the one that cut an old reply.
+    assert.deepEqual(stFingerprint({}, { ...ctx(), eventTypes: {} }).rx, [['全局摘要', 5], ['预设摘要', 5], ['卡摘要', 5]]);
+    assert.equal('rx' in stFingerprint({}, { chatCompletionSettings: {}, eventTypes: {} }), false);
     // Old SillyTavern without WORLD_INFO_ACTIVATED: the fingerprint says the world info list is unknown.
     assert.equal(stFingerprint({}, { chatCompletionSettings: {}, eventTypes: {} }).wiOff, true);
     assert.equal(stFingerprint({}, { chatCompletionSettings: {}, eventTypes: { WORLD_INFO_ACTIVATED: 'world_info_activated' } }).wiOff, undefined);
+});
+
+test('historyMarks: thinking written into a reply is skipped; a short last message goes whole in exact', async () => {
+    globalThis.SillyTavern = { getContext: () => ({ chatCompletionSettings: {} }) };
+    const { historyMarks } = await import('../src/panel/core/inject.js');
+    const chat = [
+        { mes: '开场白：木屋里很冷，炉火快灭了' },
+        { mes: '<thinking>先想想她会怎么做\n再写</thinking>\n<content>雪落在门槛上，她没有回头。</content>' },
+        { mes: '继续', is_user: true },
+    ];
+    const marks = historyMarks({ chat });
+    assert.deepEqual(marks.end, ['<content>雪落在门槛上，她没有回头。</content>'.slice(0, 40)]);
+    assert.deepEqual(marks.exact, ['继续']);
+    assert.equal(historyMarks({ chat: chat.slice(0, 2) }).exact, undefined, 'a long last message needs no exact match');
 });

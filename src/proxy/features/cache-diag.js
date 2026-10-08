@@ -62,6 +62,33 @@ function isRewrite(a, b) {
     return fresh > REWRITE_SHARE * b.length;
 }
 
+/** `b` is `a` cut down: one stretch of it cut out (oneCutOut), or clearly
+ *  shorter with every line of it already in `a` (only its <摘要> part kept, a
+ *  status bar stripped). A swipe or a rewritten reply has lines of its own. */
+const CUT_DOWN_SHARE = 0.8;
+function isCutDown(a, b) {
+    if (!b.trim() || b.length >= a.length) return false;
+    if (oneCutOut(a, b)) return true;
+    if (b.length > CUT_DOWN_SHARE * a.length) return false;
+    const flat = (s) => s.replace(/\s+/g, '');
+    const old = flat(a);
+    return b.split('\n').every((line) => old.includes(flat(line)));
+}
+
+/** `b` is `a` with one stretch taken out (果实「3楼外伏笔不发送」drops the seeds: part of an older
+ *  reply, about 12% of it) or with only one stretch kept (「5楼外只发送摘要」keeps the end from
+ *  <meow_FM>): what `b` has is a start and an end of `a`, nothing of its own. */
+const MIN_CUT_CHARS = 20;
+function oneCutOut(a, b) {
+    if (a.length - b.length < MIN_CUT_CHARS) return false;
+    if (b.trim().length >= MIN_CUT_CHARS && a.includes(b)) return true;
+    let p = 0;
+    while (p < b.length && a.charCodeAt(p) === b.charCodeAt(p)) p++;
+    let s = 0;
+    while (s < b.length - p && a.charCodeAt(a.length - 1 - s) === b.charCodeAt(b.length - 1 - s)) s++;
+    return p + s === b.length && Math.min(p, s) > 0;
+}
+
 function openTags(text, offset) {
     const base = Math.max(0, offset - 60000);
     const before = text.slice(base, offset);
@@ -126,7 +153,10 @@ export function diagnoseCache(systemText, history, { chatKey = null } = {}) {
 
     // History that existed last turn (minus the previous current message,
     // which is normally replaced by the reply + new input) should be stable.
-    const comparable = Math.max(0, prev.history.length - 1);
+    // With a trailing assistant prefill (果实) that message is followed by the prefill, which also
+    // changes every turn: compare up to the previous turn's last player message.
+    const prevLastUser = prev.history.findLastIndex((t) => t.startsWith('user:'));
+    const comparable = prevLastUser >= 0 ? prevLastUser : Math.max(0, prev.history.length - 1);
     let historyDiffAt = -1;
     for (let i = 0; i < comparable && i < texts.length; i++) {
         if (prev.history[i] !== texts[i]) { historyDiffAt = i; break; }
@@ -135,9 +165,20 @@ export function diagnoseCache(systemText, history, { chatKey = null } = {}) {
     // is not part of it). Reads back almost everything, so it says nothing
     // about what a new turn costs — reports keep it apart.
     const reroll = texts.length === prev.history.length && texts.every((t, i) => t === prev.history[i]);
+    // An older reply cut down to part of itself: a preset's prompt-only regex
+    // that keeps only the last N replies in full (灰烬之桥「保留4层正文」sends
+    // older ones as just their <摘要>). Happens every turn as replies age —
+    // not a swipe. Everything after it is re-written all the same.
+    const summaryReplaced = historyDiffAt >= 0 && prev.history[historyDiffAt]?.startsWith('assistant:')
+        && texts[historyDiffAt]?.startsWith('assistant:')
+        && texts.findLastIndex((t) => t.startsWith('assistant:')) > historyDiffAt
+        && isCutDown(prev.history[historyDiffAt].slice(10), texts[historyDiffAt].slice(10));
     // A reply that differs from the one sent last turn: the player picked
     // another swipe (or edited the reply). Everything after it is re-written.
-    const replyChanged = historyDiffAt >= 0 && texts[historyDiffAt]?.startsWith('assistant:');
+    const replyChanged = !summaryReplaced && historyDiffAt >= 0 && texts[historyDiffAt]?.startsWith('assistant:');
+    // How deep that reply sits (SillyTavern's regex depth: the newest player message is 0), to tell
+    // which depth regex reached it.
+    const cutDepth = summaryReplaced ? texts.findLastIndex((t) => t.startsWith('user:')) - historyDiffAt : null;
     const diag = {
         chat: key, // hash of the chat's opening two messages — groups turns per chat in reports, carries no text
         firstTurn: false,
@@ -149,6 +190,7 @@ export function diagnoseCache(systemText, history, { chatKey = null } = {}) {
         historyLen: texts.length,
         ...(reroll ? { reroll: true } : {}),
         ...(replyChanged ? { replyChanged: true } : {}),
+        ...(summaryReplaced ? { summaryReplaced: true, cutDepth } : {}),
         ...(rewrite ? { rewrite: true } : {}),
     };
     undo.set(diag, { key, prev, state });
@@ -182,7 +224,9 @@ export function describeDiag(d) {
     if (d.historyDiffAt !== null) {
         parts.push(d.replyChanged
             ? `第 ${d.historyDiffAt + 1} / ${d.historyLen} 条（一条回复）和上一轮发的不同：切换了回复分支（swipe）或编辑了回复，从这里往后重写`
-            : `聊天记录从第 ${d.historyDiffAt + 1} / ${d.historyLen} 条开始与上一轮不同（正则改写旧楼层、删改消息会造成）`);
+            : d.summaryReplaced
+                ? `第 ${d.historyDiffAt + 1} / ${d.historyLen} 条（深度 ${d.cutDepth} 的旧回复）被预设正则改短了，从这里往后重写`
+                : `聊天记录从第 ${d.historyDiffAt + 1} / ${d.historyLen} 条开始与上一轮不同（正则改写旧楼层、删改消息会造成）`);
     }
     return `缓存诊断：${parts.join('；')}`;
 }
@@ -278,11 +322,56 @@ export function scriptSuspects(entry, prevEntry) {
     return same ? b.mut : null;
 }
 
+// Subscription weights measured on 2026-10-08 (Opus 4.6, 1 h cache, one run): output ≈ 4× a cache
+// write, a read ≈ 1/36 of a write. Only for comparing the parts of one turn, never turned into money.
+export const QUOTA_WEIGHT = { output: 4, write: 1, read: 1 / 36 };
+
+/** What a turn spent of the subscription, by part (input not cached counts as a write). */
+export function quotaParts(e) {
+    return {
+        output: QUOTA_WEIGHT.output * (e?.outputTokens ?? 0),
+        write: QUOTA_WEIGHT.write * ((e?.cacheCreationTokens ?? 0) + (e?.inputTokens ?? 0)),
+        read: QUOTA_WEIGHT.read * (e?.cacheReadTokens ?? 0),
+    };
+}
+
 /**
- * Plain-Chinese explanation of one recorded request's cache outcome, for the
- * panel. `entry` / `prevEntry` are usage-stats records (prevEntry: the
- * request before it, if any).
- * @returns {{ read: number, wrote: number, hitPct: number, headline: string, reasons: string[] } | null}
+ * Was the cache healthy this turn: how much of what the previous turn sent was read back.
+ * The plain hit rate (read ÷ everything sent) drops with every long reply even when the cache
+ * works, so it is not the verdict.
+ * @returns {{ state: 'ok'|'part'|'full'|'first'|'expired'|'reroll', reusePct: number|null }}
+ */
+export function cacheState(entry, prevEntry = null) {
+    const d = entry?.cacheDiag;
+    if (!d || d.firstTurn) return { state: 'first', reusePct: null };
+    if (d.reroll) return { state: 'reroll', reusePct: null };
+    if (prevEntry?.ok && cacheExpired(entry, prevEntry)) return { state: 'expired', reusePct: 0 };
+    const read = entry.cacheReadTokens ?? 0;
+    const prevTotal = prevEntry?.ok ? (prevEntry.cacheReadTokens ?? 0) + (prevEntry.cacheCreationTokens ?? 0) + (prevEntry.inputTokens ?? 0) : 0;
+    const base = prevTotal || read + (entry.cacheCreationTokens ?? 0) + (entry.inputTokens ?? 0);
+    const reusePct = base ? Math.min(100, Math.round((read / base) * 100)) : 0;
+    return { state: reusePct >= 95 ? 'ok' : reusePct >= 30 ? 'part' : 'full', reusePct };
+}
+
+/** The depth regex (the panel's [name, minDepth] list) that reached a reply at `depth`: the deepest
+ *  minDepth not below it — the one it just crossed. Named short: its 「[2]」-style number if the name
+ *  has one, else the start of the name. Null when none fits. */
+export function depthRegexAt(list, depth) {
+    if (!Array.isArray(list) || !Number.isFinite(depth)) return null;
+    let best = null;
+    for (const r of list) {
+        if (!Array.isArray(r) || typeof r[0] !== 'string' || !Number.isFinite(r[1]) || r[1] > depth) continue;
+        if (!best || r[1] > best[1]) best = r;
+    }
+    if (!best) return null;
+    return best[0].match(/\[[^\]\s]{1,4}\]/)?.[0] ?? `「${best[0].slice(0, 6)}」`;
+}
+
+const STATE_TITLE = { ok: '缓存正常', part: '部分重写', full: '整段重写', first: '第一轮', expired: '缓存过期', reroll: '重新生成' };
+
+/**
+ * The last turn's cache in plain words, for the panel. `entry` / `prevEntry` are usage-stats
+ * records (prevEntry: the request before it, if any). `reasons[0]` is the one-line why.
  */
 export function explainCache(entry, prevEntry = null) {
     if (!entry?.ok) return null;
@@ -290,70 +379,51 @@ export function explainCache(entry, prevEntry = null) {
     const wrote = entry.cacheCreationTokens ?? 0;
     const total = read + wrote + (entry.inputTokens ?? 0);
     const hitPct = total ? Math.round((read / total) * 100) : 0;
+    const { state, reusePct } = cacheState(entry, prevEntry);
     const d = entry.cacheDiag;
     const reasons = [];
-    if (!d || d.firstTurn) {
-        reasons.push('本聊天的第一轮（或代理刚重启）：整段写入缓存，下一轮起才能读取。');
+    if (state === 'first') {
+        reasons.push('先存进缓存，下一轮开始读');
     } else {
-        if (d.systemChanged && d.loreMoved?.length) {
-            reasons.push(`${d.loreMoved.map((t) => `<${t}>`).join('、')} 每轮随剧情变化，已自动移到本轮消息开头：系统提示词和之前的聊天记录照常读缓存，只重写最近一轮。`);
-        } else if (d.systemChanged) {
-            const where = `第 ${d.systemDiffAt.toLocaleString()} 字${d.systemDiffLabel ? `（${d.systemDiffLabel} 内）` : ''}`;
-            reasons.push(`系统提示词在${where}变了，这一轮整段重写（Claude Code 把系统提示词作为一整块缓存，改一个字就整段读不到）。常见原因：改了预设开关或角色卡、世界书按关键词触发、随机宏或每轮变化的变量。一次性的改动，下一轮起恢复。`);
-            if (d.systemDiffLabel === '<world_info>' || /world|世界/.test(d.systemDiffLabel ?? '')) {
-                reasons.push('世界书按关键词触发，每轮载入的条目不同，它后面的整段聊天记录都要重写。把这张卡的世界书条目改成常驻，聊天记录就能每轮读缓存（实测每轮写入从约 2.8 万降到约 3 千 token）。');
-            }
-        }
-        if (d.historyDiffAt !== null && d.historyDiffAt !== undefined) {
-            reasons.push(d.replyChanged
-                ? `第 ${d.historyDiffAt + 1} 条回复和上一轮发的不同：切换了回复分支（swipe）或编辑了这条回复，从这里往后重写一次，属正常现象。${entry.st?.mut?.length ? `你没切换也没编辑的话，可能是预设或角色卡里的脚本改了它（这一轮启用着：${entry.st.mut.join('、')}）。` : ''}`
-                : `聊天记录从第 ${d.historyDiffAt + 1} / ${d.historyLen} 条起和上一轮不同，之后全部重写。常见原因：预设正则按楼层改写旧消息（如「5 楼外只发摘要」）；「深度注入保持原位」打开时，深度注入每轮往后挪一格；或删改了消息。`);
-        }
-        // Nothing changed in SillyTavern yet the system prompt did: maybe a script of the preset / card (Izumi's 悬浮窗).
         const suspects = scriptSuspects(entry, prevEntry);
-        if (suspects) {
-            reasons.unshift(`酒馆里的设置没变，提示词却变了：可能是预设或角色卡里的脚本 / 正则在发送时改写了内容（这一轮启用着：${suspects.join('、')}）。刚改过角色卡、用户设定或作者注释的话，就是那次改动。`);
+        if (d.reroll) reasons.push(read >= wrote ? '几乎全读缓存，不算进统计' : '重新生成，但整段重写了');
+        if (suspects) reasons.push(`设置没动却变了，查脚本：${suspects.join('、')}`);
+        // Another preset: its regexes no longer touch the old replies the same way either — the
+        // whole request is new, nothing more to say about the history.
+        const switched = !!prevEntry?.st?.preset && !!entry.st?.preset && prevEntry.st.preset !== entry.st.preset;
+        if (d.systemChanged && switched) {
+            reasons.push('换了预设，整段重写');
+        } else if (d.systemChanged && d.loreMoved?.length) {
+            reasons.push('世界书挪到发言前，只重写一轮');
+        } else if (d.systemChanged) {
+            reasons.push(d.rewrite ? '换了预设，整段重写' : `设定在 ${d.systemDiffLabel ?? `第 ${d.systemDiffAt.toLocaleString()} 字`} 变了，下轮恢复`);
+            if (d.systemDiffLabel === '<world_info>' || /world|世界/.test(d.systemDiffLabel ?? '')) reasons.push('关键词世界书每轮不同；改常驻就好');
         }
-        if (d.tailRewritten) {
-            reasons.push(`预设放在聊天记录后面的条目变了（开关或编辑）：之前 ${d.tailRewritten} 轮里带的旧版本已换成新版本，聊天记录重写这一次，下一轮恢复。`);
+        if (d.historyDiffAt !== null && d.historyDiffAt !== undefined && !(d.systemChanged && switched)) {
+            const floor = d.historyDiffAt + 1;
+            const rx = d.summaryReplaced ? depthRegexAt(entry.st?.rx, d.cutDepth) : null;
+            if (rx) reasons.push(`第 ${floor} 楼被正则${rx}改短，每轮重写 ${wrote >= 1000 ? `${Math.round(wrote / 1000)}k` : wrote}`);
+            else if (d.summaryReplaced) reasons.push(`第 ${floor} 楼被预设正则改短了`);
+            else if (d.replyChanged) reasons.push(entry.st?.mut?.length ? `第 ${floor} 楼变了：换了回复，或脚本改的` : `第 ${floor} 楼换了回复，从这重写`);
+            else reasons.push(`第 ${floor} 楼起变了：多半是正则改旧楼`);
         }
-        if (prevEntry?.ok && prevEntry.effort !== undefined && entry.effort !== undefined && prevEntry.effort !== entry.effort) {
-            reasons.push('思考深度和上一轮不同：系统提示词的缓存保留，聊天记录部分要重写一次。');
-        }
-        if (prevEntry && prevEntry.model !== entry.model) {
-            reasons.push('模型和上一轮不同：缓存按模型分开，换模型要重新写入。');
-        }
-        // Self-check for the turn replay (turn-capture.js): same chat, nothing
-        // changed, yet the read did not grow past last turn's prompt — the
-        // history is being re-written again. Most likely a CLI update changed
-        // how it attaches its per-turn reminders.
+        if (d.tailRewritten) reasons.push('改了记录后面的条目，重写一次');
+        if (prevEntry?.ok && prevEntry.effort !== undefined && entry.effort !== undefined && prevEntry.effort !== entry.effort) reasons.push('思考深度变了，重写一次');
+        if (prevEntry && prevEntry.model !== entry.model) reasons.push('换了模型，要重写');
         const expired = prevEntry?.ok ? cacheExpired(entry, prevEntry) : null;
-        if (expired) {
-            reasons.push(expired.ttl === '5m'
-                ? `距上一轮开始已过 ${expired.gapMin} 分钟，上一轮的缓存只按 5 分钟写入（订阅额度用超、开始扣额外用量时 Claude Code 会这样做），已经过期，这一轮整段重写。5.2.1 起代理固定要求 1 小时；更新后仍看到这条，检查环境变量 CLAUDE_CODE_PROMPT_CACHE_TTL / FORCE_PROMPT_CACHING_5M。`
-                : `距上一轮开始已过 ${expired.gapMin} 分钟，超过了 1 小时的缓存有效期，这一轮整段重写，属正常现象。`);
-        } else if (entry.cacheTtl === '5m') {
-            reasons.push('这一轮的缓存只按 5 分钟写入（多半是订阅额度用超、在扣额外用量）：下一轮若在 5 分钟后才发（长回复加阅读时间通常会超过），就读不到了。5.2.1 起代理固定要求 1 小时；仍看到这条请检查环境变量 CLAUDE_CODE_PROMPT_CACHE_TTL / FORCE_PROMPT_CACHING_5M。');
-        }
-        if (cacheAnomaly(entry, prevEntry)) {
-            reasons.push('异常：系统提示词和聊天记录都没变、也没过缓存有效期，聊天记录却没读到缓存，代理的「逐轮还原」可能失效了（连着两轮会自动重置一次）。持续出现的话，在 CCST 文件夹运行 node scripts/wire-diagnosis.mjs，把输出发给维护者。刚重启过代理的第一轮除外。');
-        }
-        if (d.reroll) {
-            // A reroll normally reads everything back; when it didn't, the reason above is the point.
-            reasons.unshift(hitPct >= 50
-                ? '这是重roll：聊天记录和上一次请求一样，几乎全部读缓存。它不代表正常新一轮的开销，统计里的命中率不算它。'
-                : `这是重roll，但没读到缓存：${d.systemChanged ? '两次之间系统提示词变了（多半是改了角色卡、用户设定或预设条目），' : ''}这一次整段重写。统计里的命中率不算它。`);
-        }
-        if (!reasons.length) {
-            reasons.push(read > 0
-                ? '系统提示词和聊天记录都和上一轮一致，只写入了新增的内容。'
-                : '内容和上一轮一致却没读到缓存。');
-        }
+        if (expired) reasons.push(expired.ttl === '5m' ? '只存了 5 分钟，已过期' : `隔了 ${expired.gapMin} 分钟，超过 1 小时`);
+        else if (entry.cacheTtl === '5m') reasons.push('只存 5 分钟：多半在扣超额');
+        if (cacheAnomaly(entry, prevEntry)) reasons.push('内容没变却没读到，请导出日志');
+        if (!reasons.length) reasons.push(read > 0 ? '该读的都读到了' : '内容一样却没读到');
     }
-    const equiv = equivalentTokens(entry);
-    const noCache = equivalentTokens({ model: entry.model, inputTokens: total, outputTokens: entry.outputTokens });
-    reasons.push(`「花在」按这个模型的 API 价格折算，输出含思考；完全不用缓存约 ${k(noCache)} 等效 token。订阅额度不按美元扣，金额只用来比较；实测订阅里读缓存比 API 价更便宜、输出更贵。`);
-    return { read, wrote, hitPct, equiv, cost: costParts(entry), usd: apiValueUsd(entry), firstTurn: !d || !!d.firstTurn, headline: `读取缓存 ${k(read)} · 重新写入 ${k(wrote)} · 命中 ${hitPct}% · 约 ${k(equiv)} 等效`, reasons };
+    const q = quotaParts(entry);
+    return {
+        read, wrote, hitPct, reusePct, state, title: STATE_TITLE[state],
+        quota: q, cost: costParts(entry), usd: apiValueUsd(entry),
+        firstTurn: state === 'first',
+        headline: `读取缓存 ${k(read)} · 重新写入 ${k(wrote)} · 复用 ${reusePct ?? '–'}%`,
+        reasons,
+    };
 }
 
 /** Test seam. */

@@ -110,7 +110,23 @@ fi
 ok "酒馆在：$ST"
 has_ext "$ST" || warn "这个酒馆里还没装 CCST 面板。先在酒馆里 扩展 → 安装扩展，粘贴 https://github.com/kcgoofee-jpg/CCST ；不装也能继续，只是面板不会出现。"
 
-# 酒馆正在运行：先关掉（换插件文件、移走旧插件时它不能占着），装完再打开
+# 已经是最新版（插件和面板都没有新提交、依赖在）：酒馆开着也不用关
+up_to_date() { # $1=git 文件夹
+    [[ -d "$1/.git" ]] || return 1
+    { [[ "$(command -v git)" != /usr/bin/git ]] || xcode-select -p >/dev/null 2>&1; } || return 1
+    git -C "$1" fetch --quiet 2>/dev/null || return 1
+    local up; up=$(git -C "$1" rev-parse '@{u}' 2>/dev/null || git -C "$1" rev-parse origin/HEAD 2>/dev/null || git -C "$1" rev-parse origin/main 2>/dev/null)
+    [[ -n "$up" && "$(git -C "$1" rev-parse HEAD 2>/dev/null)" == "$up" ]]
+}
+CURRENT=0
+if [[ -d "$ST/plugins/CCST/node_modules" ]] && up_to_date "$ST/plugins/CCST"; then
+    CURRENT=1
+    for d in "$ST"/public/scripts/extensions/third-party/CCST(N/) "$ST"/data/*/extensions/CCST(N/); do
+        [[ -d "$d/.git" ]] && ! up_to_date "$d" && CURRENT=0
+    done
+fi
+
+# 酒馆正在运行：要更新就先关掉（换插件文件、移走旧插件时它不能占着），装完再打开
 ST_PORT=$(sed -nE 's/^port:[[:space:]]*([0-9]+).*/\1/p' "$ST/config.yaml" 2>/dev/null | head -1)
 ST_RUNNING=0; STOPPED=0
 if [[ "${CCST_NO_PROCESS_SCAN:-0}" != 1 ]]; then
@@ -118,9 +134,11 @@ if [[ "${CCST_NO_PROCESS_SCAN:-0}" != 1 ]]; then
     for pid in ${(f)"$(lsof -nP -iTCP:${ST_PORT:-8000} -sTCP:LISTEN -t 2>/dev/null)"}; do
         [[ "$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p')" == "$ST" ]] && st_pids+=("$pid")
     done
-    if (( ${#st_pids} )); then
+    if (( ${#st_pids} )) && (( CURRENT )); then
+        ST_RUNNING=1; ok "CCST 已经是最新版，酒馆不用关"
+    elif (( ${#st_pids} )); then
         ST_RUNNING=1
-        a=y; [[ "$ASSUME_YES" == 1 ]] || a=$(ask "酒馆正在运行。先关掉它（聊天记录都已保存），装完再帮你打开？[Y/n] ")
+        a=y; [[ "$ASSUME_YES" == 1 ]] || a=$(ask "有新版本，要先关掉酒馆（聊天记录都已保存），装完在新窗口里重新打开。现在关？[Y/n] ")
         if [[ "$a" == [nN]* ]]; then warn "没关。装完要自己关掉酒馆再打开。"
         else
             kill $st_pids 2>/dev/null
@@ -281,8 +299,12 @@ fi
 print -r -- ""
 print -r -- "════════════════════════════════"
 if (( STOPPED )) && open -a Terminal "$ST/start.sh" 2>/dev/null; then
-    print -r -- "装好了。酒馆已经在新的终端窗口里重新打开，面板会自动连上。"
-    print -r -- "（浏览器里按 Cmd+Shift+R 刷新一下。）"
+    print -r -- "装好了。酒馆已经在新弹出的终端窗口里运行："
+    print -r -- "  · 那个窗口就是酒馆，聊天时一直开着，关掉它酒馆和 CCST 就都停了。"
+    print -r -- "  · 现在这个窗口可以关了。"
+    print -r -- "  · 浏览器里按 Cmd+Shift+R 刷新酒馆页面。"
+elif (( CURRENT && ST_RUNNING )); then
+    print -r -- "已经是最新版，酒馆照常用，不用重启。"
 else
     print -r -- "装好了。关掉酒馆再打开，面板会自动连上。"
     print -r -- "（酒馆是在终端窗口里运行的话，关掉那个窗口再重新启动；浏览器里按 Cmd+Shift+R 刷新一下。）"

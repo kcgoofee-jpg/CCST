@@ -11,9 +11,9 @@ const ours = { kind: 'ours', connected: true };
 const facts = (conn, phase) => guideFacts(conn, phase);
 const boot = (over = {}) => ({ onboarded: false, guideSource: '', settingsExisted: false, everConnected: false, ...over });
 
-test('three steps, named 装代理 / 登录 / 连接, then 完成', () => {
+test('three steps, named 安装 / 登录 / 连接, then 完成', () => {
     assert.deepEqual(GUIDE_STEPS.map((s) => s.key), ['install', 'login', 'connect']);
-    assert.deepEqual(STEP_TITLES, { 1: '装代理', 2: '登录', 3: '连接' });
+    assert.deepEqual(STEP_TITLES, { 1: '安装', 2: '登录', 3: '连接' });
     assert.equal(DONE_STEP, 4);
 });
 

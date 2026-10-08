@@ -156,7 +156,7 @@ function hasRenderableContent(m) {
  * System messages are excluded — they ride the SDK's `systemPrompt` option.
  * Blank messages (deleted text, empty swipe placeholders) are skipped.
  */
-export function assembleEntries(history, meta, model, { replay = null, pinned = null } = {}) {
+export function assembleEntries(history, meta, model, { replay = null, pinned = null, trimLast = false } = {}) {
     const entries = [];
     let parentUuid = null;
     // Pinned CLI context goes right after the first entry, in every request.
@@ -170,6 +170,10 @@ export function assembleEntries(history, meta, model, { replay = null, pinned = 
     };
 
     const replies = replay ? repliesBefore(history) : [];
+    // trimLast: the last message is part of this turn (a prefill turn's player message). A capture of
+    // it may be an earlier attempt of this same turn, with its placeholder reply and continuation
+    // inside: only the message itself (as it was sent, with its context) is replayed.
+    const last = trimLast ? history.length - 1 : -1;
     for (const [i, m] of history.entries()) {
         if (m.role === 'system') continue;
         if (!hasRenderableContent(m)) continue;
@@ -177,7 +181,11 @@ export function assembleEntries(history, meta, model, { replay = null, pinned = 
         // attachments it carried then, so its bytes (and the cache) match.
         // Found by its text and the reply it answers (turn-capture.js).
         if (replay && m.role === 'user' && typeof userContentFromMessage(m) === 'string') {
-            const replayed = replay(userContentFromMessage(m), parentUuid, meta, replies[i]);
+            let replayed = replay(userContentFromMessage(m), parentUuid, meta, replies[i]);
+            if (i === last && replayed?.length) {
+                const cut = replayed.findIndex((e) => e?.type === 'assistant');
+                if (cut > 0) replayed = replayed.slice(0, cut);
+            }
             if (replayed?.length) {
                 entries.push(...replayed);
                 parentUuid = replayed[replayed.length - 1].uuid;
@@ -201,6 +209,10 @@ export function assembleEntries(history, meta, model, { replay = null, pinned = 
 // ──────────────────────────────────────────────
 
 const SYNTHETIC_START = '[Start]';
+
+/** What the CLI puts between a transcript that ends on a user message and the next user message
+ *  (its own placeholder reply, CLI 2.1.285 — seen in the requests it sends). */
+export const NO_RESPONSE_FILLER = 'No response requested.';
 
 /**
  * Closest in-SDK approximation of Messages-API assistant prefill. The Agent

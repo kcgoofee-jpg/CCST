@@ -272,7 +272,7 @@ async function turn(messages, ns = {}) {
 }
 const text = (e) => (typeof e.message?.content === 'string' ? e.message.content : (e.message?.content ?? []).map((b) => b?.text ?? '').join('\n'));
 
-test('a prefill turn is filed under its own instruction, not under the player message', async () => {
+test('a 「继续」 round is filed under its own instruction, not under the player message', async () => {
     __setSdkForTesting({ query: () => (async function* () {})() });
     __resetTurnCaptures();
     __resetCacheDiag();
@@ -285,11 +285,11 @@ test('a prefill turn is filed under its own instruction, not under the player me
     const firstSent = sentTextFor('我推门', '开场');
     assert.match(firstSent, /^<triggered_lore>\n【甲】[\s\S]*我推门$/, 'filed as sent, lore included');
 
-    // The prefill round: SillyTavern ends with the assistant text it wants continued.
+    // The 「继续」 round: SillyTavern ends with the reply it wants continued.
     const prefill = await turn([
         { role: 'system', content: sys('乙') }, { role: 'assistant', content: '开场' },
         { role: 'user', content: '我推门' }, { role: 'assistant', content: '门开了' },
-    ], wi('乙'));
+    ], { ...wi('乙'), gen_type: 'continue' });
     assert.ok(!prefill.some((e) => text(e).includes('Continue the assistant')), 'the instruction is not history');
     assert.equal(sentTextFor('我推门', '开场'), firstSent, 'the prefill round does not refile the player message');
 
@@ -302,6 +302,31 @@ test('a prefill turn is filed under its own instruction, not under the player me
     const players = next.filter((e) => text(e).includes('我推门'));
     assert.equal(players.length, 1, 'the player message is replayed once');
     assert.ok(!next.some((e) => text(e).includes('Continue the assistant')), 'no continuation instruction replaces it');
+    __setSdkForTesting(null);
+});
+
+test('a prefill turn (果实: the preset ends on an assistant entry) is replayed whole next turn', async () => {
+    __setSdkForTesting({ query: () => (async function* () {})() });
+    __resetTurnCaptures();
+    __resetCacheDiag();
+    const sys = `<rules>${'规则'.repeat(2000)}</rules>`;
+    const tail = '<输出要求>\n正文 2000 字，结尾写摘要。\n</输出要求>';
+    const prefillOf = (said) => `[任务确认]\n<user_input>\n${said}\n</user_input>`;
+    const ask = (history, said) => [{ role: 'system', content: sys }, ...history, { role: 'user', content: said }, { role: 'system', content: tail }, { role: 'assistant', content: prefillOf(said) }];
+    const t1 = await turn(ask([{ role: 'assistant', content: '开场' }], '我推门'));
+    assert.deepEqual(t1.map(text).slice(-2), [`我推门\n\n${tail}`, 'No response requested.'], 'the placeholder reply is ours, after the merged player message');
+    const t2 = await turn(ask([{ role: 'assistant', content: '开场' }, { role: 'user', content: '我推门' }, { role: 'assistant', content: '门开了。' }], '我点灯'));
+    const texts = t2.map(text);
+    const at = texts.indexOf(`我推门\n\n${tail}`);
+    assert.ok(at > 0, 'the player message goes out as it was sent, post-history entries included');
+    assert.equal(texts[at + 1], 'No response requested.');
+    assert.match(texts[at + 2], /^Continue the assistant's reply[\s\S]*我推门/, 'then the continuation instruction it was sent with');
+    assert.equal(texts[at + 3], '门开了。', 'then the reply');
+    assert.deepEqual(texts.slice(0, t1.length), t1.map(text), 'turn 2 starts with everything turn 1 sent');
+    assert.equal(texts.filter((t) => t.includes('我推门')).length, 2, 'the player message once (plus the instruction quoting it)');
+    // A reroll of the same turn: the earlier attempt's placeholder and instruction are not replayed twice.
+    const again = await turn(ask([{ role: 'assistant', content: '开场' }, { role: 'user', content: '我推门' }, { role: 'assistant', content: '门开了。' }], '我点灯'));
+    assert.deepEqual(again.map(text), texts);
     __setSdkForTesting(null);
 });
 // ── #26: the pin file and the replay know which SDK wrote them ──
@@ -382,6 +407,24 @@ test('rewriteCaptured swaps an old post-history block in captured turns', async 
     assert.equal(sentTextFor('你好', ''), '你好');
 });
 
+test('rewriteCaptured replaces two different old tail versions; a turn already on the new one is left alone', async () => {
+    const { createTurnCollector, sentTextFor, rewriteCaptured, __resetTurnCaptures } = await import('../src/proxy/features/turn-capture.js');
+    __resetTurnCaptures();
+    const turn = (text, sent, ctx) => {
+        const c = createTurnCollector(sent, text, null, ctx);
+        c.onAppend([{ type: 'user', uuid: `u${ctx}`, message: { role: 'user', content: sent } }, { type: 'assistant', uuid: `a${ctx}` }]);
+    };
+    turn('一', '一\n\n<规则>日记番外</规则>', 'r1');
+    turn('二', '二\n\n<规则>日记番外</规则>\n\n<文风>嘎嘎</文风>', 'r2');
+    // Rerolled after the edit: already carries the new tail, which contains an old version.
+    turn('三', '三\n\n<规则>日记番外</规则>\n\n<文风>直白</文风>', 'r3');
+    const n = rewriteCaptured(['\n\n<规则>日记番外</规则>', '\n\n<规则>日记番外</规则>\n\n<文风>嘎嘎</文风>'], '\n\n<规则>日记番外</规则>\n\n<文风>直白</文风>');
+    assert.equal(n, 2);
+    assert.equal(sentTextFor('一', 'r1'), '一\n\n<规则>日记番外</规则>\n\n<文风>直白</文风>');
+    assert.equal(sentTextFor('二', 'r2'), '二\n\n<规则>日记番外</规则>\n\n<文风>直白</文风>');
+    assert.equal(sentTextFor('三', 'r3'), '三\n\n<规则>日记番外</规则>\n\n<文风>直白</文风>');
+});
+
 test('a player message wrapped only while it is the newest (Kemini <interactive_input>) is found bare next turn', async () => {
     const { createTurnCollector, sentTextFor, __resetTurnCaptures } = await import('../src/proxy/features/turn-capture.js');
     __resetTurnCaptures();
@@ -391,4 +434,23 @@ test('a player message wrapped only while it is the newest (Kemini <interactive_
     assert.equal(sentTextFor('我走到窗边', '开场'), `规则\n\n${wrapped}`);
     assert.equal(sentTextFor('我走到窗边', '另一段回复'), null, 'only under the same reply context');
     assert.equal(sentTextFor('我走到', '开场'), null, 'part of the message is not the same turn');
+});
+
+test('switching presets takes the old preset\'s post-history entries out of earlier turns', async () => {
+    __setSdkForTesting({ query: () => (async function* () {})() });
+    __resetTurnCaptures();
+    __resetCacheDiag();
+    const { __resetInjected } = await import('../src/proxy/features/lore-tail.js');
+    __resetInjected();
+    const ashenTail = `</Chat_History>\n<创作之律>${'灰烬的写作规则。'.repeat(80)}</创作之律>`;
+    const sysA = `<ashen>${'灰烬'.repeat(2000)}</ashen>`;
+    const sysB = `<guoshi>${'果实'.repeat(2000)}</guoshi>`;
+    const fp = (preset) => ({ st_fp: { preset, order: preset, wi: [], mut: [] } });
+    await turn([{ role: 'system', content: sysA }, { role: 'assistant', content: '开场' }, { role: 'user', content: '我推门' }, { role: 'system', content: ashenTail }], fp('灰烬之桥'));
+    const ashen2 = await turn([{ role: 'system', content: sysA }, { role: 'assistant', content: '开场' }, { role: 'user', content: '我推门' }, { role: 'assistant', content: '门开了。' }, { role: 'user', content: '我点灯' }, { role: 'system', content: ashenTail }], fp('灰烬之桥'));
+    assert.ok(ashen2.some((e) => text(e) === `我推门\n\n${ashenTail}`), 'same preset: the earlier turn goes out as sent, tail included');
+    const guoshi = await turn([{ role: 'system', content: sysB }, { role: 'assistant', content: '开场' }, { role: 'user', content: '我推门' }, { role: 'assistant', content: '门开了。' }, { role: 'user', content: '我点灯' }, { role: 'assistant', content: '灯亮了。' }, { role: 'user', content: '我坐下' }, { role: 'system', content: '<输出要求>果实的尾部</输出要求>' }, { role: 'assistant', content: '[任务确认]' }], fp('果实V6.3'));
+    assert.ok(!guoshi.some((e) => text(e).includes('创作之律')), 'no turn keeps the old preset\'s rules');
+    assert.ok(guoshi.some((e) => text(e) === '我推门') && guoshi.some((e) => text(e) === '我点灯'), 'the player messages stay');
+    __setSdkForTesting(null);
 });

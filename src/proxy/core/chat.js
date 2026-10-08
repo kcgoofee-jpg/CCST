@@ -38,7 +38,7 @@ import { parseModelRequest, effortForModel, isExtendedContextKnownUnavailable, r
 import { buildSubprocessEnv } from './env.js';
 import { tapBaseUrl, tapSkipReason } from '../features/wire-tap.js';
 import { buildSystemPrompt, extractSystemText } from './system-prompt.js';
-import { assembleEntries, splitHistoryForResume, currentToSdkUserMessage, singleMessageStream } from '../features/jsonl-entries.js';
+import { assembleEntries, buildAssistantEntry, splitHistoryForResume, currentToSdkUserMessage, singleMessageStream, NO_RESPONSE_FILLER } from '../features/jsonl-entries.js';
 import { SDK_VERSION } from '../features/sdk-version.js';
 import { ResumeSessionStore, resumeScratchCwd, sweepSessionTranscript } from '../features/session-store.js';
 import { createTurnCollector, historyReplay, repliesBefore, replyBefore, sentTextFor, noteReplayHealth, rewriteCaptured } from '../features/turn-capture.js';
@@ -49,7 +49,7 @@ import { explainError, formatErrorForUser } from '../features/errors-zh.js';
 import { recordRequest, promptShape } from '../features/usage-stats.js';
 import { applyHistoryBounds, inlineLateSystemMessages } from '../features/system-placement.js';
 import { diagnoseCache, describeDiag, discardDiag } from '../features/cache-diag.js';
-import { foldTrailingInjections, injectBlocks, injectedTextFor, loreTarget, newLoreOnly, noteTail, rememberInjected, rewriteInjected, cutExactLore, TRIGGERED_TAG, LORE_WINDOW } from '../features/lore-tail.js';
+import { foldTrailingInjections, injectBlocks, injectedTextFor, loreTarget, newLoreOnly, noteTail, tailsOfOldPreset, rememberInjected, rewriteInjected, cutExactLore, TRIGGERED_TAG, LORE_WINDOW } from '../features/lore-tail.js';
 import { noteLastRequest, noteLastEntries } from '../features/last-request.js';
 import { keepReply, trackGeneration } from '../features/reply-keeper.js';
 
@@ -240,7 +240,21 @@ function buildQueryConfig({ messages: rawMessages, modelInfo, oneMActive, settin
             // model as served, since the context names it.
             const pinKey = envFlag('CLAUDE_SUBSCRIPTION_CONTEXT_PIN', true) ? `${modelInfo.baseId}${oneMActive ? '[1m]' : ''}` : null;
             const { replay, pinned } = historyReplay(pinKey, { replay: envFlag('CLAUDE_SUBSCRIPTION_TURN_REPLAY', true) });
-            const entries = assembleEntries(split.history, meta, modelInfo.baseId, { replay, pinned });
+            const prefill = split.shape === 'trailing-assistant-continue';
+            const entries = assembleEntries(split.history, meta, modelInfo.baseId, { replay, pinned, trimLast: prefill });
+            // A prefill turn sends [player message, placeholder reply, continuation instruction]; the
+            // CLI adds the placeholder itself when the transcript ends on a user entry. Next turn
+            // SillyTavern sends just the player message and the reply, and without these three the
+            // history changed right there: every turn of a prefill preset (果实) re-wrote the whole
+            // history (measured 2026-10-08: read = system prompt only). Write the placeholder here and
+            // keep all three as this turn, under the player's text. Not for SillyTavern's 「继续」: the
+            // player's message was a turn of its own and the reply keeps the continued text.
+            let lead = null;
+            const lastUserEntry = entries.findLastIndex((e) => e?.type === 'user');
+            if (prefill && lastUserEntry >= 0 && entries.slice(lastUserEntry + 1).every((e) => e?.type === 'attachment')) {
+                entries.push(buildAssistantEntry({ message: { role: 'assistant', content: NO_RESPONSE_FILLER }, parentUuid: entries.at(-1).uuid, meta, model: modelInfo.baseId }));
+                if (settings.genType !== 'continue' && lastUserEntry > 0) lead = entries.slice(lastUserEntry);
+            }
             // Empty entry lists make the SDK reject the resume with "No
             // conversation found" — first turns can't resume.
             if (entries.length > 0) {
@@ -249,15 +263,17 @@ function buildQueryConfig({ messages: rawMessages, modelInfo, oneMActive, settin
                 // Filed under its text and the reply it answers; background
                 // calls record nothing (no capture, no pin).
                 // A trailing-assistant prefill sends the synthetic continuation
-                // instruction, not the player's message: filing that entry
-                // under settings.captureKey (what SillyTavern sends back next
-                // turn) would replay the INSTRUCTION in place of the player's
-                // text, so it goes under its own text — a key no future
-                // history message has.
-                const keyText = split.shape === 'trailing-assistant-continue' ? null : settings.captureKey;
+                // instruction, not the player's message: filed alone under
+                // settings.captureKey it would replay the INSTRUCTION in place of
+                // the player's text (#28). Kept behind the player's message and
+                // the placeholder (lead) it is the whole turn, filed under the
+                // player's text; without a lead it goes under its own text — a
+                // key no future history message has.
+                const playerText = typeof split.history.at(-1)?.content === 'string' ? split.history.at(-1).content : null;
+                const keyText = !prefill ? settings.captureKey : lead ? settings.captureKey ?? playerText : null;
                 const collector = settings.auxiliary
                     ? null
-                    : createTurnCollector(currentText, keyText, pinKey, replyBefore(split.history, split.history.length));
+                    : createTurnCollector(currentText, keyText, pinKey, replyBefore(split.history, split.history.length), lead);
                 const resume = { sessionId, store: new ResumeSessionStore(sessionId, entries, collector?.onAppend), cwd };
                 if (settings.dryRun) noteLastEntries(entries);
                 const options = buildSdkOptions({ modelInfo, oneMActive, settings, systemText, abortController, stream, env, resume });
@@ -588,13 +604,20 @@ async function completeChat(req, res, body, settings, conn) {
         // Post-history entries changed (one switched off, edited): earlier
         // turns go out again as sent, so swap their old copy for the new one
         // (lore-tail.js noteTail). Not on a reroll: nothing was changed then.
+        const preset = settings.stFingerprint?.preset || null;
+        const oldTails = cacheDiag?.systemChanged && !cacheDiag.reroll ? tailsOfOldPreset(cacheDiag.chat ?? null, preset) : null;
+        if (oldTails) {
+            const from = oldTails.map((t) => `\n\n${t}`);
+            const n = rewriteCaptured(from, '') + rewriteInjected(from, '');
+            if (n) console.log(`${PLUGIN_TAG} 换了预设：之前 ${n} 轮里旧预设放在聊天记录后面的条目一起去掉`);
+        }
         const lastUserAt = messages.findLastIndex((m) => m?.role === 'user');
         const trailing = lastUserAt >= 0 ? messages.slice(lastUserAt + 1) : null;
         if (settings.systemPlacement === 'inline' && trailing && trailing.every((m) => m?.role === 'system' && typeof m.content === 'string')) {
             const tail = trailing.map((m) => m.content).filter(Boolean).join('\n\n');
-            const change = noteTail(cacheDiag?.chat ?? null, tail);
-            if (change && !cacheDiag?.reroll) {
-                const from = `\n\n${change.from}`;
+            const change = noteTail(cacheDiag?.chat ?? null, tail, { order: settings.stFingerprint?.order ?? null, reroll: !!cacheDiag?.reroll, preset });
+            if (change) {
+                const from = change.from.map((t) => `\n\n${t}`);
                 const to = change.to ? `\n\n${change.to}` : '';
                 const n = rewriteCaptured(from, to) + rewriteInjected(from, to);
                 if (n && cacheDiag) cacheDiag.tailRewritten = n;

@@ -65,9 +65,13 @@ export function applyHistoryBounds(messages, hist, genType = null) {
     // Whitespace-blind: a card's greeting is stored with \r\n and sent with \n.
     const flat = (s) => String(s).replace(/\s+/g, '');
     const has = (m, list) => { const t = flat(text(m)); return list.some((s) => flat(s) && t.includes(flat(s))); };
+    // A short last message (「继续」) is matched as the whole message — markup a
+    // prompt regex wraps it in aside — never as part of one (an old turn has it too).
+    const exact = (hist?.exact ?? []).map(flat).filter(Boolean);
+    const whole = (m) => m?.role === 'user' && exact.includes(flat(text(m).replace(/<\/?[^<>\n]{1,60}>/g, '')));
     const first = messages.findIndex((m) => m?.role !== 'system' && has(m, start));
     if (first < 0) return messages;
-    let last = end.length ? messages.findLastIndex((m) => m?.role !== 'system' && has(m, end)) : -1;
+    let last = end.length || exact.length ? messages.findLastIndex((m) => m?.role !== 'system' && (has(m, end) || whole(m))) : -1;
     if (last < first || genType === 'continue') last = -1;
     const asSystem = (m) => (m?.role === 'system' ? m : { role: 'system', content: text(m) });
     let changed = false;

@@ -17,7 +17,7 @@
 // not repeated; one given longer ago is sent again in full, so an entry that
 // keeps firing stays near the current turn.
 
-import { turnKey } from './turn-capture.js';
+import { swapVersions, turnKey } from './turn-capture.js';
 
 export const TAIL_NOTE = '（以上是本轮按剧情触发的设定资料，来自系统设定，不是用户的发言。）';
 
@@ -167,12 +167,12 @@ function cutAt(text, i, len) {
 }
 export const TRIGGERED_TAG = 'triggered_lore';
 
-/** Replace `from` with `to` in every remembered message (see rewriteCaptured). */
+/** Replace `from` (one text or several versions) with `to` in every remembered message (see rewriteCaptured). */
 export function rewriteInjected(from, to) {
-    if (!from || from === to) return 0;
     let n = 0;
     for (const [key, sent] of injected) {
-        if (sent.includes(from)) { injected.set(key, sent.split(from).join(to)); n++; }
+        const now = swapVersions(sent, from, to);
+        if (now !== sent) { injected.set(key, now); n++; }
     }
     return n;
 }
@@ -182,27 +182,69 @@ export function rewriteInjected(from, to) {
 // again as they went out — so the cache keeps working. When the user changes
 // those entries (switches one off, edits it), every earlier turn would keep
 // the old version for good (seen live: an output-format entry switched off
-// still steered every reply). A tail that had been the same for a few turns
-// and then changed is a settings change, not per-turn content: the earlier
-// copies are replaced with the new one. That turn re-writes the history once.
+// still steered every reply; 灰烬之桥: the old and the new tail, with
+// conflicting rules, in one request). A changed tail is a settings change when
+// the preset's entries changed (the panel's order fingerprint), or — without
+// a fingerprint — when the old tail had been the same for a few turns (per-turn
+// content changes every turn). Then every earlier version this chat had is
+// replaced with the new one, so the model never sees two versions of the
+// preset's rules. That turn re-writes the history once; an edited entry before
+// the history re-writes it anyway.
 const MIN_TAIL_CHARS = 200;
 const STABLE_TURNS = 2;
 const MAX_TAIL_CHATS = 12;
-const tails = new Map(); // chat → { text, turns }
+const MAX_TAIL_VERSIONS = 8;
+const tails = new Map(); // chat → { text, turns, order, old: earlier versions }
 
 /**
  * @param {string|null} chat  chat key (cache-diag)
  * @param {string|null} tail  this turn's post-history text as merged
- * @returns {{ from: string, to: string } | null}  replace these, if the tail was changed
+ * @param {{ order?: string|null, reroll?: boolean }} [opts]  order: the panel's
+ *   fingerprint of the preset's entries; reroll: the same turn sent again (a
+ *   continue's nudge is no settings change) — nothing is learned from it
+ * @returns {{ from: string[], to: string } | null}  replace these versions, if the tail was changed
  */
-export function noteTail(chat, tail) {
-    if (!chat || typeof tail !== 'string') return null;
+export function noteTail(chat, tail, { order = null, reroll = false, preset = null } = {}) {
+    if (!chat || typeof tail !== 'string' || reroll) return null;
     const rec = tails.get(chat);
+    if (rec && rec.text === tail) {
+        rec.turns++;
+        if (order) rec.order = order;
+        if (preset) rec.preset = preset;
+        return null;
+    }
+    const edited = !!order && !!rec?.order && order !== rec.order;
+    // Same entries, and the new tail is only the end of the old one: the end of
+    // the chat history was not found (a short 「继续」), not a settings change.
+    if (rec && order && order === rec.order && rec.text.endsWith(tail)) return null;
+    const old = rec ? [...rec.old.filter((t) => t !== tail), rec.text].slice(-MAX_TAIL_VERSIONS) : [];
     tails.delete(chat);
-    tails.set(chat, rec && rec.text === tail ? { text: tail, turns: rec.turns + 1 } : { text: tail, turns: 1 });
-    while (tails.size > MAX_TAIL_CHATS) tails.delete(tails.keys().next().value);
-    if (!rec || rec.text === tail || rec.turns < STABLE_TURNS || rec.text.length < MIN_TAIL_CHARS) return null;
-    return { from: rec.text, to: tail };
+    while (tails.size >= MAX_TAIL_CHATS) tails.delete(tails.keys().next().value);
+    const from = old.filter((t) => t.length >= MIN_TAIL_CHARS);
+    if (!rec || !from.length || (!edited && rec.turns < STABLE_TURNS)) {
+        tails.set(chat, { text: tail, turns: 1, order, preset, old });
+        return null;
+    }
+    // Replaced from here on: start the list over.
+    tails.set(chat, { text: tail, turns: 1, order, preset, old: [] });
+    return { from, to: tail };
+}
+
+/**
+ * The chat moved to another preset: the post-history versions noted under the old one, to take out
+ * of earlier turns. SillyTavern never sends an old preset's entries again, but those turns went out
+ * with them and are replayed as sent — after a switch from 灰烬之桥 to 果实 its 3.1 万字 of rules
+ * stayed in the history, re-written with it every turn. Only on a turn whose system prompt changed
+ * too (the whole request is re-written then anyway). Null when there is nothing to take out.
+ * @returns {string[] | null}
+ */
+export function tailsOfOldPreset(chat, preset) {
+    if (!chat || !preset) return null;
+    const rec = tails.get(chat);
+    if (!rec?.preset || rec.preset === preset) return null;
+    tails.delete(chat);
+    const from = [...rec.old, rec.text].filter((t) => t.length >= MIN_TAIL_CHARS);
+    return from.length ? from : null;
 }
 
 /** Test seam. */

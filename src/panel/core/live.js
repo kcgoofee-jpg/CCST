@@ -41,8 +41,8 @@ export function versionMismatch(proxyVersion, panelV = panelVersion) {
     const side = mismatchSide(proxyVersion, panelV);
     if (!side) return null;
     return side === 'proxy'
-        ? `代理 v${proxyVersion} 比面板 v${panelV} 旧，新功能可能用不了，个别设置可能不生效。`
-        : `面板 v${panelV} 比代理 v${proxyVersion} 旧，新功能可能用不了，个别设置可能不生效。`;
+        ? `CCST 服务 v${proxyVersion} 比面板 v${panelV} 旧，请更新`
+        : `面板 v${panelV} 比服务 v${proxyVersion} 旧，请更新`;
 }
 
 const glancePatch = (partial) => store.merge('glance', partial);
@@ -71,7 +71,7 @@ export async function refreshStatus() {
             const key = `${panelVersion}|${data.version}`;
             if (warnedVersions !== key) {
                 warnedVersions = key;
-                notify('warn', '面板和代理版本不一致', `${mismatch.split('，')[0]}。详见面板。`, { ms: 15000 });
+                notify('warn', '版本不配', '更新后重启酒馆', { ms: 15000 });
             }
         }
         store.set({
@@ -119,14 +119,14 @@ export async function heartbeat() {
     } else if (!up && !heartbeatDown && connected) {
         heartbeatDown = true;
         if (status === 401 || status === 403) {
-            notify('bad', '代理不让这台设备用', '代理只开放给它所在的那台电脑。', { ms: 0, replace: 'proxy' });
+            notify('bad', '本机专用', '只给装它的那台电脑用', { ms: 0, replace: 'proxy' });
         } else {
-            notify('bad', '连不上代理，重试中', '先确认代理还在运行、那台电脑没睡眠。', { ms: 0, replace: 'proxy' });
+            notify('bad', '重连中', '看看那台电脑是否开着', { ms: 0, replace: 'proxy' });
         }
         refreshStatus();
     } else if (up && heartbeatDown) {
         heartbeatDown = false;
-        notify('ok', '代理已恢复', '可以继续发消息了。', { ms: 3000, replace: 'proxy' });
+        notify('ok', '已恢复', '可以继续发了', { ms: 3000, replace: 'proxy' });
         setTimeout(() => F.keeper.recoverKeptReply(), 500);
         refreshStatus();
     }
@@ -192,7 +192,7 @@ export async function refreshStats() {
         const res = await fetchProxy(`/stats?chat=${chat}`, `/v1/usage/stats?chat=${chat}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        glancePatch({ cache: data.lastCache?.hitPct ?? null });
+        glancePatch({ cache: data.lastCache?.reusePct ?? data.lastCache?.hitPct ?? null });
         store.set({ stats: { phase: 'ok', data } });
         store.set({ statsAt: Date.now() }); // 回复后自动刷新也要更新「更新于」时间
     } catch (err) {

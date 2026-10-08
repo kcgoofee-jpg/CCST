@@ -14,3 +14,10 @@ test('word count: CJK by character, other scripts by word, punctuation / markup 
     assert.equal(countWords('<div class="status">**好感度** 80 ❤️</div>'), 4);
     assert.equal(countWords(''), 0);
 });
+
+test('word count: thinking written into the reply is not counted, also one still open while streaming', () => {
+    assert.equal(countWords('<thinking>先想想她会怎么做</thinking>\n<content>她推开门。</content>'), 4);
+    assert.equal(countWords('<think>想</think>门<thinking>又想一遍</thinking>开了'), 3);
+    assert.equal(countWords('<thinking>\n还在想，她会不会'), 0);
+    assert.equal(countWords('她推开门。<THINKING>第二套思维链'), 4);
+});

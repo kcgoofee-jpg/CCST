@@ -33,7 +33,7 @@ test('connect notice warns when the active preset looks made for another model f
     assert.equal(presetMismatchNote('Default'), '');
     assert.equal(presetMismatchNote('Claude 专用'), '');
     const note = presetMismatchNote('智脑-Z(3.1P)');
-    assert.match(note, /『智脑-Z\(3\.1P\)』看起来是给 Gemini 用的，Claude 可能表现不好；可以在『AI 回复配置』换成给 Claude 的预设/);
+    assert.equal(note, '「智脑-Z(3.1P)」是给 Gemini 的预设');
     assert.match(connectAdvice({ presetNote: note })[0].text, /Gemini/);
     assert.doesNotMatch(profileNotice({ existed: false }), /Gemini/);
     assert.deepEqual(connectAdvice({}), []);

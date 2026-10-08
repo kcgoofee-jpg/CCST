@@ -38,8 +38,8 @@ export function adoptUnrecordedReco() {
 // A preset can ship `extensions.claude_max = { loreTail, cacheTtl }`; switching to it applies those
 // values (and switching away restores them). Fields of older versions (effort, thinking, …) are ignored.
 const PRESET_FIELDS = {
-    loreTail: { label: '世界书移到本轮消息', valid: (v) => typeof v === 'boolean' },
-    cacheTtl: { label: '缓存有效期', valid: (v) => v === '1h' || v === '5m' },
+    loreTail: { label: '条目后移', valid: (v) => typeof v === 'boolean' },
+    cacheTtl: { label: '缓存时长', valid: (v) => v === '1h' || v === '5m' },
 };
 
 export function applyPresetRecommendation() {
@@ -74,7 +74,7 @@ export async function applyModelProfile() {
             if (changed) { pm.render(); pm.saveServiceSettings(); }
         }
     }
-    if (done.length) notify('info', `按 ${shortModel(model)} 调整预设`, done.join('；'), { ms: 5000 });
+    if (done.length) notify('info', '随模型调', `${shortModel(model)}：${done.join('；')}`, { ms: 5000 });
 }
 
 function applyPresetRecoCore() {
@@ -90,7 +90,7 @@ function applyPresetRecoCore() {
     rebuildPanel();
     const preset = ctx.chatCompletionSettings?.preset_settings_openai ?? '当前预设';
     const parts = [];
-    if (applied.length) parts.push(`按预设「${preset}」的推荐调整：${applied.map((k) => PRESET_FIELDS[k].label).join('、')}`);
-    if (restored.length) parts.push(`恢复上一个预设改动过的：${restored.map((k) => PRESET_FIELDS[k].label).join('、')}`);
-    notify('info', `预设「${preset}」`, `${parts.join('；')}。`, { ms: 8000 });
+    if (applied.length) parts.push(`已调好 ${applied.map((k) => PRESET_FIELDS[k].label).join('、')}`);
+    if (restored.length) parts.push(`已还原 ${restored.map((k) => PRESET_FIELDS[k].label).join('、')}`);
+    notify('info', '按预设调', `「${preset}」：${parts.join('；')}`, { ms: 8000 });
 }

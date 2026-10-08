@@ -20,19 +20,19 @@ export function statusAdvisories(status, endpoint) {
     const out = [];
     if (!status || status.phase !== 'online') return out;
     if (status.compat && status.compat.ok === false) {
-        out.push({ tone: 'error', text: `当前 SDK 版本与代理不兼容（没有 ${status.compat.missing?.join('、') || '要用的功能'}），对话能连通但缓存和逐轮还原多半不对。请在 CCST 文件夹里运行 npm install @anthropic-ai/claude-agent-sdk@文档指定的版本 --save-exact，然后重启代理。` });
+        out.push({ tone: 'error', text: `组件过旧：缓存会失效，照文档重装 SDK（缺 ${status.compat.missing?.join('、') || '功能'}）` });
     }
     if (typeof status.foldStreak === 'number' && status.foldStreak > 3) {
-        out.push({ tone: 'warn', text: `连续 ${status.foldStreak} 轮没能逐轮还原，整段折叠发送：每轮都在重写缓存，慢和耗额度都偏高。通常跟着上面一条 SDK 问题一起出现。` });
+        out.push({ tone: 'warn', text: `${status.foldStreak} 轮重写：多半是上一条的原因` });
     }
     // 走酒馆同源路由时，答复的可能是端口上另一个代理实例（#36）。
     const actual = status.via === 'plugin' ? status.endpoint : null;
     if (actual && endpoint && normalizeEndpoint(actual) !== normalizeEndpoint(endpoint)) {
-        out.push({ tone: 'warn', text: `代理实际地址与面板设置不一致：设置里是 ${endpoint}，应答的这个代理在 ${actual}。请把面板端点改成实际地址，或确认 8901 上没有另一个代理。` });
+        out.push({ tone: 'warn', text: `地址不对：设置是 ${endpoint}，实际是 ${actual}` });
     }
     const own = status.sharedBy;
     if (own && status.root && own.root !== status.root && own.version !== status.version) {
-        out.push({ tone: 'warn', text: `在聊天的是另一份 CCST v${status.version}（${status.root}），不是这个酒馆装的 v${own.version}。关掉它（另一个酒馆，或旧的单独代理），再重启这个酒馆。` });
+        out.push({ tone: 'warn', text: `有两份 CCST：关掉另一份（v${status.version}，${status.root}），重启酒馆` });
     }
     return out;
 }
@@ -53,8 +53,8 @@ function checkInlineCot() {
     const tag = match[1];
     tip.hidden = false;
     tip.replaceChildren(
-        el('div', 'cm-note-title', '预设把思维链写进了正文'),
-        el('small', 'cm-hint', `收进折叠框：酒馆「用户设置 → 推理 → 自动解析」，前缀 <${tag}>、后缀 </${tag}>。`),
+        el('div', 'cm-note-title', '正文思考'),
+        el('small', 'cm-hint', `「推理→自动解析」填 <${tag}>`),
     );
 }
 
@@ -74,7 +74,7 @@ export function init() {
     store.subscribe('status', ({ status }) => renderAdvice(status));
     store.subscribe('statsAt', ({ statsAt }) => {
         const stamp = document.getElementById('claude_max_stats_time');
-        if (stamp) stamp.textContent = `更新于 ${new Date(statsAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })}`;
+        if (stamp) stamp.textContent = `${new Date(statsAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })} 更新`;
     });
 }
 
@@ -86,12 +86,12 @@ function idleQuotaLine() {
 }
 
 const WINDOW_LABELS = {
-    five_hour: '5 小时窗口',
-    seven_day: '7 天 · 全部模型',
+    five_hour: '5 小时',
+    seven_day: '7 天',
     seven_day_opus: '7 天 · Opus',
     seven_day_sonnet: '7 天 · Sonnet',
     seven_day_fable: '7 天 · Fable',
-    seven_day_oauth_apps: '7 天 · 第三方应用',
+    seven_day_oauth_apps: '7 天 · 外部',
 };
 
 function formatReset(ts) {
@@ -136,7 +136,7 @@ function renderQuota(quota) {
     const box = document.getElementById('claude_max_quota');
     if (!box) return;
     if (quota.phase === 'loading') {
-        if (!box.childElementCount) box.replaceChildren(stateLine('loading', '正在读取额度…'));
+        if (!box.childElementCount) box.replaceChildren(stateLine('loading', '读取中…'));
         box.classList.add('cm-loading');
         return;
     }
@@ -159,7 +159,7 @@ function renderQuota(quota) {
         const hint = line.querySelector('small');
         const tick = () => {
             const left = Math.max(0, Math.ceil((data.retryAt - Date.now()) / 1000));
-            hint.textContent = `额度暂时查不到：Anthropic 限流了，${String(Math.floor(left / 60)).padStart(2, '0')}:${String(left % 60).padStart(2, '0')} 后自动再试`;
+            hint.textContent = `暂时查不到，${String(Math.floor(left / 60)).padStart(2, '0')}:${String(left % 60).padStart(2, '0')} 后重试`;
             if (!hint.isConnected && timer) { clearInterval(timer); timer = null; }
         };
         let timer = setInterval(tick, 1000);
@@ -168,7 +168,7 @@ function renderQuota(quota) {
         return;
     }
     if (!data.windows?.length) {
-        box.append(stateLine('empty', '暂无额度数据。'));
+        box.append(stateLine('empty', '没有数据'));
         return;
     }
     for (const w of data.windows) {
@@ -188,17 +188,17 @@ function renderQuota(quota) {
         row.append(label, el('b', 'cm-qline-pct', pct !== null ? `${pct}%` : '–'), bar);
         box.append(row);
         if (pace?.level === 'critical' && pace.runOutMs != null) {
-            box.append(el('small', 'cm-pace critical', `▲ 照这个速度，约 ${fmtDur(pace.runOutMs)}后用完（重置前）`));
+            box.append(el('small', 'cm-pace critical', `照这速度 ${fmtDur(pace.runOutMs)}后用完`));
         } else if (pace?.level === 'warning') {
-            box.append(el('small', 'cm-pace warning', `▲ 照这个速度，重置时会用到约 ${pace.endPct}%`));
+            box.append(el('small', 'cm-pace warning', `照这速度会用到 ${pace.endPct}%`));
         }
     }
     if (data.stale && data.fetchedAt) {
         const mins = Math.max(1, Math.round((Date.now() - data.fetchedAt) / 60000));
-        box.append(el('small', 'cm-hint', `（${mins} 分钟前的数据）`));
+        box.append(el('small', 'cm-hint', `${mins} 分钟前`));
     }
     if (data.extraUsage?.isEnabled) {
-        box.append(el('small', 'cm-hint', `额外用量：${data.extraUsage.usedCredits} / ${data.extraUsage.monthlyLimit} ${data.extraUsage.currency}`));
+        box.append(el('small', 'cm-hint', `超额用量 ${data.extraUsage.usedCredits} / ${data.extraUsage.monthlyLimit} ${data.extraUsage.currency}`));
     }
 }
 
@@ -216,20 +216,19 @@ const fmtWhen = (ts) => {
 /** Today and the last 7 days side by side (one column when they are the same). Units live in the row
  *  labels so no cell needs more than a number: it reads at 375px without wrapping. */
 function usageTable(today, week) {
-    const cols = today.requests === week.requests ? [['今天 · 近 7 天', today]] : [['今天', today], ['近 7 天', week]];
+    const cols = today.requests === week.requests ? [['今天 · 7 天', today]] : [['今天', today], ['7 天', week]];
     const table = el('table', 'cm-usage');
     const head = el('tr');
     head.append(el('th'), ...cols.map(([t]) => el('th', null, t)));
     table.append(head);
     const rows = [
-        ['请求', (a) => String(a.requests)],
+        ['次数', (a) => String(a.requests)],
         ...(cols.some(([, a]) => a.failed) ? [['失败', (a) => String(a.failed ?? 0)]] : []),
-        ['输出 token', (a) => fmtK(a.outputTokens)],
-        ['平均耗时', (a) => fmtSec(a.avgDurationMs)],
-        ['首字等待', (a) => fmtSec(a.avgTtftMs)],
-        ['缓存命中', (a) => fmtPct(a.cacheHitRate)],
-        ['花在', (a) => costShares(a.cost).slice(0, 2).map((p) => `${p.label.replace('缓存', '')}${p.pct}%`).join(' ') || '–'],
-        ['按 API 价', (a) => (a.apiUsd ? fmtUsd(a.apiUsd) : '–')],
+        ['写回复', (a) => fmtK(a.outputTokens)],
+        ['平均用时', (a) => fmtSec(a.avgDurationMs)],
+        ['等首字', (a) => fmtSec(a.avgTtftMs)],
+        ['缓存正常', (a) => fmtPct(a.cacheOkRate)],
+        ['花在', (a) => quotaShares(a.quota).slice(0, 2).map((p) => `${p.label}${p.pct}%`).join(' ') || '–'],
     ];
     for (const [label, fn] of rows) {
         const tr = el('tr');
@@ -239,45 +238,37 @@ function usageTable(today, week) {
     return table;
 }
 
-/** The cache result in plain words (the proxy's headline has the numbers; this says what they mean). */
-function cacheVerdict(hitPct, firstTurn = false) {
-    // 第一轮本来就读不到缓存：不是出错，用中性提示，别用黄色警告
-    if (firstTurn) return { tone: 'info', text: '本聊天第一轮（或代理刚重启）：整段写入缓存，下一轮起读取' };
-    if (hitPct >= 80) return { tone: 'ok', text: `缓存命中 ${hitPct}%，大部分读了缓存` };
-    if (hitPct >= 50) return { tone: 'ok', text: `缓存命中 ${hitPct}%，大半读了缓存` };
-    return { tone: 'warn', text: `缓存命中 ${hitPct}%，大部分重写了，通常偏慢、偏耗额度` };
-}
+const QUOTA_LABELS = { output: '写回复', write: '写缓存', read: '读缓存' };
 
-const COST_LABELS = { write: '写缓存', output: '输出', read: '读缓存', input: '未缓存输入' };
-
-/** The proxy's cost parts (cache-diag.js costParts, equivalent input tokens) as shares, biggest first; parts under 1% dropped. */
-export function costShares(cost) {
-    if (!cost) return [];
-    const total = Object.values(cost).reduce((n, v) => n + (v || 0), 0);
+/** The proxy's subscription-weighted parts (cache-diag.js quotaParts) as shares, biggest first; parts under 1% dropped. */
+export function quotaShares(quota) {
+    if (!quota) return [];
+    const total = Object.values(quota).reduce((n, v) => n + (v || 0), 0);
     if (!total) return [];
-    return Object.keys(COST_LABELS)
-        .map((key) => ({ key, label: COST_LABELS[key], pct: Math.round((100 * (cost[key] || 0)) / total) }))
+    return Object.keys(QUOTA_LABELS)
+        .map((key) => ({ key, label: QUOTA_LABELS[key], pct: Math.round((100 * (quota[key] || 0)) / total) }))
         .filter((p) => p.pct >= 1)
         .sort((x, y) => y.pct - x.pct);
 }
 
-const fmtUsd = (x) => (x == null ? '' : x >= 1 ? `$${x.toFixed(2)}` : `$${x.toFixed(3)}`);
-
-/** One bar plus 「花在 · 按 API 价约 $0.21：写缓存 39% · 输出 61%」. */
-function costLine(cost, usd = null) {
-    const shares = costShares(cost);
-    if (!shares.length) return null;
-    const total = Object.values(cost).reduce((n, v) => n + (v || 0), 0);
-    const size = usd != null ? `按 API 价约 ${fmtUsd(usd)}` : `约 ${fmtK(total)} 等效`;
-    const box = el('div', 'cm-cost');
-    const bar = el('div', 'cm-cost-bar');
-    for (const p of shares) {
-        const seg = el('span', `cm-cost-${p.key}`);
-        seg.style.width = `${p.pct}%`;
-        bar.append(seg);
+/** A labelled bar: title and a value on top, coloured parts, a legend under it. parts: [key, share 0..1, legend text]. */
+function meter(title, value, parts) {
+    const box = el('div', 'cm-meter');
+    const top = el('div', 'cm-meter-top');
+    top.append(el('span', null, title), el('span', null, value));
+    const bar = el('div', 'cm-meter-bar');
+    const legend = el('div', 'cm-meter-legend');
+    for (const [key, share, text] of parts) {
+        if (share > 0) {
+            const seg = el('span', `cm-seg-${key}`);
+            seg.style.width = `${Math.max(2, share * 100)}%`;
+            bar.append(seg);
+        }
+        const item = el('span');
+        item.append(el('i', `cm-seg-${key}`), text);
+        legend.append(item);
     }
-    const text = el('small', 'cm-hint', `花在 · ${size}：${shares.map((p) => `${p.label} ${p.pct}%`).join(' · ')}`);
-    box.append(bar, text);
+    box.append(top, bar, legend);
     return box;
 }
 
@@ -301,37 +292,46 @@ export function contextUse(e) {
     return { tokens, size, pct, level: pct >= 85 ? 'critical' : pct >= 70 ? 'warning' : '' };
 }
 
-/** The last turn: cache in plain words first, then time / output (the model is in the header), then why. */
+/** The last turn: one word for the cache, one line why, what was sent, what it cost; the rest in 详情. */
 function lastTurnCard(data) {
     const c = data.lastCache;
     const last = data.lastRequest;
-    const v = cacheVerdict(c.hitPct, c.firstTurn);
-    const card = note(v.tone, v.text);
+    const card = el('div', 'cm-cache');
+    card.dataset.state = c.state;
+    const head = el('div', 'cm-cache-head');
+    head.append(el('span', 'cm-cache-dot'), el('b', null, c.title));
+    if (last?.durationMs) head.append(el('span', 'cm-cache-meta', fmtSec(last.durationMs)));
+    card.append(head, el('small', 'cm-cache-sub', c.reasons[0] ?? ''));
+    const fresh = c.wrote + (last?.inputTokens ?? 0);
+    const sent = c.read + fresh;
+    if (sent) {
+        card.append(meter('这轮发出的内容', fmtK(sent), [
+            ['read', c.read / sent, `读缓存 ${fmtK(c.read)}`],
+            ['write', fresh / sent, `新写入 ${fmtK(fresh)}`],
+        ]));
+    }
+    const shares = quotaShares(c.quota);
+    if (shares.length) {
+        const pct = Object.fromEntries(shares.map((p) => [p.key, p.pct]));
+        card.append(meter('额度花在', `大头：${shares[0].label}`, ['output', 'write', 'read'].map((key) => [key, (pct[key] ?? 0) / 100, `${QUOTA_LABELS[key]} ${pct[key] ?? 0}%`])));
+        if (shares[0].key === 'output') card.append(el('small', 'cm-cache-tip', '思维链和正文越长越费'));
+    }
+    const more = el('details', 'cm-mini');
+    more.append(el('summary', null, '详情'));
     if (last) {
         const speed = outputSpeed(last);
-        card.append(el('small', 'cm-hint', `用时 ${fmtSec(last.durationMs)} · 输出 ${fmtK(last.outputTokens)} token${speed ? `（每秒 ${speed}）` : ''}`));
+        more.append(el('small', 'cm-hint', `用时 ${fmtSec(last.durationMs)}${speed ? ` · 每秒 ${speed}` : ''}`));
         const ctx = contextUse(last);
-        if (ctx) card.append(el('small', `cm-hint cm-ctx ${ctx.level}`, `上下文 ${fmtK(ctx.tokens)} / ${fmtK(ctx.size)}（${ctx.pct}%）${ctx.level === 'critical' ? '：快满了，早期内容会被挤掉或报错' : ''}`));
-        const cost = costLine(c.cost, c.usd);
-        if (cost) card.append(cost);
+        if (ctx) more.append(el('small', `cm-hint cm-ctx ${ctx.level}`, `上下文 ${ctx.pct}%（${fmtK(ctx.tokens)} / ${fmtK(ctx.size)}）${ctx.level === 'critical' ? '：快满了，早期内容会丢' : ''}`));
+        const ph = last.phases;
+        const sec = (v) => (v / 1000).toFixed(1);
+        if (ph?.init && ph.firstDelta) more.append(el('small', 'cm-hint', `等首字 ${sec(ph.firstDelta)} 秒：本机 ${sec(ph.init)}，Claude ${sec(ph.firstDelta - ph.init)}`));
     }
-    // The first reason is the conclusion; everything else is detail.
-    // 第一轮的说明标题已经写了；「花在」怎么算的说明只放详情
-    const reasons = c.reasons.filter((r) => !(c.firstTurn && r.startsWith('本聊天的第一轮')));
-    const lead = reasons.find((r) => !r.startsWith('「花在」'));
-    const [first, ...rest] = lead ? [lead, ...reasons.filter((r) => r !== lead)] : [null, ...reasons];
-    if (first) card.append(el('small', 'cm-hint cm-cache-reason', first));
-    const ph = last?.phases;
-    const sec = (v) => (v / 1000).toFixed(1);
-    if (rest.length || (ph?.init && ph.firstDelta)) {
-        const more = el('details', 'cm-mini');
-        more.append(el('summary', null, '详情'));
-        for (const r of rest) more.append(el('small', 'cm-hint cm-cache-reason', r));
-        if (ph?.init && ph.firstDelta) {
-            more.append(el('small', 'cm-hint', `首字 ${sec(ph.firstDelta)} 秒：代理和 CLI 启动 ${sec(ph.init)} 秒（本机）；模型读完提示词开始回复 ${sec((ph.apiStart ?? ph.firstDelta) - ph.init)} 秒，开始写 ${sec(ph.firstDelta - (ph.apiStart ?? ph.firstDelta))} 秒（Anthropic 那边）。`));
-        }
-        card.append(more);
-    }
+    for (const r of c.reasons.slice(1)) more.append(el('small', 'cm-hint', r));
+    card.append(more);
+    // Critical context goes on the card itself, not only in 详情.
+    const ctx = last && contextUse(last);
+    if (ctx?.level === 'critical') card.append(el('small', 'cm-hint cm-ctx critical', `上下文 ${ctx.pct}%：快满了，早期内容会丢`));
     return card;
 }
 
@@ -341,8 +341,8 @@ function renderStats(stats) {
     if (!box) return;
     const lastBox = document.getElementById('claude_max_lastturn');
     if (stats.phase === 'loading') {
-        if (!box.childElementCount) box.replaceChildren(stateLine('loading', '正在读取用量…'));
-        if (lastBox && !lastBox.childElementCount) lastBox.replaceChildren(stateLine('loading', '正在读取…'));
+        if (!box.childElementCount) box.replaceChildren(stateLine('loading', '读取中…'));
+        if (lastBox && !lastBox.childElementCount) lastBox.replaceChildren(stateLine('loading', '读取中…'));
         box.classList.add('cm-loading');
         return;
     }
@@ -356,27 +356,27 @@ function renderStats(stats) {
     if (stats.phase !== 'ok') return;
     const data = stats.data;
     lastBox?.replaceChildren(data.lastCache ? lastTurnCard(data)
-        : stateLine('empty', data.lastRequest ? '这个聊天上一轮没有成功，原因看「用量」里的最近失败。' : '这个聊天还没有回复'));
+        : stateLine('empty', data.lastRequest ? '上一轮失败，原因在「用量」' : '还没有回复'));
     box.replaceChildren();
     const sum = document.getElementById('claude_max_usage_sum');
-    if (sum) sum.textContent = data.week?.requests ? `近 7 天 ${data.week.requests} 次请求` : '近 7 天还没有请求';
+    if (sum) sum.textContent = data.week?.requests ? `7 天 ${data.week.requests} 次` : '7 天没用过';
     if (!data.week?.requests) {
-        box.append(stateLine('empty', '还没有记录（只记耗时和 token，不记内容）。'));
+        box.append(stateLine('empty', '还没有记录，不记聊天内容'));
     } else {
         box.append(usageTable(data.today, data.week));
         const rr = data.today.rerolls || data.week.rerolls;
-        if (rr) box.append(el('small', 'cm-hint', `缓存命中不含重 roll 的请求（近 7 天 ${data.week.rerolls ?? 0} 次）。`));
+        if (rr) box.append(el('small', 'cm-hint', `不含重新生成的 ${data.week.rerolls ?? 0} 次`));
     }
     const bg = data.background;
     if (bg?.week?.requests) {
-        box.append(el('small', 'cm-hint', `后台请求（不计入上表）：今天 ${bg.today.requests} 次，近 7 天 ${bg.week.requests} 次、输出 ${fmtK(bg.week.outputTokens)} token${bg.week.failed ? `、失败 ${bg.week.failed} 次` : ''}。`));
+        box.append(el('small', 'cm-hint', `后台：今天 ${bg.today.requests} 次，7 天 ${bg.week.requests} 次${bg.week.failed ? `，失败 ${bg.week.failed} 次` : ''}`));
     }
     // Only surface a failure from the last day; older ones are noise.
     if (data.lastError && Date.now() - data.lastError.at < 24 * 3600 * 1000) {
-        const err = note('error', `最近失败 · ${fmtWhen(data.lastError.at)} · ${shortModel(data.lastError.model)}${data.lastError.background ? ' · 后台' : ''}`);
+        const err = note('error', `上次失败 · ${fmtWhen(data.lastError.at)}${data.lastError.background ? ' · 后台' : ''}`);
         err.append(el('small', null, data.lastError.message));
         const more = el('details', 'cm-mini');
-        more.append(el('summary', null, '怎么办 · 原始错误'),
+        more.append(el('summary', null, '怎么办'),
             el('small', 'cm-hint', data.lastError.hint),
             el('small', 'cm-hint cm-raw', data.lastError.raw));
         err.append(more);
@@ -399,16 +399,16 @@ export function buildStatusTab(pane) {
     const stamp = el('small', 'cm-hint');
     stamp.id = 'claude_max_stats_time';
     const tools = el('div', 'cm-section-tools');
-    tools.append(stamp, iconButton('fa-rotate', '重新检测并刷新', refreshAll));
+    tools.append(stamp, iconButton('fa-rotate', '刷新', refreshAll));
     const last = group('上一轮', { tools });
     const lastBox = el('div', 'cm-stats');
     lastBox.id = 'claude_max_lastturn';
-    lastBox.append(stateLine('empty', '这个聊天还没有回复'));
+    lastBox.append(stateLine('empty', '还没有回复'));
     last.body.append(lastBox);
     pane.append(last.root);
 
     // 最新回复: only the reliable checks (refusal / cut off / empty), one line each; hidden when none.
-    const latest = group('最新回复', { id: 'claude_max_latest_sec' });
+    const latest = group('回复问题', { id: 'claude_max_latest_sec' });
     latest.root.hidden = true;
     const latestBox = el('div', 'cm-stats');
     latestBox.id = 'claude_max_latest';
@@ -417,7 +417,7 @@ export function buildStatusTab(pane) {
 
     const quota = group('额度', {
         id: 'claude_max_quota_sec',
-        tools: iconButton('fa-rotate', '刷新额度', () => refreshQuota({ force: true })),
+        tools: iconButton('fa-rotate', '刷新', () => refreshQuota({ force: true })),
     });
     const quotaBox = el('div', 'cm-quota');
     quotaBox.id = 'claude_max_quota';
@@ -430,7 +430,7 @@ export function buildStatusTab(pane) {
     usage.root.querySelector('.cm-fold-desc').id = 'claude_max_usage_sum';
     const statsBox = el('div', 'cm-stats');
     statsBox.id = 'claude_max_stats';
-    statsBox.append(stateLine('loading', '正在读取用量…'));
+    statsBox.append(stateLine('loading', '读取中…'));
     usage.body.append(statsBox);
     pane.append(usage.root);
 
@@ -489,10 +489,10 @@ async function proxyText(path, direct) {
 }
 
 function buildDiagGroup() {
-    const g = group('诊断');
+    const g = group('反馈');
     // One file with everything: the readable report first, then the raw data (captured requests, last full
     // request). Users send the file instead of pasting a wall of text into a chat box.
-    const save = button('导出诊断文件', async () => {
+    const save = button('导出日志', async () => {
         save.disabled = true;
         try {
             const [report, full] = await Promise.all([
@@ -506,14 +506,14 @@ function buildDiagGroup() {
             a.download = `ccst-诊断-${stamp.getMonth() + 1}${String(stamp.getDate()).padStart(2, '0')}-${String(stamp.getHours()).padStart(2, '0')}${String(stamp.getMinutes()).padStart(2, '0')}.txt`;
             a.click();
             setTimeout(() => URL.revokeObjectURL(a.href), 10000);
-            notify('ok', '诊断文件已下载', '在浏览器的下载文件夹里。里面有角色卡和聊天原文：私发给作者，别公开贴。', { ms: 10000 });
+            notify('ok', '已下载', '含聊天原文，别公开发', { ms: 10000 });
         } catch (err) {
-            notify('warn', '没拿到诊断', proxyErrorText('诊断', err) ?? String(err?.message ?? err));
+            notify('warn', '导出失败', proxyErrorText('日志', err) ?? String(err?.message ?? err));
         } finally {
             save.disabled = false;
         }
     }, { icon: 'fa-download', primary: true });
-    save.title = '缓存或回复不对时发给作者；含角色卡和聊天原文，别公开贴';
+    save.title = '出问题时私发给作者';
     g.body.append(save);
     return g.root;
 }

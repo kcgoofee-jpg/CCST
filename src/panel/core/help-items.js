@@ -23,7 +23,7 @@ export function copyButton(idle, text) {
     btn.addEventListener('click', async () => {
         const ok = await copyText(text);
         copyFeedback.set(text, { label: ok ? '已复制' : '请手动选中复制', until: Date.now() + COPY_FEEDBACK_MS });
-        notify(ok ? 'ok' : 'warn', ok ? '已复制' : '没能自动复制', ok ? '' : '请手动选中文字复制。', { ms: 2500, replace: 'copy' });
+        notify(ok ? 'ok' : 'warn', ok ? '已复制' : '复制失败', ok ? '' : '请手动选中复制', { ms: 2500, replace: 'copy' });
         apply();
         setTimeout(() => { if (btn.isConnected) apply(); }, COPY_FEEDBACK_MS + 50);
     });
@@ -65,6 +65,6 @@ export function linkButton(d) {
  */
 export function downloadItem(d) {
     const box = el('div', 'cm-dl');
-    box.append(linkButton(d), cmdRow(d.copy ?? d.href, d.copyLabel ?? '复制链接'));
+    box.append(linkButton(d), cmdRow(d.copy ?? d.href, d.copyLabel ?? '复制'));
     return box;
 }

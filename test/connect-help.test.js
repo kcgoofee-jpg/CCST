@@ -22,7 +22,8 @@ test('desktop: Mac gets a terminal line (downloaded .command files are blocked),
     assert.equal(mac.download, false);
     assert.match(MAC_PLUGIN_CMD, /install-plugin-mac\.sh/);
     assert.ok(existsSync(fileURLToPath(new URL('../install-plugin-mac.sh', import.meta.url))), 'the script the line downloads exists');
-    assert.equal(win.label, '下载一键安装（Windows）');
+    assert.equal(win.label, '下载安装');
+    assert.match(mac.label, /^Mac：在终端粘贴/);
     assert.ok(existsSync(fileURLToPath(win.href)), `${win.file} exists in installer/`);
     assert.equal(win.download, true);
     assert.match(win.copy, /^https:\/\/github\.com\/kcgoofee-jpg\/CCST\//, 'a copyable GitHub link as the fallback');
@@ -34,7 +35,8 @@ const cardText = (h) => [h.title, h.sub, h.hint, ...h.downloads.map((d) => d.lab
 test('TauriTavern / elsewhere: one sentence and a docs link; no 127.0.0.1, no steps, no form', () => {
     for (const host of ['tauri', 'elsewhere']) {
         const h = connectHelp({ host });
-        assert.equal(h.title, '连不上 CCST 代理');
+        assert.equal(h.title, '连不上');
+        assert.match(h.sub, /npm start/);
         assert.deepEqual(h.steps, []);
         assert.equal(h.form, undefined);
         assert.ok(h.downloads.every((d) => !/CCST安装|CCST-mac/.test(d.href)));
@@ -48,7 +50,8 @@ test('desktop browser ST: one sentence, a Mac line and a Windows installer, no f
     assert.deepEqual(h.steps, []);
     assert.equal(h.form, undefined);
     assert.equal(h.fold, undefined);
-    assert.match(h.sub, /Mac 在「终端」粘贴下面一行/);
+    assert.equal(h.sub, '重启酒馆；没装就先装');
+    assert.match(h.downloads[0].label, /^Mac：在终端粘贴/);
     assert.doesNotMatch(cardText(h), /仍要打开|CCST-mac/, 'no zip to double-click on Mac any more');
     assert.deepEqual(h.downloads.map((d) => d.key), ['mac-plugin-cmd', 'win']);
 });
@@ -83,15 +86,15 @@ test('version mismatch, proxy older: TauriTavern gets the standalone steps only'
         assert.ok(h.steps.some((st) => st.cmd === 'git pull && npm install'), 'update the standalone proxy in place');
         const t = allText(h);
         assert.doesNotMatch(t, /CCST安装|一键安装|酒馆的黑色窗口/);
-        assert.match(t, /重启代理/);
-        assert.match(t, /重启 TauriTavern/);
+        assert.match(t, /关掉运行 npm start 的窗口，再运行一次/, 'restart the standalone proxy');
+        assert.match(t, /完全退出 TauriTavern 再打开/);
     }
 });
 
 test('version mismatch on a desktop browser keeps the plugin path', () => {
     const plugin = mismatchHelp({ side: 'proxy', proxyVersion: '4.0.0', panelVersion: '4.5.1', runtime: 'plugin' });
     assert.equal(plugin.downloads.length, 2);
-    assert.match(allText(plugin), /Mac：在「终端」再粘贴一次/);
+    assert.match(allText(plugin), /再装一次：Mac 在终端粘贴/);
     assert.match(allText(plugin), /CCST安装/);
     const standalone = mismatchHelp({ side: 'proxy', proxyVersion: '4.0.0', panelVersion: '4.5.1', runtime: 'standalone' });
     assert.equal(standalone.downloads.length, 0);
@@ -121,7 +124,7 @@ test('openExternal: opener plugin first, window.open as fallback; copyText falls
 test('update card: only on a desktop SillyTavern, with the installer downloads', async () => {
     const { updateHelp, isNewerVersion } = await import('../src/panel/core/connect-help.js');
     const h = updateHelp({ latest: '6.0.4' });
-    assert.equal(h.title, '有新版本 v6.0.4');
+    assert.equal(h.title, '有新版 v6.0.4');
     assert.ok(h.downloads.some((d) => d.file === 'CCST安装.bat') && h.downloads.some((d) => d.key === 'mac-plugin-cmd'));
     assert.equal(updateHelp({ latest: '6.0.4', host: 'tauri' }), null);
     assert.equal(isNewerVersion('6.0.10', '6.0.9'), true);

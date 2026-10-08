@@ -39,12 +39,12 @@ test('saved tab keys: current ones stay, old ones map to their successors, junk 
     for (const to of Object.values(OLD_TABS)) assert.ok(TABS.some(([k]) => k === to));
 });
 
-test('设置: 连接 / 缓存 / 排查, then 重新引导; thinking, model and the cache switches are not here', () => {
+test('设置: 连接 / 缓存 / 检查, then 重看引导; thinking, model and the cache switches are not here', () => {
     const settings = src('tabs/settings.js');
     const sections = [...settings.matchAll(/group\('([^']+)'/g)].map((m) => m[1]);
-    assert.deepEqual(sections, ['连接', '缓存', '排查']);
+    assert.deepEqual(sections, ['连接', '缓存', '检查']);
     for (const id of ['claudeMaxLoreTail', 'claude_max_debug_view', 'claude_max_guide_again']) assert.ok(settings.includes(id), id);
-    assert.ok(settings.indexOf("group('排查')") < settings.indexOf('claude_max_guide_again'), '重新引导 at the bottom');
+    assert.ok(settings.indexOf("group('检查')") < settings.indexOf('claude_max_guide_again'), '重看引导 at the bottom');
     for (const gone of ['claudeMaxAlwaysThink', 'claudeMaxDebugDump', 'claudeMaxIdentity', 'claudeMaxResume', 'claudeMaxInlineSystem', 'claudeMaxFoldTail', '后台请求思考深度', "collapsible('高级'", 'claude_max_backend', 'API 密钥']) assert.ok(!settings.includes(gone), gone);
 });
 
@@ -66,7 +66,8 @@ test('状态: no 缓存建议; the last-turn line leaves the model to the header
     assert.ok(!status.includes('世界书缓存') && !status.includes('记录原始请求'));
     // One export button (report + raw data in one file).
     assert.ok(!status.includes("button('复制诊断报告'") && !status.includes("button('下载完整请求'"));
-    assert.ok(status.indexOf("button('导出诊断文件'") > 0);
+    assert.ok(status.indexOf("button('导出日志'") > 0);
+    assert.equal(status.split("button('导出").length, 2, 'exactly one export button');
 });
 
 test('thinking follows SillyTavern\'s 推理强度: Minimum = no thinking, Auto sends no depth, background calls never think', () => {

@@ -46,6 +46,6 @@ export async function fetchProxy(pluginPath, directPath, { method = 'GET', body 
 /** 没装 / 没连本代理时（酒馆里没有插件路由 → 404，或连不上）说人话，别只给 HTTP 码。 */
 export function proxyErrorText(what, err) {
     const msg = String(err instanceof Error ? err.message : err);
-    if (/404|Failed to fetch|NetworkError|ECONNREFUSED/i.test(msg)) return `${what}只在连着 CCST 代理时显示（现在没连上）。`;
-    return `${what}暂不可用（${msg}）`;
+    if (/404|Failed to fetch|NetworkError|ECONNREFUSED/i.test(msg)) return '连上 CCST 才能看';
+    return `暂时看不了（${msg}）`;
 }
