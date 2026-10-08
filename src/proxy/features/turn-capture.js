@@ -423,7 +423,7 @@ export function noteReplayHealth(captured) {
         return false;
     }
     replayMissStreak += 1;
-    console.warn(`${PLUGIN_TAG} 这一轮没有捕获到逐轮还原的上下文（连续 ${replayMissStreak} 轮），Claude 命令行可能改了写入方式`);
+    console.warn(`${PLUGIN_TAG} 连续 ${replayMissStreak} 轮没接上缓存：Claude Code 可能更新了，请导出诊断`);
     if (replayMissStreak < REPLAY_RESET_AFTER_MISSES) return false;
     resetReplayState('已重置逐轮还原状态，本轮缓存会全量重写一次');
     return true;

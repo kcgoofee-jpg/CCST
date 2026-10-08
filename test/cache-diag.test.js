@@ -51,7 +51,7 @@ test('explainCache: system change, history rewrite, effort switch', () => {
     const e = (over) => ({ ok: true, model: 'm', effort: 'high', inputTokens: 2, cacheReadTokens: 30000, cacheCreationTokens: 10000, ...over });
     const c = explainCache(e({ cacheDiag: { firstTurn: false, systemChanged: true, systemDiffAt: 36000, systemDiffLabel: '<world_info>', splitAt: 35000, historyDiffAt: 5, historyLen: 12 } }), e({}));
     assert.equal(c.hitPct, 75);
-    assert.match(c.reasons[0], /设定在 <world_info> 变了/);
+    assert.match(c.reasons[0], /角色卡或预设改过/);
     assert.doesNotMatch(c.reasons.join('\n'), /单独缓存/, 'the CLI sends the system prompt as one block: no split claim');
     assert.match(c.reasons.join('\n'), /第 6 楼起变了/);
     assert.match(c.reasons.join('\n'), /世界书后移/);
@@ -85,9 +85,9 @@ test('explainCache flags history that stopped caching although nothing changed',
     const diag = { chat: 'c1', firstTurn: false, systemChanged: false, historyDiffAt: null, historyLen: 9 };
     const prev = { ok: true, model: 'm', cacheReadTokens: 47000, cacheCreationTokens: 4000, cacheDiag: { chat: 'c1' } };
     const broken = explainCache({ ok: true, model: 'm', cacheReadTokens: 26000, cacheCreationTokens: 28000, cacheDiag: diag }, prev);
-    assert.match(broken.reasons.join(), /内容没变却没读到/);
+    assert.match(broken.reasons.join(), /内容没变却没命中/);
     const healthy = explainCache({ ok: true, model: 'm', cacheReadTokens: 51000, cacheCreationTokens: 2500, cacheDiag: diag }, prev);
-    assert.doesNotMatch(healthy.reasons.join(), /内容没变却没读到/);
+    assert.doesNotMatch(healthy.reasons.join(), /内容没变却没命中/);
 });
 
 test('costParts uses list-price ratios', async () => {
@@ -169,7 +169,7 @@ test('prompt changed with the SillyTavern setup unchanged: scripts named as a ma
     const prev = { ok: true, model: 'm', chatKey: 'k', st: { ...st } };
     const blamed = (entry, p = prev) => explainCache(entry, p).reasons.some((x) => /设置没动/.test(x));
     const r = explainCache(e, prev).reasons;
-    assert.match(r[0], /没改设置却变了.*可能是脚本.*泉此方悬浮窗/);
+    assert.match(r[0], /被脚本改了.*泉此方悬浮窗/);
     assert.ok(!blamed(e, { ...prev, st: { ...st, preset: '衡' } }), 'a preset switch is a setting change');
     assert.ok(!blamed({ ...e, st: { ...st, mut: [] } }), 'no script running: no claim');
     assert.ok(!blamed({ ...e, cacheDiag: { ...d, loreMoved: ['Lore'] } }), 'lore moved explains it');
@@ -224,7 +224,7 @@ test('a reroll that read nothing does not claim it read everything', async () =>
     const base = { ok: true, model: 'claude-opus-5-5', inputTokens: 2, outputTokens: 2600, cacheTtl: '1h' };
     const missed = explainCache({ ...base, cacheReadTokens: 0, cacheCreationTokens: 39878, cacheDiag: { chat: 'p1', firstTurn: false, reroll: true, systemChanged: true, systemDiffAt: 5609, systemDiffLabel: '<story_setting>', historyDiffAt: null, historyLen: 2 } });
     assert.match(missed.reasons[0], /^重新生成，但没命中/);
-    assert.match(missed.reasons.join('\n'), /设定在 <story_setting> 变了/);
+    assert.match(missed.reasons.join('\n'), /改动在 <story_setting> 附近/);
     const hit = explainCache({ ...base, cacheReadTokens: 65385, cacheCreationTokens: 0, cacheDiag: { chat: 'p1', firstTurn: false, reroll: true, systemChanged: false, historyDiffAt: null, historyLen: 6 } });
     assert.match(hit.reasons[0], /全部命中/);
 });
@@ -281,8 +281,8 @@ test('explainCache names the depth regex that cut the reply and what that costs 
     const e = { ok: true, model: 'claude-opus-4-6', inputTokens: 3, cacheReadTokens: 21727, cacheCreationTokens: 75167, cacheTtl: '1h', cacheDiag: d, st };
     const prev = { ok: true, model: 'claude-opus-4-6', inputTokens: 3, cacheReadTokens: 21727, cacheCreationTokens: 74514, cacheTtl: '1h', st };
     const why = explainCache(e, prev).reasons[0];
-    assert.equal(why, '第 11 楼被正则[2]改短，每轮重写 75k');
-    assert.ok(why.replace(/\s/g, '').length <= 20, why);
+    assert.equal(why, '第 11 楼被正则[2]改短，每轮多写约 7.5 万');
+    assert.ok(why.replace(/\s/g, '').length <= 22, why);
     // No regex list (an older panel): still not called a swipe.
     assert.equal(explainCache({ ...e, st: { ...st, rx: undefined } }, prev).reasons[0], '第 11 楼被预设正则改短了');
 });

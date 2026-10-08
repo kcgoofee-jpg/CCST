@@ -58,7 +58,7 @@ test('a different SDK than last run is logged and remembered (#30)', () => {
         let previous = null;
         const lines = capture(() => { previous = noteSdkVersionRun(); });
         assert.equal(previous, '0.1.0-previous');
-        assert.match(lines, /SDK 已从 0\.1\.0-previous 变为/);
+        assert.match(lines, /组件更新了（SDK 0\.1\.0-previous → /);
         assert.equal(JSON.parse(readFileSync(file, 'utf8')).version, SDK_VERSION, 'the new version is on disk');
 
         const again = capture(() => noteSdkVersionRun());

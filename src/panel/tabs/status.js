@@ -19,7 +19,7 @@ export function statusAdvisories(status, endpoint) {
     const out = [];
     if (!status || status.phase !== 'online') return out;
     if (status.compat && status.compat.ok === false) {
-        out.push({ tone: 'error', text: `组件过旧：再运行一次安装那一行（缺 ${status.compat.missing?.join('、') || '功能'}）` });
+        out.push({ tone: 'error', text: '组件过旧：再运行一次安装那一行' });
     }
     if (typeof status.foldStreak === 'number' && status.foldStreak > 3) {
         out.push({ tone: 'warn', text: `连续 ${status.foldStreak} 轮整段重写：原因看「上一轮」` });
@@ -27,7 +27,7 @@ export function statusAdvisories(status, endpoint) {
     // 走酒馆同源路由时，答复的可能是端口上另一个代理实例（#36）。
     const actual = status.via === 'plugin' ? status.endpoint : null;
     if (actual && endpoint && normalizeEndpoint(actual) !== normalizeEndpoint(endpoint)) {
-        out.push({ tone: 'warn', text: `地址不对：设置是 ${endpoint}，实际是 ${actual}` });
+        out.push({ tone: 'warn', text: '另一个 CCST 占着这个端口：关掉多余的酒馆窗口再试' });
     }
     const own = status.sharedBy;
     if (own && status.root && own.root !== status.root && own.version !== status.version) {
@@ -95,7 +95,6 @@ const WINDOW_LABELS = {
     seven_day_opus: '7 天 · Opus',
     seven_day_sonnet: '7 天 · Sonnet',
     seven_day_fable: '7 天 · Fable',
-    seven_day_oauth_apps: '7 天 · 外部',
 };
 
 // 审: 把额度重置时间格式化成「HH:MM 重置」或「月/日 HH:MM 重置」。
@@ -180,7 +179,8 @@ function renderQuota(quota) {
         box.append(stateLine('empty', '没有数据'));
         return;
     }
-    for (const w of data.windows) {
+    // 「7 天 · 外部」（oauth_apps 窗口）说不清是什么，不显示。
+    for (const w of data.windows.filter((x) => x.type !== 'seven_day_oauth_apps')) {
         const pct = w.utilization !== null ? Math.round(w.utilization * 100) : null;
         const row = el('div', 'cm-qline');
         const bar = el('div', 'cm-quota-bar');
@@ -356,13 +356,8 @@ function renderStats(stats) {
     box.replaceChildren();
     const sum = document.getElementById('claude_max_usage_sum');
     if (sum) sum.textContent = data.week?.requests ? `7 天 ${data.week.requests} 次` : '7 天没用过';
-    if (!data.week?.requests) {
-        box.append(stateLine('empty', '还没有记录，不记聊天内容'));
-    } else {
-        box.append(usageTable(data.today, data.week));
-        const rr = data.today.rerolls || data.week.rerolls;
-        if (rr) box.append(el('small', 'cm-hint', `不含重新生成的 ${data.week.rerolls ?? 0} 次`));
-    }
+    // 7 天没用过：标题旁已经写了，这里不再放提示。
+    if (data.week?.requests) box.append(usageTable(data.today, data.week));
     const bg = data.background;
     if (bg?.week?.requests) {
         box.append(el('small', 'cm-hint', `后台：今天 ${bg.today.requests} 次，7 天 ${bg.week.requests} 次${bg.week.failed ? `，失败 ${bg.week.failed} 次` : ''}`));

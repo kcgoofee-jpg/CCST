@@ -65,7 +65,7 @@ export function isAllowedHost(hostHeader, bindHost, extra = process.env.CLAUDE_S
 export function guardHost(bindHost) {
     return (req, res, next) => {
         if (isAllowedHost(req.headers.host, bindHost)) return next();
-        res.status(403).json({ error: { message: `代理不接受用「${req.headers.host}」这个地址访问。只有本机地址和已允许的地址能用；确实要用这个地址的话，把它加到环境变量 CLAUDE_SUBSCRIPTION_ALLOWED_HOSTS 里。` } });
+        res.status(403).json({ error: { message: '代理只接受本机地址：请用 127.0.0.1 打开酒馆' } });
     };
 }
 
@@ -77,7 +77,7 @@ export function guardPostOrigin(req, res, next) {
     if (!origin || isTrustedPostOrigin(origin)) return next();
     if (LOOPBACK_ORIGIN.test(origin)) {
         // A page on this machine could be any local web app (a dev server, …): it does not get to spend the subscription.
-        res.status(403).json({ error: { message: `代理不接受来自本机网页（${origin}）的写入请求：这类请求会花你的订阅。酒馆自己的聊天请求不受影响；确实要让这个页面用的话，把它加进 CLAUDE_SUBSCRIPTION_ALLOWED_ORIGINS。` } });
+        res.status(403).json({ error: { message: `别的网页（${origin}）想用你的订阅，已拦下` } });
         return;
     }
     res.status(403).json({ error: { message: `代理拒绝了来自其他网站（${origin}）的请求：只有酒馆页面可以用这个代理。` } });

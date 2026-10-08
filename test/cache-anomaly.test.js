@@ -35,7 +35,7 @@ test('cacheAnomaly: same chat, nothing changed, read below last turn\'s prompt',
 
 test('explainCache still says it out loud, with the way to fix it', () => {
     const prev = entry('c1', 40_000, 2_000);
-    const line = explainCache(entry('c1', 3_000, 30_000), prev).reasons.find((r) => r.startsWith('内容没变却没读到'));
+    const line = explainCache(entry('c1', 3_000, 30_000), prev).reasons.find((r) => r.startsWith('内容没变却没命中'));
     assert.ok(line, 'the panel keeps the explanation');
     assert.match(line, /导出诊断/, 'the way forward: export the log');
     assert.doesNotMatch(line, /claude-agent-sdk@/, 'no more 「downgrade the SDK」: 5.2.0 pins it, and it never fixed an expired cache');

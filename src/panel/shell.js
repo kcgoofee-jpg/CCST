@@ -22,20 +22,9 @@ import { buildSettingsTab } from './tabs/settings.js';
 import { TABS, resolveTab } from './core/tabs.js';
 import { buildGuideCard, renderGuide } from './guide.js';
 import { glanceLinked } from './core/guide.js';
-import { chooseConnectModel, ensureProfile, profileNotice, connectAdvice, describeCurrentConnection, sourceLabel } from './core/connection-profile.js';
+import { chooseConnectModel, ensureProfile, profileNotice, connectAdvice, sourceLabel } from './core/connection-profile.js';
 
 // ── One-click connect (same selector path as ST's /api-url command) ──
-
-// 审: 「连到 CCST？」确认框里的「现在：…」；没了用户看不到自己会被换掉什么连接。
-/** What ST is connected to right now, in words (for the confirm dialog). */
-function currentConnectionText() {
-    const src = $('#chat_completion_source').val();
-    const url = src === 'custom' ? $('#custom_api_url_text').val() : '';
-    // The model of the CURRENT source only (connectionInfo reads that source's own field).
-    const model = connectionInfo().model || '';
-    const profile = $('#connection_profiles option:selected').text?.() || '';
-    return describeCurrentConnection({ profile, source: src, url, model });
-}
 
 // 审: 酒馆在用别的连接时它叫什么（配置名，或已连上的接口名），连接卡片据此提示「现在用的是…」。
 /** The connection SillyTavern is on when it is not CCST, as the user named it: the profile name, else
@@ -74,27 +63,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // One-click connect rewrites SillyTavern's LIVE connection fields (source, URL, post-processing),
 // keeps a Claude model ST already has (else Opus 4.6), then saves that as the connection profile 「CCST」 (created, or
-// updated when it exists). Other profiles are never edited, but the live connection is replaced — so
-// it always asks first unless ST already points at this proxy.
-// 审: 一键连接入口（引导卡、连接卡、设置页「重新连接」都调它）：确认 → 改字段 → 存「CCST」配置。
+// updated when it exists). Other profiles are never edited; no confirmation — it only adds or updates 「CCST」.
+// 审: 一键连接入口（引导卡、连接卡、设置页「重新连接」都调它）：改字段 → 存「CCST」配置（不再弹确认）。
 export async function connect(settings) {
     try {
         // Taken before anything is rewritten: a Claude model ST already has is kept.
         const keepModel = connectionInfo().model ?? '';
-        const ours = $('#chat_completion_source').val() === 'custom'
-            && isOurEndpoint($('#custom_api_url_text').val(), settings);
-        if (!ours) {
-            const ctx = SillyTavern.getContext();
-            const box = document.createElement('div');
-            for (const line of [
-                '连到 CCST？',
-                `现在：${currentConnectionText() || '（未连接）'}`,
-                `改成：CCST · ${settings.endpoint}`,
-                '会存一个「CCST」配置，别的不动',
-            ]) { const p = document.createElement('p'); p.textContent = line; box.append(p); }
-            const ok = await ctx.callGenericPopup(box, ctx.POPUP_TYPE.CONFIRM);
-            if (!ok) return;
-        }
         applyConnection(settings);
         notify('info', '连接中…', '在读模型列表，约 10 秒', { ms: 0, replace: 'connect-profile' });
         await connectProfile(settings, keepModel);
@@ -204,11 +178,10 @@ export function renderGlance() {
             // Only the local proxy is left: 「本机代理」 says nothing; the billing (订阅) does.
             if (q != null) {
                 const quota = el('span', 'cm-bar-quota', `5h ${q}%`);
-                // The worse of how much is used and how fast (pace, see tabs/status.js usagePace); ▲ = on track to run out.
+                // The worse of how much is used and how fast (pace, see tabs/status.js usagePace) sets the colour; the pace in words is in 额度.
                 const pace = store.get().glance?.quotaPace;
                 if (q >= 90 || pace === 'critical') quota.dataset.tone = 'error';
                 else if (q >= 75 || pace === 'warning') quota.dataset.tone = 'warn';
-                if (pace === 'critical' || pace === 'warning') quota.textContent += ' ▲';
                 bar.append(quota);
             }
         }
@@ -256,7 +229,7 @@ function updateCard(base, status) {
     const help = updateHelp({ latest, host: hostNow() });
     if (!help) return null;
     return { ...base, tone: 'info', dot: 'online', key: `update-${latest}`, title: help.title, sub: help.sub, downloads: help.downloads, showSteps: true, steps: [],
-        action: { label: '不再提醒', run: () => { getSettings().skipVersion = latest; saveSettingsDebounced(); renderConnect(); } } };
+        action: { label: '这版不提醒', run: () => { getSettings().skipVersion = latest; saveSettingsDebounced(); renderConnect(); } } };
 }
 
 // 审: 把 store 里的代理状态翻译成连接卡该显示什么（纯数据），renderConnect 只管画。
@@ -273,7 +246,7 @@ function describeCard() {
         return { ...base, setup: true, tone: 'info', dot: 'offline', key: 'away', title: help.title, sub: help.sub };
     }
     if (phase === 'denied') {
-        return { ...base, tone: 'error', dot: 'offline', key: 'denied', title: '只能本机用', sub: status.message || '只给装 CCST 的那台电脑用' };
+        return { ...base, tone: 'error', dot: 'offline', key: 'denied', title: '只能本机用', sub: '目前仅支持本机代理' };
     }
     if (phase === 'offline') {
         const help = connectHelp({ host: hostNow() });
@@ -285,8 +258,8 @@ function describeCard() {
     }
     if (status.phase === 'nologin') {
         return { ...base, tone: 'warn', dot: 'warning', key: 'login', title: '还没登录',
-            sub: '登录一次，就用你的订阅', steps: loginSteps(hostNow()),
-            action: { label: '怎么登录', again: '登好了', run: refreshAll } };
+            sub: '', steps: loginSteps(hostNow()), showSteps: true,
+            action: { label: '登好了', run: refreshAll } };
     }
     if (status.phase === 'pending' || status.phase === 'idle') {
         return setup ? { ...base, tone: 'info', dot: 'pending', key: 'checking', title: '检测中…', sub: '' } : null;
@@ -309,8 +282,8 @@ function describeCard() {
                 action: { label: '连接', icon: 'fa-plug', primary: true, run: () => connect(getSettings()) },
                 action2: { label: '不再提示', run: () => { getSettings().hideConnectFor = using; saveSettingsDebounced(); renderConnect(); } } };
         }
-        const sub = '点一下，自动选好模型';
-        return { ...base, tone: 'info', dot: mismatch ? 'warning' : 'online', key: 'connect', title: '差一步',
+        const sub = '点击【连接】';
+        return { ...base, tone: 'info', dot: mismatch ? 'warning' : 'online', key: 'connect', title: '还没连上',
             sub: mismatch ? `${sub}\n${mismatch}` : sub, action: { label: '连接', icon: 'fa-plug', primary: true, run: () => connect(getSettings()) } };
     }
     return null;

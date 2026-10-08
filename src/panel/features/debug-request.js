@@ -17,7 +17,7 @@ export async function showDebugRequest() {
         return;
     }
     if (!data?.ok) {
-        notify('info', '暂无请求', String(data?.error ?? '先聊一句再看'), { ms: 8000 });
+        notify('info', '暂无请求', '先聊一句再看', { ms: 8000 });
         return;
     }
     const wrap = el('div', 'cm-debug-view');

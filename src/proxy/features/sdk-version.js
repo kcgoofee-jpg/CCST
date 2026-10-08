@@ -55,7 +55,7 @@ export function noteSdkVersionRun() {
         previous = JSON.parse(readFileSync(f, 'utf8')).version ?? null;
     } catch { /* first run */ }
     if (previous && previous !== SDK_VERSION) {
-        console.log(`${PLUGIN_TAG} SDK 已从 ${previous} 变为 ${SDK_VERSION}（缓存和逐轮还原这次会全量重写一轮）`);
+        console.log(`${PLUGIN_TAG} 组件更新了（SDK ${previous} → ${SDK_VERSION}），这一轮多写一次缓存`);
     }
     try {
         mkdirSync(dirname(f), { recursive: true });

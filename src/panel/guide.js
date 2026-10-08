@@ -121,7 +121,7 @@ function drawDone(card) {
     const { model } = connectionInfo();
     card.append(
         el('div', 'cm-note-title', model ? `已连接 · ${shortModel(model)}` : '已连接'),
-        el('small', 'cm-hint', '可以聊了；温度等参数无效'),
+        el('small', 'cm-hint', '设置完成！'),
     );
     const row = el('div', 'cm-btn-row');
     row.append(button('完成', () => apply(finishGuide()), { icon: 'fa-check', primary: true }));

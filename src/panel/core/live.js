@@ -123,7 +123,7 @@ export async function heartbeat() {
     } else if (!up && !heartbeatDown && connected) {
         heartbeatDown = true;
         if (status === 401 || status === 403) {
-            notify('bad', '本机专用', '只给装它的那台电脑用', { ms: 0, replace: 'proxy' });
+            notify('bad', '只能本机用', '目前仅支持本机代理', { ms: 0, replace: 'proxy' });
         } else {
             notify('bad', '重连中', '看看酒馆的终端窗口还开着吗', { ms: 0, replace: 'proxy' });
         }

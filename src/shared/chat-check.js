@@ -87,7 +87,7 @@ export function refusalNotice(last) {
 }
 
 // 审: 「被拒绝了」的补充说明文案，只在 refusalNotice 用，故不导出。
-const REFUSAL_HINT = '多半是卡里内容触发了政策';
+const REFUSAL_HINT = '多半是卡里内容触发了 Claude 的安全规则';
 
 // 审: 汇总最新回复的拒绝/写满/空回复三类问题；面板 checkup、gen-progress、turn-notice 用。
 /**

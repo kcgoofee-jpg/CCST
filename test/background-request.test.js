@@ -18,7 +18,7 @@ test('proxy refusal signal: an empty refused turn is a decline, partial text is 
     const declined = refusalNotice({ notices: ['refusal'], finish: 'content_filter', textChars: 40 });
     assert.equal(declined.declined, true);
     assert.equal(declined.title, '被拒绝了');
-    assert.match(declined.text, /政策/);
+    assert.match(declined.text, /安全规则/);
     assert.doesNotMatch(declined.text, /重新生成|换/);
     const cut = refusalNotice({ notices: ['refusal'], finish: 'content_filter', textChars: 1500 });
     assert.equal(cut.declined, false);

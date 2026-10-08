@@ -387,6 +387,9 @@ export function depthRegexAt(list, depth) {
 const STATE_TITLE = { ok: '缓存正常', part: '部分重写', full: '整段重写', first: '第一轮', expired: '缓存过期', reroll: '重新生成' };
 
 // 审: 面板展示用的缓存说明（usage-stats 调用）；reasons[0] 是一句话原因。
+// 审: 词元数按「万」说：75,200 → 7.5 万，不到一万写整数。
+const wan = (n) => (n >= 10000 ? `${(n / 10000).toFixed(1).replace(/\.0$/, '')} 万` : String(n));
+
 /**
  * The last turn's cache in plain words, for the panel. `entry` / `prevEntry` are usage-stats
  * records (prevEntry: the request before it, if any). `reasons[0]` is the one-line why.
@@ -400,12 +403,13 @@ export function explainCache(entry, prevEntry = null) {
     const { state, reusePct } = cacheState(entry, prevEntry);
     const d = entry.cacheDiag;
     const reasons = [];
+    let where = null;   // 设定改在哪：只放进详情
     if (state === 'first') {
         reasons.push('先存进缓存，下一轮开始命中');
     } else {
         const suspects = scriptSuspects(entry, prevEntry);
-        if (d.reroll) reasons.push(read >= wrote ? '全部命中，不算进统计' : '重新生成，但没命中');
-        if (suspects) reasons.push(`你没改设置却变了，可能是脚本：${suspects.join('、')}`);
+        if (d.reroll) reasons.push(read >= wrote ? '重新生成，全部命中' : '重新生成，但没命中');
+        if (suspects) reasons.push(`发出去的内容被脚本改了：${suspects.join('、')}`);
         // Another preset: its regexes no longer touch the old replies the same way either — the
         // whole request is new, nothing more to say about the history.
         const switched = !!prevEntry?.st?.preset && !!entry.st?.preset && prevEntry.st.preset !== entry.st.preset;
@@ -414,13 +418,14 @@ export function explainCache(entry, prevEntry = null) {
         } else if (d.systemChanged && d.loreMoved?.length) {
             reasons.push('新触发了世界书，这轮多写一次');
         } else if (d.systemChanged) {
-            reasons.push(d.rewrite ? '换了预设，整段重写' : `设定在 ${d.systemDiffLabel ?? `第 ${d.systemDiffAt.toLocaleString()} 字`} 变了，这轮多写一次`);
+            reasons.push(d.rewrite ? '换了预设，整段重写' : '角色卡或预设改过，这轮多写一次');
+            if (!d.rewrite) where = `改动在 ${d.systemDiffLabel ?? `第 ${d.systemDiffAt.toLocaleString()} 字`} 附近`;
             if (d.systemDiffLabel === '<world_info>' || /world|世界/.test(d.systemDiffLabel ?? '')) reasons.push('触发的世界书变了；开「世界书后移」可免');
         }
         if (d.historyDiffAt !== null && d.historyDiffAt !== undefined && !(d.systemChanged && switched)) {
             const floor = d.historyDiffAt + 1;
             const rx = d.summaryReplaced ? depthRegexAt(entry.st?.rx, d.cutDepth) : null;
-            if (rx) reasons.push(`第 ${floor} 楼被正则${rx}改短，每轮重写 ${wrote >= 1000 ? `${Math.round(wrote / 1000)}k` : wrote}`);
+            if (rx) reasons.push(`第 ${floor} 楼被正则${rx}改短，每轮多写约 ${wan(wrote)}`);
             else if (d.summaryReplaced) reasons.push(`第 ${floor} 楼被预设正则改短了`);
             else if (d.replyChanged) reasons.push(entry.st?.mut?.length ? `第 ${floor} 楼变了：换了回复，或脚本改的` : `第 ${floor} 楼换了回复，从这楼起重写`);
             else reasons.push(`第 ${floor} 楼起变了：多半是正则改旧楼`);
@@ -429,10 +434,11 @@ export function explainCache(entry, prevEntry = null) {
         if (prevEntry?.ok && prevEntry.effort !== undefined && entry.effort !== undefined && prevEntry.effort !== entry.effort) reasons.push('推理强度变了，这轮多写一次');
         if (prevEntry && prevEntry.model !== entry.model) reasons.push('换了模型，整段重写');
         const expired = prevEntry?.ok ? cacheExpired(entry, prevEntry) : null;
-        if (expired) reasons.push(expired.ttl === '5m' ? '只存了 5 分钟，已过期' : `隔了 ${expired.gapMin} 分钟，超过 1 小时`);
-        else if (entry.cacheTtl === '5m') reasons.push('缓存只给 5 分钟：可能在用超额');
-        if (cacheAnomaly(entry, prevEntry)) reasons.push('内容没变却没读到，请导出诊断');
+        if (expired) reasons.push(expired.ttl === '5m' ? '只存了 5 分钟，已过期' : `隔了 ${expired.gapMin} 分钟，缓存过期了`);
+        else if (entry.cacheTtl === '5m') reasons.push('这轮缓存只留 5 分钟：订阅额度用完、开始扣超额时会这样');
+        if (cacheAnomaly(entry, prevEntry)) reasons.push('内容没变却没命中，请导出诊断');
         if (!reasons.length) reasons.push(read > 0 ? '该命中的都命中了' : '内容没变却没命中，请导出诊断');
+        if (where) reasons.push(where);
     }
     const q = quotaParts(entry);
     return {

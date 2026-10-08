@@ -337,7 +337,7 @@ try {
             Say '马上会打开浏览器，用你的 Claude 账号（Pro 或 Max）登录并点「授权」。'
             if ((Run-Native { npm run login --silent }) -eq 0) { Ok '登录成功' }
             else {
-                Warn '登录没完成。不影响安装，之后随时可以补：再双击一次「CCST安装.bat」，它会重新打开登录。'
+                Warn '登录没完成，不影响安装。之后补登：再双击一次「CCST安装.bat」，它会重新打开登录。'
             }
         }
     }

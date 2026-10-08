@@ -56,7 +56,7 @@ test('desktop browser ST: one sentence, a Mac line and a Windows installer, no f
     assert.deepEqual(h.steps, []);
     assert.equal(h.form, undefined);
     assert.equal(h.fold, undefined);
-    assert.equal(h.sub, '重启酒馆；没装就先装');
+    assert.equal(h.sub, '请重启酒馆重试');
     assert.match(h.downloads[0].label, /^Mac：在终端粘贴/);
     assert.doesNotMatch(cardText(h), /仍要打开|CCST-mac/, 'no zip to double-click on Mac any more');
     assert.deepEqual(h.downloads.map((d) => d.key), ['mac-plugin-cmd', 'win']);
@@ -85,27 +85,13 @@ test('every link the cards offer has a URL to copy', () => {
     }
 });
 
-test('version mismatch, proxy older: TauriTavern gets the standalone steps only', () => {
-    for (const runtime of [null, 'plugin', 'standalone']) {
-        const h = mismatchHelp({ side: 'proxy', proxyVersion: '4.0.0', panelVersion: '4.5.1', runtime, tauri: true });
-        assert.deepEqual(h.downloads, [], `runtime ${runtime}`);
-        assert.ok(h.steps.some((st) => st.cmd === 'git pull && npm install'), 'update the standalone proxy in place');
-        const t = allText(h);
-        assert.doesNotMatch(t, /CCST安装|一键安装|酒馆的黑色窗口/);
-        assert.match(t, /关掉运行 npm start 的窗口，再运行一次/, 'restart the standalone proxy');
-        assert.match(t, /完全退出 TauriTavern 再打开/);
+test('version mismatch, proxy older: one line and a link to the update notes, any host', () => {
+    for (const tauri of [false, true]) {
+        const h = mismatchHelp({ side: 'proxy', tauri });
+        assert.equal(h.sub, '代理要更新：照说明更新');
+        assert.deepEqual(h.steps, []);
+        assert.deepEqual(h.downloads.map((d) => d.href), [DOCS_URL]);
     }
-});
-
-test('version mismatch on a desktop browser keeps the plugin path', () => {
-    const plugin = mismatchHelp({ side: 'proxy', proxyVersion: '4.0.0', panelVersion: '4.5.1', runtime: 'plugin' });
-    assert.equal(plugin.downloads.length, 2);
-    assert.match(allText(plugin), /再装一次：Mac 在终端粘贴/);
-    assert.match(allText(plugin), /CCST安装/);
-    const standalone = mismatchHelp({ side: 'proxy', proxyVersion: '4.0.0', panelVersion: '4.5.1', runtime: 'standalone' });
-    assert.equal(standalone.downloads.length, 0);
-    const unknown = mismatchHelp({ side: 'proxy', proxyVersion: '4.0.0', panelVersion: '4.5.1' });
-    assert.equal(unknown.downloads.length, 2);
 });
 
 test('version mismatch, panel older: no downloads, TauriTavern wording', () => {

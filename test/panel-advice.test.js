@@ -14,7 +14,7 @@ test('a SDK the proxy cannot work with gets the top banner (#30)', () => {
     assert.equal(lines.length, 1);
     assert.equal(lines[0].tone, 'error');
     assert.match(lines[0].text, /^组件过旧/);
-    assert.match(lines[0].text, /SYSTEM_PROMPT_DYNAMIC_BOUNDARY/);
+    assert.match(lines[0].text, /安装那一行/);
     assert.match(lines[0].text, /安装那一行/, 'says how to fix it');
 });
 
@@ -30,7 +30,7 @@ test('the proxy answering over SillyTavern\'s route is checked against the set e
     const status = online({ endpoint: 'http://127.0.0.1:8902/v1', via: 'plugin' });
     const lines = statusAdvisories(status, 'http://127.0.0.1:8901/v1');
     assert.equal(lines.length, 1);
-    assert.match(lines[0].text, /^地址不对：设置是 http:\/\/127\.0\.0\.1:8901\/v1，实际是 http:\/\/127\.0\.0\.1:8902\/v1/);
+    assert.match(lines[0].text, /另一个 CCST 占着这个端口/);
     assert.deepEqual(statusAdvisories({ ...status, via: 'direct' }, 'http://127.0.0.1:8901/v1'), [], 'asked the proxy itself: nothing to warn about');
     assert.deepEqual(statusAdvisories(status, 'http://127.0.0.1:8902/v1'), [], 'the same address with a trailing slash is the same address');
     assert.deepEqual(statusAdvisories(online({ endpoint: null, via: 'plugin' }), 'http://127.0.0.1:8901/v1'), [], 'an old proxy that reports nothing');

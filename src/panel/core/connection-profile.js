@@ -49,14 +49,6 @@ const SOURCE_NAMES = {
 // 审: 来源 id → 显示名，查不到原样返回。
 export const sourceLabel = (id) => SOURCE_NAMES[id] ?? id;
 
-// 审: 连接确认弹窗里「现在：…」那一行（配置·来源·地址·模型），酒馆报「<None>」时省略配置。
-/** The confirm popup's 「现在：…」 line. ST's connection manager reports "<None>" for no profile: leave it out. */
-export function describeCurrentConnection({ profile = '', source = '', url = '', model = '' } = {}) {
-    const p = String(profile ?? '').trim();
-    const hasProfile = p && !/^<none>$/i.test(p);
-    return [hasProfile && `连接配置「${p}」`, source && `来源 ${sourceLabel(source)}`, url, model].filter(Boolean).join(' · ');
-}
-
 // 审: 连接后应落在哪个模型：酒馆里已有的 Claude 模型原样保留（含 [1m]），否则用默认。
 /**
  * The model the connect should end on: the Claude model ST already has (kept as it is, incl. a [1m] suffix),

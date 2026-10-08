@@ -65,8 +65,8 @@ export function buildSettingsTab(pane, settings, save) {
     }));
     pane.append(cache.root);
 
-    const view = group('检查');
-    view.body.append(button('查看发送内容', () => F.debug.showDebugRequest(), { icon: 'fa-magnifying-glass', text: true, id: 'claude_max_debug_view' }));
+    const view = group('排查');
+    view.body.append(button('查看发给模型的内容', () => F.debug.showDebugRequest(), { icon: 'fa-magnifying-glass', text: true, id: 'claude_max_debug_view' }));
     pane.append(view.root);
 
     const again = el('button', 'cm-link-btn cm-guide-again', '重看引导');

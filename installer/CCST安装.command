@@ -289,7 +289,7 @@ else
         say "马上会打开浏览器，用你的 Claude 账号（Pro 或 Max）登录并点「授权」。"
         if (cd "$DEST" && npm run login --silent); then ok "登录成功"
         else
-            warn "登录没完成。不影响安装，之后随时可以补："
+            warn "登录没完成，不影响安装。之后补登："
             say "  打开「终端」，输入 cd 后面加一个空格，把 $DEST 这个文件夹拖进去，回车，再输入 npm run login"
             say "  或者${AGAIN_FILE}，它会重新打开登录。"
         fi

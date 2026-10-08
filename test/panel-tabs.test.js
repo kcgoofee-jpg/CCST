@@ -42,7 +42,7 @@ test('saved tab keys: current ones stay, old ones map to their successors, junk 
 test('设置: 连接 / 缓存 / 检查, then 重看引导; thinking, model and the cache switches are not here', () => {
     const settings = src('tabs/settings.js');
     const sections = [...settings.matchAll(/group\('([^']+)'/g)].map((m) => m[1]);
-    assert.deepEqual(sections, ['连接', '缓存', '检查']);
+    assert.deepEqual(sections, ['连接', '缓存', '排查']);
     for (const id of ['claudeMaxLoreTail', 'claude_max_debug_view', 'claude_max_guide_again']) assert.ok(settings.includes(id), id);
     assert.ok(settings.indexOf("group('检查')") < settings.indexOf('claude_max_guide_again'), '重看引导 at the bottom');
     for (const gone of ['claudeMaxAlwaysThink', 'claudeMaxDebugDump', 'claudeMaxIdentity', 'claudeMaxResume', 'claudeMaxInlineSystem', 'claudeMaxFoldTail', '后台请求思考深度', "collapsible('高级'", 'claude_max_backend', 'API 密钥']) assert.ok(!settings.includes(gone), gone);

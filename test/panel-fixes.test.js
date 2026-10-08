@@ -51,11 +51,9 @@ test('TauriTavern named in the connect texts', () => {
     assert.equal(appName(false), '酒馆');
     const shell = src('panel/shell.js');
     // The short copy names no app at all, so TauriTavern users never read a hard-coded 「酒馆」 here.
-    assert.match(shell, /key: 'connect', title: '差一步'/);
+    assert.match(shell, /key: 'connect', title: '还没连上'/);
     assert.match(src('panel/tabs/settings.js'), /notify\('info', '地址已改', '点「重新连接」生效'/);
-    const confirm = shell.slice(shell.indexOf("'连到 CCST？'"), shell.indexOf('callGenericPopup'));
-    assert.ok(confirm.length > 0);
-    assert.doesNotMatch(confirm, /酒馆/);
+    assert.doesNotMatch(shell, /callGenericPopup/, 'connecting no longer asks first');
 });
 
 test('always-thinking models: disabled 不思考, and the list matches the proxy catalog', () => {

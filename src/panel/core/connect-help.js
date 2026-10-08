@@ -52,7 +52,7 @@ export function updateHelp({ latest, host = 'desktop' }) {
     if (host !== 'desktop') return null;
     return {
         title: `有新版 v${latest}`,
-        sub: '再装一次就是更新',
+        sub: '',
         downloads: desktopDownloads(),
     };
 }
@@ -86,7 +86,7 @@ export function connectHelp({ host = 'desktop' } = {}) {
     }
     return {
         ...base,
-        sub: '重启酒馆；没装就先装',
+        sub: '请重启酒馆重试',
         downloads: desktopDownloads(),
         hint: '',
     };
@@ -104,7 +104,7 @@ export function installHelp({ host = 'desktop' } = {}) {
     }
     const [win] = desktopDownloads().filter((d) => d.key === 'win');
     return {
-        sub: '装好后重启酒馆',
+        sub: '',
         mac: MAC_PLUGIN_CMD,
         win,
         docs: null,
@@ -121,62 +121,18 @@ export function loginHelp({ host = 'desktop' } = {}) {
 }
 
 // 审: 版本不配后「刷新页面」这一步的统一文案。
-const REFRESH = '刷新酒馆页面（Cmd+Shift+R / Ctrl+F5）。';
-// 审: 桌面端装完安装器后的提示行。
-const DESKTOP_HINT = '装完重启酒馆';
-
-// 审: 「面板和代理版本不一致」卡片：按哪边旧、代理怎么运行（插件/单独）、在哪个环境，给不同的更新步骤。
-/**
- * 「面板和代理版本不一致」卡片：情况 → 影响 → 怎么办（编号步骤）。
- * runtime 是代理自己在 /status 里报的（'plugin' 装成酒馆插件 | 'standalone' 单独运行）；旧代理不报，
- * 这时不去猜，两种做法都列出来让用户对号入座。TauriTavern 跑不了酒馆插件，只列单独运行的做法，不给安装器。
- * @returns {{ sub: string, steps: { text: string, cmd?: string }[], downloads: object[], hint: string }}
- */
-export function mismatchHelp({ side, proxyVersion, panelVersion, runtime = null, tauri = false, host = tauri ? 'tauri' : 'desktop' }) {
-    const isTT = host === 'tauri';
-    // 审: TauriTavern 是 App 不是浏览器页，最后一步改成「完全退出再打开」。
-    // TauriTavern is an app, not a browser tab, and has no black server window: restart the app instead.
-    const REFRESH_STEP = isTT ? '完全退出 TauriTavern 再打开。' : REFRESH;
-        if (side === 'panel') {
+// 审: 版本对不上时的卡片：面板旧就在酒馆里更新面板；代理旧就指向更新说明（README），不在卡片里写步骤。
+/** 「面板和代理版本不一致」卡片。side：谁旧（'panel' | 'proxy'）。 */
+export function mismatchHelp({ side, tauri = false, host = tauri ? 'tauri' : 'desktop' }) {
+    if (side === 'panel') {
         return {
-            sub: `面板 v${panelVersion} 比代理 v${proxyVersion} 旧，请更新：`,
+            sub: '面板要更新：',
             steps: [
-                { text: '「扩展 → 管理扩展」里更新 CCST。' },
-                { text: REFRESH_STEP },
+                { text: '扩展 → 管理扩展 → 更新 CCST' },
+                { text: host === 'tauri' ? '完全退出 TauriTavern 再打开' : '刷新页面（Cmd+Shift+R / Ctrl+F5）' },
             ],
             downloads: [], hint: '',
         };
     }
-    const sub = `代理 v${proxyVersion} 比面板 v${panelVersion} 旧，请更新：`;
-    // 审: 单独运行（npm start）的代理的更新步骤。
-    const standaloneSteps = [
-        { text: '在 CCST 文件夹运行：', cmd: 'git pull && npm install' },
-        { text: '关掉运行 npm start 的窗口，再运行一次。' },
-    ];
-    // 审: 这两种环境没有插件安装器，代理必然是别处单独运行的那份，只列单独运行的步骤。
-    if (isTT) {
-        // TauriTavern has no plugin installer: the proxy is the standalone one.
-        return { sub, steps: [...standaloneSteps, { text: REFRESH_STEP }], downloads: [], hint: '' };
-    }
-    // 审: 装成酒馆插件的代理的更新步骤（再装一次）。
-    const pluginSteps = [
-        { text: '再装一次：Mac 在终端粘贴下面那行，Windows 双击「CCST安装」。' },
-        { text: '重启酒馆。' },
-    ];
-    // 审: 代理没报 runtime（旧版本）时不猜，两种做法都列出让用户对号入座。
-    let steps;
-    if (runtime === 'plugin') steps = pluginSteps;
-    else if (runtime === 'standalone') steps = standaloneSteps;
-    else {
-        steps = [
-            { text: `用安装包装的：${pluginSteps[0].text}${pluginSteps[1].text}` },
-            { text: `单独运行的（npm start）：${standaloneSteps[0].text}（${standaloneSteps[0].cmd}）；${standaloneSteps[1].text}` },
-        ];
-    }
-    return {
-        sub,
-        steps: [...steps, { text: REFRESH_STEP }],
-        downloads: runtime === 'standalone' ? [] : desktopDownloads(),
-        hint: runtime === 'standalone' ? '' : DESKTOP_HINT,
-    };
+    return { sub: '代理要更新：照说明更新', steps: [], downloads: [remoteItem('docs', '更新说明', DOCS_URL)], hint: '' };
 }
