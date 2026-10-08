@@ -72,6 +72,7 @@ jobs:
           $stage = "$env:RUNNER_TEMP\zipstage"
           New-Item -ItemType Directory "$stage\CCST-main" | Out-Null
           Copy-Item "$env:GITHUB_WORKSPACE\package.json" "$stage\CCST-main\"
+          Copy-Item -Recurse "$env:GITHUB_WORKSPACE\installer" "$stage\CCST-main\installer"
           Compress-Archive -Path "$stage\CCST-main" -DestinationPath "$env:RUNNER_TEMP\ccst.zip"
           $env:CCST_ST_DIR = "$env:RUNNER_TEMP\ST2"
           $env:CCST_REPO_URL = "$env:RUNNER_TEMP\does-not-exist"

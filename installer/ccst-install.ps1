@@ -317,10 +317,15 @@ try {
     Ok '依赖装好了'
 
     # 面板在酒馆里被停用了（扩展 → 管理扩展 里关掉的）：重新启用。酒馆开着时它会覆盖设置，只能让你自己开
-    $off = "$(node installer/panel-enable.mjs $St --check 2>$null)"
-    if ($off.Trim()) {
-        if ($StRunning) { Warn 'CCST 面板在酒馆里被停用了：在 扩展 → 管理扩展 里把 CCST 打开。' }
-        else { node installer/panel-enable.mjs $St | Out-Null; Ok 'CCST 面板之前被停用了，已重新启用' }
+    # 这一步可有可无：脚本不在或出错都不能让安装中断（PowerShell 5.1 会把 node 的报错输出当成异常）
+    if (Test-Path 'installer/panel-enable.mjs') {
+        try {
+            $off = "$(node installer/panel-enable.mjs $St --check 2>$null)"
+            if ($off.Trim()) {
+                if ($StRunning) { Warn 'CCST 面板在酒馆里被停用了：在 扩展 → 管理扩展 里把 CCST 打开。' }
+                else { node installer/panel-enable.mjs $St | Out-Null; Ok 'CCST 面板之前被停用了，已重新启用' }
+            }
+        } catch { }
     }
 
     # ── 6. 登录 Claude ──
