@@ -8,8 +8,11 @@ zip 里的权限位在 macOS 解压时会保留，解压出来的 .command 双�
 import pathlib
 import zipfile
 
+# 审: 安装器目录；zip 打进这里，installer.test.js 会核对 zip 与 .command 一致。
 root = pathlib.Path(__file__).resolve().parent.parent / "installer"
+# 审: 要打包的 Mac 安装脚本。
 src = root / "CCST安装.command"
+# 审: 带 0755 权限位和固定时间戳的 zip 条目，解压后 .command 才能双击运行且结果可复现。
 info = zipfile.ZipInfo(src.name, date_time=(2020, 1, 1, 0, 0, 0))  # 固定时间，重复打包结果一样
 info.external_attr = (0o100755 << 16)
 info.compress_type = zipfile.ZIP_DEFLATED

@@ -37,7 +37,6 @@ function child(env) {
             CLAUDE_SUBSCRIPTION_SCRATCH_CWD: join(tmp, 'scratch'),
             CLAUDE_SUBSCRIPTION_STATS_FILE: join(tmp, 'usage.jsonl'),
             CLAUDE_SUBSCRIPTION_CONTEXT_PIN_FILE: 'off',
-            CLAUDE_SUBSCRIPTION_CACHE_MEMORY_FILE: 'off',
         },
         stdio: ['ignore', 'pipe', 'pipe'],
     });
