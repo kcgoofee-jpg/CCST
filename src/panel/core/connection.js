@@ -17,7 +17,7 @@ export function connectionInfo() {
 // 审: 模型 id → 面板显示名的匹配表，顺序重要（fable-5-1 要排在 fable-5 前，5-5 排在 5 前）。
 const MODEL_SHORT = [
     [/fable-5-1/, 'Fable 5.1'], [/fable-5/, 'Fable 5'], [/opus-5-5/, 'Opus 5.5'], [/opus-5/, 'Opus 5'],
-    [/sonnet-5-5/, 'Sonnet 5.5'], [/sonnet-5/, 'Sonnet 5'], [/opus-4-(\d)/, 'Opus 4.$1'], [/sonnet-4-(\d)/, 'Sonnet 4.$1'], [/haiku-4-5/, 'Haiku 4.5'],
+    [/sonnet-5-5/, 'Sonnet 5.5'], [/sonnet-5/, 'Sonnet 5'], [/opus-4-(\d)/, 'Opus 4.$1'], [/sonnet-4-(\d)/, 'Sonnet 4.$1'], [/haiku-5-5/, 'Haiku 5.5'], [/haiku-4-5/, 'Haiku 4.5'],
 ];
 
 // 审: 任意来源写法的模型 id → 用户看的短名（Opus 4.6，1M 加后缀）；认不出就原样。

@@ -42,7 +42,7 @@ export const CANONICAL_TIER_MODELS = {
 // 审: 模型目录（id / 档位 / 能不能 1M / 思考能力 / 上下文），选择器列表、思考参数、请求解析的唯一数据源。
 // `adaptiveOnly` = always-thinking model families; sampling params are
 // rejected and `thinking: { type: 'enabled' | 'disabled' }` is invalid — only
-// adaptive applies (Opus 5.5, Sonnet 5.5, Fable, Mythos). Measured live (5.1): `thinking: disabled` is accepted
+// adaptive applies (Opus 5.5, Sonnet 5.5, Haiku 5.5, Fable, Mythos). Measured live (5.1): `thinking: disabled` is accepted
 // on all of them, but Opus 5.5 / Sonnet 5.5 still return a thinking block, so for them "off" does nothing.
 // `noBudget` = thinking can be turned off, but `budget_tokens` is rejected —
 // "always on" maps to adaptive instead of enabled+budget (Sonnet 5, Opus 4.7 / 4.8 / 5: measured live, off gives no thinking block).
@@ -60,6 +60,8 @@ export const CLAUDE_SUBSCRIPTION_MODELS = [
     { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', tier: 'sonnet', oneM: true, adaptiveOnly: false, context: 200000 },
     { id: 'claude-opus-4-5', name: 'Claude Opus 4.5', tier: 'opus', oneM: false, adaptiveOnly: false, context: 200000 },
     { id: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5', tier: 'sonnet', oneM: false, adaptiveOnly: false, context: 200000 },
+    // Haiku 5.5: same shape as Sonnet 5.5 in the CLI's model table (0.3.293): native 1M, rejects_disabled_thinking.
+    { id: 'claude-haiku-5-5', name: 'Claude Haiku 5.5', tier: 'haiku', oneM: false, adaptiveOnly: true, context: 1000000 },
     { id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5', tier: 'haiku', oneM: false, adaptiveOnly: false, context: 200000 },
 ];
 
@@ -92,6 +94,7 @@ export function isAdaptiveOnlyModel(id) {
     return (
         /claude-opus-(?:4-(?:[7-9]|\d{2,})|[5-9]|\d{2,})/.test(s) ||
         /claude-sonnet-(?:5-(?:[5-9]|\d{2,})|[6-9]|\d{2,})/.test(s) ||
+        /claude-haiku-(?:5-(?:[5-9]|\d{2,})|[6-9]|\d{2,})/.test(s) ||
         s.includes('fable') ||
         s.includes('mythos')
     );

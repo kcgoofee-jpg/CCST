@@ -29,6 +29,7 @@ const PRICES = {
     'claude-sonnet-5': { input: 2, output: 10 },
     'claude-sonnet-4-6': { input: 3, output: 15 },
     'claude-sonnet-4-5': { input: 3, output: 15 },
+    'claude-haiku-5-5': { input: 0.1, output: 0.5, cacheRead: 0.01 }, // CLI model catalog 0.3.293: haiku_55 (prompts over 100k cost 5×; not modelled)
     'claude-haiku-4-5': { input: 1, output: 5 },
 };
 

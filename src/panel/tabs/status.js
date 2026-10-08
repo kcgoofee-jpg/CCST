@@ -266,7 +266,7 @@ export function quotaShares(quota) {
 
 // Models with a 1M context of their own (no [1m] suffix needed).
 // 审: 自带 1M 上下文的模型（名字里没有 [1m]），算上下文占用时按 1M 计。
-const NATIVE_1M = /sonnet-5[-.]5/i;
+const NATIVE_1M = /(?:sonnet|haiku)-5[-.]5/i;
 
 /** How full the model's context window was: everything sent (input + cache read + write) against
  *  1M for a 1M-context model, else 200k. Colours at 70% / 85% (claude-hud's thresholds). */
