@@ -5,11 +5,13 @@
 // Pure functions, no Node or browser APIs — imported by the UI panel
 // (index.js) and by the tests. Every check looks at ONE assistant reply.
 
+// 审: 去掉所有 <...> 标签，只给 bodyOf 取纯文本。
 const stripTags = (s) => s.replace(/<[^>]+>/g, '');
 
+// 审: 先剥掉非正文的扩展标记再判拒绝；只在本文件内用，故不导出。
 /** The cleaner behind the refusal check: drops extension markup that is not
  *  prose (柏宝绘 <bbi_image> blocks, HTML cards, variable / status blocks, placeholder tags). */
-export function cleanReply(mes) {
+function cleanReply(mes) {
     return String(mes ?? '')
         .replace(/<bbi_image>[\s\S]*?<\/bbi_image>/g, '')
         .replace(/<htm1fenge>[\s\S]*?<\/htm1fenge>/g, '')
@@ -19,6 +21,7 @@ export function cleanReply(mes) {
         .replace(/<\w+(?:\s[^>]*)?\/>/g, '');
 }
 
+// 审: 取回复正文（<content> 内或去掉卡片/状态块后的纯文本）；detectRefusal 用，测试也直接用。
 export function bodyOf(mes) {
     // Image tags another extension writes into the reply (柏宝绘) and HTML
     // cards inside the prose are not prose.
@@ -33,13 +36,20 @@ export function bodyOf(mes) {
 // Conservative on purpose: a short reply whose first sentences open with a first-person refusal. A
 // character who says「我拒绝！」in dialogue, or narration that merely mentions 拒绝, is not flagged:
 // the phrase must START a sentence outside any quotation (an opening quote breaks the anchor).
+// 审: 英文拒绝句式（必须出现在句首）；detectRefusal 的识别规则之一。
 const REFUSAL_EN = /(?:I(?:'|’)?m sorry,? (?:but )?(?:I )?(?:can(?:'|’)?t|cannot|won(?:'|’)?t|am unable|(?:'|’)m unable)|Sorry,? (?:but )?I (?:can(?:'|’)?t|cannot|won(?:'|’)?t)|I apologi[sz]e,? but I (?:can(?:'|’)?t|cannot|won(?:'|’)?t)|I (?:need|have|want|must|will have) to (?:decline|stop here|pause here|step out|refuse)|I (?:can(?:'|’)?t|cannot|won(?:'|’)?t|am not able to|am unable to|(?:'|’)m not able to|(?:'|’)m unable to|(?:'|’)m not going to|am not going to) (?:continue|write|help|assist|create|generate|produce|engage|roleplay|role-play|proceed|go on|do that|provide|take this))/i;
+// 审: 中文拒绝句式（必须出现在句首）；detectRefusal 的识别规则之一。
 const REFUSAL_ZH = /(?:(?:很抱歉|抱歉|对不起|十分抱歉|非常抱歉)[，,、]?\s*(?:但)?我(?:不能|无法|没法|不会|不可以)|我(?:必须|需要|只能|得)(?:要)?(?:拒绝|停下|停在这里|婉拒)|我(?:拒绝|不能|无法|没法|不会|不可以)(?:继续|接着|再)?(?:写|创作|续写|撰写|生成|提供|协助|参与|描写|扮演|进行)?(?:这个|这段|这场|该|本|下去的|此)?(?:故事|剧情|角色扮演|扮演|创作|写作|内容|请求|场景|情节|描写|设定|方向)|我(?:不能|无法|没法)(?:继续|再)(?:写|创作|续写|扮演|这个|这样|这类)|我(?:不能|无法)继续(?=[。.！!，,]?\s*$)|无法继续(?:这个|这段|这场|该|本|此)?(?:故事|剧情|角色扮演|扮演|创作|写作|内容|请求|场景|情节)|(?:这(?:一|个)?(?:段|轮|部分|场|条|次)?(?:内容|剧情)?)?我(?:还是|就|恐怕|暂时)?(?:不写|不会写|不能写|没法写|无法写|写不了|不(?:会|能)?(?:再)?(?:继续|接着)写|没法(?:再)?(?:继续|接着)写|无法(?:再)?(?:继续|接着)写)(?=[。.！!，,：:\s]|$))/;
+// 审: 拒绝只看回复开头这么多字，避免正文里偶然出现的句子误报。
 const REFUSAL_HEAD_CHARS = 300;   // the refusal sits at the head of the reply
+// 审: 超过此长度的回复必须同时带「替代方案」措辞才算拒绝。
 const REFUSAL_SHORT_BODY = 700;
+// 审: 拒绝之后常见的「可以帮你换方向」措辞，用来确认较长回复确实是拒绝。
 const REFUSAL_OFFER = /happy to help|glad to help|instead|alternative|let me know|other directions|would you like|another direction|可以帮你|愿意帮|换个方向|换一个方向|其他方向|另外的方向|你可以告诉我|可以继续的方向|可以从下面|你选哪|告诉我就行/i;
+// 审: 超过此长度一律不算拒绝（长场景只是碰巧提到）。
 const REFUSAL_MAX_BODY = 1500;    // refusal + a list of alternative suggestions; a long scene that mentions one is far longer
 
+// 审: 从回复文字推断模型是否拒绝了本轮，返回一行摘录；replyFlags 的后备判断（代理没给 refusal 信号时）。
 /** One-line excerpt of the refusal, or null when the reply does not look like one. */
 export function detectRefusal(mes) {
     const body = bodyOf(String(mes ?? ''));
@@ -62,6 +72,7 @@ export function detectRefusal(mes) {
     return null;
 }
 
+// 审: 代理给出的确定性拒绝信号（stop_reason refusal）转成面板提示；turn-notice 和 replyFlags 用。
 /**
  * The proxy's definitive signal (stop_reason "refusal", recorded as notice 'refusal' / finish
  * 'content_filter'): a reply that is nearly empty was a refusal of the whole turn; one with real text
@@ -75,8 +86,10 @@ export function refusalNotice(last) {
     return { declined: false, title: '被拦一半', text: '结尾缺了，重新生成试试' };
 }
 
-export const REFUSAL_HINT = '多半是卡里内容触发了政策';
+// 审: 「被拒绝了」的补充说明文案，只在 refusalNotice 用，故不导出。
+const REFUSAL_HINT = '多半是卡里内容触发了政策';
 
+// 审: 汇总最新回复的拒绝/写满/空回复三类问题；面板 checkup、gen-progress、turn-notice 用。
 /**
  * The reliable checks of the latest reply (always on, no switch): the model refused, the reply was cut
  * off at the length limit, or it is empty. `mes` is the reply text, `last` the proxy's record of that
@@ -98,6 +111,7 @@ export function replyFlags(mes, last = null) {
     return out;
 }
 
+// 审: 取聊天里最新两条 AI 回复（跳过开场白/玩家/系统消息）；checkup 用。
 /**
  * The replies the checks look at: the newest AI reply and the one before it. The greeting (floor 0,
  * the card's first_mes) is not a reply and is never checked; player and system messages are skipped.
