@@ -21,14 +21,21 @@ import { dirname, join } from 'node:path';
 import { homedir, tmpdir } from 'node:os';
 
 
+// 审: 日志前缀，diag-log 靠它收集本代理的日志行。
 const PLUGIN_TAG = '[claude-subscription]';
+// 审: OAuth 刷新令牌的端点（和 CLI 一样）。
 const TOKEN_URL = 'https://platform.claude.com/v1/oauth/token';
+// 审: CLI 自己用的 client_id，刷新必须用同一个。
 const OAUTH_CLIENT_ID = '9d1c250a-e61b-44d9-88ed-5944d1962f5e';
+// 审: 额度查询端点（订阅 OAuth 令牌专用）。
 const USAGE_URL = 'https://api.anthropic.com/api/oauth/usage';
+// 审: 额度端点要求的 beta 头。
 const USAGE_BETA_HEADER = 'oauth-2025-04-20';
+// 审: 额度结果缓存 30 秒，面板多处同时问也只请求一次。
 const USAGE_CACHE_TTL_MS = 30000;
 
-export function credentialsPath() {
+// 审: 凭据文件路径（支持 CLAUDE_CONFIG_DIR）；只在本文件内用，去掉了 export。
+function credentialsPath() {
     const configDir = process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude');
     return join(configDir, '.credentials.json');
 }
@@ -40,9 +47,12 @@ export function credentialsPath() {
 //      its credentials there and never writes the JSON file
 // Only the file source is refreshed out-of-band; for env/keychain the CLI
 // refreshes the token itself on the next query.
+// 审: macOS 钥匙串里 CLI 存凭据的条目名。
 const KEYCHAIN_SERVICE = 'Claude Code-credentials';
+// 审: 钥匙串读取要同步起子进程，缓存 30 秒。
 const KEYCHAIN_CACHE_TTL_MS = 30000;
 
+// 审: 按 环境变量→文件→钥匙串 的顺序找订阅凭据；测试直接引用所以保留 export。
 export function loadCredentials({
     env = process.env,
     platform = process.platform,
@@ -69,8 +79,10 @@ export function loadCredentials({
     return { source: null, creds: null };
 }
 
+// 审: 钥匙串/未找到结果的短期缓存（文件不缓存）。
 let credentialCache = null;
 
+// 审: 带缓存的 loadCredentials，避免每次状态查询都起 security 子进程；测试引用所以保留 export。
 export function loadCredentialsCached(load = loadCredentials, now = Date.now()) {
     // The keychain read spawns `security` synchronously (the event loop waits
     // for it); the file read is cheap and must stay fresh because refresh
@@ -84,12 +96,14 @@ export function loadCredentialsCached(load = loadCredentials, now = Date.now()) 
     return value;
 }
 
+// 审: 测试接缝，清掉凭据缓存。
 /** Test seam. */
 export function __resetCredentialCache() {
     credentialCache = null;
 }
 
-export function readCredentials() {
+// 审: 取当前凭据对象；只在本文件内用，去掉了 export。
+function readCredentials() {
     return loadCredentialsCached().creds;
 }
 
@@ -97,9 +111,12 @@ export function readCredentials() {
 
 // Bare status numbers only where they stand alone as a status: 「429」 in
 // "processed 242900 tokens" or "(4012)" in a message id is not an HTTP code.
+// 审: 独立出现的 401，供 isExpiredTokenError 判断。
 const STATUS_401 = /(?<!\d)401(?!\d)/;
+// 审: 独立出现的 429，供 isRateLimitError 判断。
 const STATUS_429 = /(?<!\d)429(?!\d)/;
 
+// 审: 判断错误文本是否是登录过期（chat.js 据此触发刷新重试）。
 export function isExpiredTokenError(text) {
     const s = String(text ?? '').toLowerCase();
     return (
@@ -115,11 +132,13 @@ export function isExpiredTokenError(text) {
     );
 }
 
+// 审: 判断错误文本是否是限流（chat.js 用）。
 export function isRateLimitError(text) {
     const s = String(text ?? '').toLowerCase();
     return STATUS_429.test(s) || s.includes('rate limit') || s.includes('too many requests');
 }
 
+// 审: 判断是否是 1M 上下文需要超额用量（chat.js 用）。
 export function isExtraUsageRequiredError(text) {
     const s = String(text ?? '').toLowerCase();
     return (s.includes('extra usage') && s.includes('1m'))
@@ -128,6 +147,7 @@ export function isExtraUsageRequiredError(text) {
         || (s.includes('usage credits required') && s.includes('1m'));
 }
 
+// 审: 判断是否是会话找不到（chat.js 用于重建会话重试）。
 export function isStaleSessionError(text) {
     const s = String(text ?? '').toLowerCase();
     return s.includes('no conversation found');
@@ -135,6 +155,7 @@ export function isStaleSessionError(text) {
 
 // ── Out-of-band token refresh (in-flight dedup) ──
 
+// 审: 正在进行的刷新（并发请求共用一次）。
 let inflightRefresh = null;
 
 /** The CLI binary the SDK runs (its per-platform package), or the configured one. */
@@ -148,6 +169,7 @@ function cliBinary() {
     }
 }
 
+// 审: 钥匙串凭据归 CLI 管：跑一次极小的 claude -p 让它自己刷新令牌。
 /** One minimal Haiku call, so the CLI refreshes and stores its own login token. */
 async function refreshViaCli() {
     const bin = cliBinary();
@@ -159,12 +181,14 @@ async function refreshViaCli() {
     });
 }
 
+// 审: 带并发去重的令牌刷新入口（chat.js 与额度查询用）。
 export function refreshOAuthToken() {
     if (inflightRefresh) return inflightRefresh;
     inflightRefresh = doRefresh().finally(() => { inflightRefresh = null; });
     return inflightRefresh;
 }
 
+// 审: 实际刷新逻辑：钥匙串交给 CLI，文件凭据走 refresh_token 并原子写回。
 async function doRefresh() {
     const path = credentialsPath();
     const { source, creds } = loadCredentials();
@@ -236,6 +260,7 @@ async function doRefresh() {
 
 // ── Quota polling ──
 
+// 审: 额度接口里要读的窗口名，顺序即展示顺序。
 const WINDOW_TYPES = [
     'five_hour',
     'seven_day',
@@ -245,20 +270,27 @@ const WINDOW_TYPES = [
     'seven_day_oauth_apps',
 ];
 
+// 审: 最近一次成功的额度快照。
 let quotaCache = null;
 
 // Upstream 429 backoff. The panel (and every phone / Mac panel open at once) asks on drawer open,
 // tab entry and after each reply; failures used to leave nothing cached, so each ask hit Anthropic
 // again and the log filled with 429s. While backing off, answer from the last good snapshot.
+// 审: 上游 429 后退避的下限。
 const BACKOFF_MIN_MS = 60000;
+// 审: 上游 429 后退避的上限（15 分钟）。
 const BACKOFF_MAX_MS = 15 * 60000;
+// 审: 当前退避状态（到期时间与已退避次数）。
 let backoff = { until: 0, step: 0 };
+// 审: 可替换的时钟，只为测试注入。
 let clock = () => Date.now();
 
+// 审: 测试接缝：假时钟与清空状态。
 /** Test hooks: a fake clock, and a clean slate. */
 export function __setQuotaClock(fn) { clock = fn; }
 export function __resetQuota() { quotaCache = null; backoff = { until: 0, step: 0 }; clock = () => Date.now(); }
 
+// 审: 解析 Retry-After 头（秒数或日期）为毫秒。
 /** Retry-After: delta-seconds or an HTTP date → ms from now, or null. */
 function parseRetryAfter(v, now) {
     if (v == null || v === '') return null;
@@ -268,6 +300,7 @@ function parseRetryAfter(v, now) {
     return Number.isFinite(at) ? Math.max(0, at - now) : null;
 }
 
+// 审: 退避期间返回的快照（旧数据标记 stale，或空壳 noData）。
 /** What to serve while upstream is rate-limiting: the last good numbers flagged stale, or an empty
  *  `noData` shell — both carry `retryAt` (ms epoch) so the panel can count down. */
 function backoffSnapshot() {
@@ -275,6 +308,7 @@ function backoffSnapshot() {
     return { ...base, stale: true, rateLimited: true, retryAt: backoff.until };
 }
 
+// 审: 拉取订阅额度（带缓存、401 刷新重试一次、429 退避）；handleQuota 与测试用。
 export async function fetchQuota({ force = false, retried = false } = {}) {
     const now = clock();
     if (!retried && now < backoff.until) return backoffSnapshot(); // even when forced: upstream said wait
@@ -360,6 +394,7 @@ export async function fetchQuota({ force = false, retried = false } = {}) {
     return quotaCache;
 }
 
+// 审: GET 额度接口的处理函数（routes.js 注册）。
 export async function handleQuota(_req, res) {
     const snapshot = await fetchQuota();
     if (snapshot?.noData) {
@@ -372,6 +407,7 @@ export async function handleQuota(_req, res) {
     return res.json({ ok: true, ...snapshot });
 }
 
+// 审: /status 里的凭据概况，无密钥无路径（server.js、status.js 用）。
 /** Lightweight credential summary for /status. No secrets, and no absolute
  *  path — /status is an unauthenticated GET and the credentials path leaks
  *  the OS username. */

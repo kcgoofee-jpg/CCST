@@ -13,8 +13,10 @@ import { dirname, join } from 'node:path';
 
 import { DATA_DIR } from '../paths.js';
 
+// 审: 控制台日志统一前缀（多个文件各自重复定义了一份，跨分区未合并）。
 const PLUGIN_TAG = '[claude-subscription]';
 
+// 审: 读 SDK 包自己的 package.json 得到版本号，读不到记 unknown；缓存 pin 和诊断都按它判断「SDK 换了」。
 function detectSdkVersion() {
     try {
         const req = createRequire(import.meta.url);
@@ -27,6 +29,7 @@ function detectSdkVersion() {
     return 'unknown';
 }
 
+// 审: 本进程实际运行的 SDK 版本，diag-report/turn-capture/usage-stats 使用。
 export const SDK_VERSION = detectSdkVersion();
 
 // ── Startup trace (#30) ──
@@ -35,11 +38,13 @@ export const SDK_VERSION = detectSdkVersion();
 // diagnose afterwards, so the version this process runs on is kept on disk and
 // a change is logged.
 
+// 审: 记录上次 SDK 版本的文件路径；测试环境默认不落盘，除非显式给环境变量（CLAUDE_SUBSCRIPTION_SDK_VERSION_FILE，仅测试使用）。
 function versionFile() {
     if (process.env.NODE_TEST_CONTEXT && !process.env.CLAUDE_SUBSCRIPTION_SDK_VERSION_FILE) return null;
     return process.env.CLAUDE_SUBSCRIPTION_SDK_VERSION_FILE || join(DATA_DIR, 'sdk-version.json');
 }
 
+// 审: 启动时对比上次版本，变了打一行日志并更新记录；plugin.js 和 server.js 启动时调用。
 /** Log one line when the SDK differs from the last run, then remember this one.
  *  @returns {string|null} the version the previous run recorded */
 export function noteSdkVersionRun() {

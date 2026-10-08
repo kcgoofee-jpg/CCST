@@ -20,14 +20,20 @@ import { createHash } from 'node:crypto';
 import { contentToText } from '../core/system-prompt.js';
 import { cacheWriteMultiplier, priceFor } from '../../shared/backends.js';
 
+// 审: 最多同时记住 6 个聊天的上一轮，防止内存无限增长。
 const MAX_CHATS = 6;
+// 审: 每个聊天上一轮的系统提示词+历史（仅内存），diagnoseCache 靠它和新请求对比。
 const previous = new Map(); // chatKey → { system, history: string[] }
+// 审: 每个诊断对象对应"它之前的聊天状态"，请求失败时 discardDiag 据此回滚。
 const undo = new WeakMap(); // diagnosis → the chat's state before it (discardDiag)
+// 审: 判断标题是否像世界书（只当作一种类别报告，不引用原文）。
 // Heading text that looks like world info (only ever named as a kind, never quoted).
 const LORE_TAG = /world|lore|世界|设定集|worldinfo/i;
 
+// 审: 短哈希，给聊天开头做 key，报告里不带任何正文。
 const hash = (s) => createHash('sha1').update(s).digest('hex').slice(0, 12);
 
+// 审: 没有面板传来的 chatKey 时，用聊天开头算出聊天标识，把各轮归到同一个聊天。
 /** Same chat across turns: the opening of the conversation — everything up
  *  to and including the first user message — doesn't change. (The first two
  *  messages alone are not enough: a preset's fake assistant acknowledgement
@@ -43,6 +49,7 @@ function chatKeyOf(history) {
     return hash(opening.join('\u0000'));
 }
 
+// 审: 两个字符串第一处不同的位置，完全相同返回 -1。
 function firstDiff(a, b) {
     const n = Math.min(a.length, b.length);
     let i = 0;
@@ -50,6 +57,7 @@ function firstDiff(a, b) {
     return i === n && a.length === b.length ? -1 : i;
 }
 
+// 审: 区分"换了预设"和"小改"，决定报告写整段重写还是局部变化。
 /** Most of the prompt replaced (another preset, not an edit): over 30% of
  *  the new prompt's text is in lines the old prompt did not have. A toggled
  *  entry or a world-info change adds a few lines; a different preset adds
@@ -62,6 +70,7 @@ function isRewrite(a, b) {
     return fresh > REWRITE_SHARE * b.length;
 }
 
+// 审: 识别"旧回复被预设正则改短"，没了它会把这种每轮必发生的变化误判成 swipe。
 /** `b` is `a` cut down: one stretch of it cut out (oneCutOut), or clearly
  *  shorter with every line of it already in `a` (only its <摘要> part kept, a
  *  status bar stripped). A swipe or a rewritten reply has lines of its own. */
@@ -75,6 +84,7 @@ function isCutDown(a, b) {
     return b.split('\n').every((line) => old.includes(flat(line)));
 }
 
+// 审: isCutDown 的子判断：b 只是 a 去掉中间一段或只留一段。
 /** `b` is `a` with one stretch taken out (果实「3楼外伏笔不发送」drops the seeds: part of an older
  *  reply, about 12% of it) or with only one stretch kept (「5楼外只发送摘要」keeps the end from
  *  <meow_FM>): what `b` has is a start and an end of `a`, nothing of its own. */
@@ -89,6 +99,7 @@ function oneCutOut(a, b) {
     return p + s === b.length && Math.min(p, s) > 0;
 }
 
+// 审: 栈出 offset 之前还没闭合的 XML 标签，用来给差异位置起名（只报标签名，不报正文）。
 function openTags(text, offset) {
     const base = Math.max(0, offset - 60000);
     const before = text.slice(base, offset);
@@ -107,9 +118,12 @@ function openTags(text, offset) {
     return stack;
 }
 
-export const HEADING_LABEL = '某个标题段落';
-export const LORE_HEADING_LABEL = '世界书标题段落';
+// 审: 差异落在 Markdown 标题段时的通用称呼（不引用标题原文）；只在本文件内用，测试靠字面量比对。
+const HEADING_LABEL = '某个标题段落';
+// 审: 同上，标题像世界书时的称呼。
+const LORE_HEADING_LABEL = '世界书标题段落';
 
+// 审: 给差异位置起名：优先最内层标签，其次标题类别；usage-stats / 测试用到所以保留 export。
 /** Innermost unclosed tag before `offset` as `<name>`; otherwise, if a
  *  heading line precedes it, a generic label (whether the heading looks like
  *  world info — never its text). */
@@ -122,6 +136,7 @@ export function nearestLabel(text, offset) {
     return LORE_TAG.test(headings[headings.length - 1][1]) ? LORE_HEADING_LABEL : HEADING_LABEL;
 }
 
+// 审: 缓存诊断主入口：每次聊天请求对比上一轮，找出系统提示词/历史从哪里开始变，chat.js 调用。
 /**
  * @param {string} systemText  the system prompt as sent to Claude
  * @param {Array} history      non-system messages (history + current turn)
@@ -197,6 +212,7 @@ export function diagnoseCache(systemText, history, { chatKey = null } = {}) {
     return diag;
 }
 
+// 审: 请求失败后回滚本轮记录，让重发不被误判成 reroll（chat.js 调用）。
 /** The request failed: nothing reached the cache, so the next one (a resend) is compared with the
  *  last request that went through, not with this one — else a resend reads as a reroll. */
 export function discardDiag(diag) {
@@ -208,6 +224,7 @@ export function discardDiag(diag) {
     if (u.prev) previous.set(u.key, u.prev);
 }
 
+// 审: 把诊断对象写成一行中文日志（chat.js 调用）。
 /** One human-readable line for the proxy log. */
 export function describeDiag(d) {
     if (!d) return null;
@@ -231,20 +248,11 @@ export function describeDiag(d) {
     return `缓存诊断：${parts.join('；')}`;
 }
 
+// 审: token 数缩写成 1.2k，给 explainCache 的 headline 用。
 const k = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
 
-/**
- * One request's cost in "equivalent input tokens" at Anthropic's list-price
- * ratios (same for every current Claude model): cache read 0.1×, cache
- * write by TTL (shared/backends.js cacheWriteMultiplier), output 5×. Subscription
- * quota accounting is not public; this is for comparing turns, presets and settings.
- */
-export function equivalentTokens(e) {
-    const p = costParts(e);
-    return Math.round(p.write + p.output + p.read + p.input);
-}
-
-/** equivalentTokens split by what it paid for (the panel's 「花在」), using the model's own price row
+// 审: 一次请求按 API 官方价比折成"等价输入 token"，按花在哪部分拆开（面板「花在」、usage-stats、apiValueUsd 用）。
+/** A request's cost in "equivalent input tokens" (list-price ratios), split by what it paid for (the panel's 「花在」), using the model's own price row
  *  where there is one (Opus 5.5 reads at 0.05×, Fable 5.1 at 0.025×); otherwise read 0.1×, output 5×.
  *  Output includes thinking. */
 export function costParts(e) {
@@ -259,6 +267,7 @@ export function costParts(e) {
     };
 }
 
+// 审: 折成 API 标价的美元数（usage-stats 用），没有价格行返回 null。
 /** What the request would cost at API list prices (USD), like a status line's session cost; null without a price row. */
 export function apiValueUsd(e) {
     const p = priceFor(e.model);
@@ -267,13 +276,7 @@ export function apiValueUsd(e) {
     return ((c.write + c.output + c.read + c.input) * p.input) / 1e6;
 }
 
-/**
- * The turn replay (turn-capture.js) stopped matching what the CLI sends: same chat,
- * same model, nothing changed in the prompt — yet the cache read did not grow past
- * what the previous turn wrote, so the whole history was re-written again.
- * `entry` / `prevEntry` are usage-stats records; the first turn of a chat (or after a
- * proxy restart) never counts.
- */
+// 审: 两种缓存 TTL 的毫秒数，cacheExpired 判断过期用。
 const TTL_MS = { '5m': 5 * 60_000, '1h': 60 * 60_000 };
 
 /**
@@ -291,6 +294,14 @@ export function cacheExpired(entry, prevEntry) {
     return { gapMin: Math.round(gap / 60_000), ttl };
 }
 
+// 审: 重放与 CLI 实际发送不一致的异常检测（usage-stats 调用）；没了它"内容没变却没读到"的提示就失效。
+/**
+ * The turn replay (turn-capture.js) stopped matching what the CLI sends: same chat,
+ * same model, nothing changed in the prompt — yet the cache read did not grow past
+ * what the previous turn wrote, so the whole history was re-written again.
+ * `entry` / `prevEntry` are usage-stats records; the first turn of a chat (or after a
+ * proxy restart) never counts.
+ */
 export function cacheAnomaly(entry, prevEntry) {
     if (!entry?.ok || !prevEntry?.ok) return false;
     if (cacheExpired(entry, prevEntry)) return false; // expired, not broken
@@ -302,6 +313,7 @@ export function cacheAnomaly(entry, prevEntry) {
     return (entry.cacheReadTokens ?? 0) < (prevEntry.cacheReadTokens ?? 0) + 0.5 * (prevEntry.cacheCreationTokens ?? 0);
 }
 
+// 审: 设置没动系统提示词却变了时，指出可疑脚本（状态卡片与诊断报告共用）。
 /**
  * The system prompt changed while SillyTavern's setup (preset, entries, post-processing, triggered
  * world info) stayed the same and the panel saw scripts / regexes running that rewrite prompts:
@@ -324,8 +336,10 @@ export function scriptSuspects(entry, prevEntry) {
 
 // Subscription weights measured on 2026-10-08 (Opus 4.6, 1 h cache, one run): output ≈ 4× a cache
 // write, a read ≈ 1/36 of a write. Only for comparing the parts of one turn, never turned into money.
+// 审: 订阅额度权重常量，仅 quotaParts 与 usage-stats 使用。
 export const QUOTA_WEIGHT = { output: 4, write: 1, read: 1 / 36 };
 
+// 审: 把一轮的订阅额度拆成 输出/写/读 三份（面板「花在」用）。
 /** What a turn spent of the subscription, by part (input not cached counts as a write). */
 export function quotaParts(e) {
     return {
@@ -335,6 +349,7 @@ export function quotaParts(e) {
     };
 }
 
+// 审: 判定本轮缓存状态 ok/part/full/first/expired/reroll（usage-stats 与 explainCache 用）。
 /**
  * Was the cache healthy this turn: how much of what the previous turn sent was read back.
  * The plain hit rate (read ÷ everything sent) drops with every long reply even when the cache
@@ -353,6 +368,7 @@ export function cacheState(entry, prevEntry = null) {
     return { state: reusePct >= 95 ? 'ok' : reusePct >= 30 ? 'part' : 'full', reusePct };
 }
 
+// 审: 找出把某条旧回复改短的深度正则名，只被 explainCache 用；测试直接引用所以保留 export。
 /** The depth regex (the panel's [name, minDepth] list) that reached a reply at `depth`: the deepest
  *  minDepth not below it — the one it just crossed. Named short: its 「[2]」-style number if the name
  *  has one, else the start of the name. Null when none fits. */
@@ -367,8 +383,10 @@ export function depthRegexAt(list, depth) {
     return best[0].match(/\[[^\]\s]{1,4}\]/)?.[0] ?? `「${best[0].slice(0, 6)}」`;
 }
 
+// 审: cacheState 状态码对应的面板标题。
 const STATE_TITLE = { ok: '缓存正常', part: '部分重写', full: '整段重写', first: '第一轮', expired: '缓存过期', reroll: '重新生成' };
 
+// 审: 面板展示用的缓存说明（usage-stats 调用）；reasons[0] 是一句话原因。
 /**
  * The last turn's cache in plain words, for the panel. `entry` / `prevEntry` are usage-stats
  * records (prevEntry: the request before it, if any). `reasons[0]` is the one-line why.
@@ -397,6 +415,7 @@ export function explainCache(entry, prevEntry = null) {
             reasons.push('世界书挪到发言前，只重写一轮');
         } else if (d.systemChanged) {
             reasons.push(d.rewrite ? '换了预设，整段重写' : `设定在 ${d.systemDiffLabel ?? `第 ${d.systemDiffAt.toLocaleString()} 字`} 变了，下轮恢复`);
+            // 审(存疑): 下面文案提到「改常驻」，6.1 已移除「设为常驻」功能，这句建议可能过时；按规则不改文案。
             if (d.systemDiffLabel === '<world_info>' || /world|世界/.test(d.systemDiffLabel ?? '')) reasons.push('关键词世界书每轮不同；改常驻就好');
         }
         if (d.historyDiffAt !== null && d.historyDiffAt !== undefined && !(d.systemChanged && switched)) {
@@ -426,6 +445,7 @@ export function explainCache(entry, prevEntry = null) {
     };
 }
 
+// 审: 测试接缝，清空各聊天的上一轮记录。
 /** Test seam. */
 export function __resetCacheDiag() {
     previous.clear();

@@ -26,18 +26,24 @@ import { scriptSuspects } from './cache-diag.js';
 import { recentLogLines } from './diag-log.js';
 import { capturedExchanges } from './wire-tap.js';
 
+// 审: CLI 在 system[0] 放的计费头前缀，用来识别它（它不参与缓存前缀）。
 const BILLING = 'x-anthropic-billing-header:';
+// 审: 6 位短哈希，报告里只放哈希不放正文。
 const sha = (s) => createHash('sha1').update(s).digest('hex').slice(0, 6);
+// 审: 数字缩写成 1.2k；null 显示 -。
 const k = (n) => (n == null ? '-' : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
+// 审: 时间戳格式化成 MM-DD HH:MM:SS。
 const hms = (t) => {
     const d = new Date(t);
     return `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${[d.getHours(), d.getMinutes(), d.getSeconds()].map((x) => String(x).padStart(2, '0')).join(':')}`;
 };
 
+// 审: 读 package.json 的版本号写进报告头。
 function pluginVersion() {
     try { return JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).version; } catch { return '?'; }
 }
 
+// 审: 把一个内容块转成文本（图片/思考块只给占位，用来算长度和哈希）。
 function blockText(b) {
     if (typeof b === 'string') return b;
     if (b?.type === 'text') return b.text ?? '';
@@ -46,6 +52,7 @@ function blockText(b) {
     return JSON.stringify(b);
 }
 
+// 审: 一个块的形状（种类/长度/哈希/缓存断点 TTL），不含正文。
 /** Shape of one block: kind, size, short hash, breakpoint TTL. No text. */
 function blockShape(b) {
     const t = blockText(b);
@@ -57,6 +64,7 @@ function blockShape(b) {
     return { kind, len: t.length, sha: kind === 'billing' ? 'billing' : sha(t), cc };
 }
 
+// 审: 请求形状；测试直接引用所以保留 export。
 /** Request shape: everything that decides the cache prefix, with no text. */
 export function shapeOf(body) {
     if (!body || typeof body !== 'object') return null;
@@ -77,9 +85,12 @@ export function shapeOf(body) {
     };
 }
 
+// 审: 块形状格式化成一小段文字。
 const fmtBlock = (b) => `${b.kind === 'text' ? '' : `${b.kind} `}${b.len}字${b.kind === 'billing' ? '' : ` ${b.sha}`}${b.cc ? ` ⚑${b.cc}` : ''}`;
+// 审: 块的比较键，计费头恒等（它每次都不同但不影响缓存）。
 const keyOf = (b) => (b.kind === 'billing' ? 'billing' : `${b.kind}:${b.len}:${b.sha}`);
 
+// 审: 两个请求形状第一处不同在哪（诊断报告"与 #N 比"一行）；测试引用所以保留 export。
 /** Where request `b` first differs from `a` (the cache prefix stops there). */
 export function firstDifference(a, b) {
     if (!a || !b) return null;
@@ -116,6 +127,7 @@ export function firstDifference(a, b) {
     return b.messages.length > a.messages.length ? '前缀完全一致，只在末尾新增 ✅' : '和上一条完全相同（重 roll 或重试）';
 }
 
+// 审: 把 Anthropic 返回的 usage 写成一行缓存读写统计。
 function usageLine(u) {
     if (!u) return '（没读到用量）';
     const split = u.cache_creation ? `（1h ${k(u.cache_creation.ephemeral_1h_input_tokens)} / 5m ${k(u.cache_creation.ephemeral_5m_input_tokens)}）` : '';
@@ -124,6 +136,7 @@ function usageLine(u) {
     return `读 ${k(u.cache_read_input_tokens)} 写 ${k(u.cache_creation_input_tokens)}${split} 未缓存 ${k(u.input_tokens)} 输出 ${k(u.output_tokens)} · 命中 ${pct}%`;
 }
 
+// 审: 把响应里的 ratelimit 头写成一行额度情况。
 function ratelimitLine(h) {
     const g = (s) => h?.[`anthropic-ratelimit-unified-${s}`];
     const parts = [
@@ -137,6 +150,7 @@ function ratelimitLine(h) {
     return parts.length ? parts.join(' · ') : '（没有额度头）';
 }
 
+// 审: 酒馆侧相比上一条请求变了什么（预设/后处理/世界书/可疑脚本）；测试引用所以保留 export。
 /** What changed on the SillyTavern side since the previous request of the same chat. */
 export function stChanges(e, prev) {
     const a = prev?.st;
@@ -154,6 +168,7 @@ export function stChanges(e, prev) {
     return suspects ? `酒馆没改设置，可能是: ${suspects.join(',')}（或改了角色卡 / 用户设定 / 作者注释）` : '';
 }
 
+// 审: 一条用量记录写成报告里的一行。
 function usageEntryLine(e, prev) {
     const start = e.at - (e.durationMs ?? 0);
     const gap = prev ? Math.round((start - (prev.at - (prev.durationMs ?? 0))) / 1000) : null;
@@ -164,11 +179,13 @@ function usageEntryLine(e, prev) {
         d.systemChanged && `系统@${d.systemDiffAt}${d.systemDiffLabel ? d.systemDiffLabel : ''}`,
         d.historyDiffAt != null && `${d.replyChanged ? '换回复' : d.summaryReplaced ? `正则改短(深${d.cutDepth})` : '历史'}@${d.historyDiffAt + 1}/${d.historyLen}`,
         d.tailRewritten && `尾部换新${d.tailRewritten}`,
+        // 审(存疑): volatileTags 现在没有任何代码写入，只可能出现在旧版本留在 usage.jsonl 的记录里；删掉会让旧记录少一段，故没动。
         d.volatileTags?.length && `移位${d.volatileTags.join('/')}`,
         d.chat && `聊天${d.chat.slice(0, 6)}`,
     ].filter(Boolean).join(' ');
     return [
         hms(e.at),
+        // 审: auxiliary（预设/扩展的安静调用）仍然存在，不是已移除的后台思考。
         e.auxiliary ? '后台' : '聊天',
         e.model,
         e.path ?? '-',
@@ -182,11 +199,13 @@ function usageEntryLine(e, prev) {
     ].filter(Boolean).join(' | ');
 }
 
+// 审: 生成文字报告（handleDiagReport / handleDiagFull 用，不含聊天正文）；只在本文件内用。
 /** The text report (no chat text). */
-export function buildReport({ usageCount = 20, exchangeCount = 12, logCount = 120 } = {}) {
+function buildReport({ usageCount = 20, exchangeCount = 12, logCount = 120 } = {}) {
     const out = [];
     out.push('## CCST 代理');
     out.push(`版本 ${pluginVersion()} · SDK ${SDK_VERSION} · Node ${process.version} · ${platform()} ${release()} ${arch()}`);
+    // 审(存疑): 列表里 ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN 对应的 API-key 路径已移除，但用户环境里设了它们会影响 CLI，仍是有用的诊断信息，且不能改报告数据，故保留。
     const env = ['CLAUDE_CODE_PROMPT_CACHE_TTL', 'FORCE_PROMPT_CACHING_5M', 'ENABLE_PROMPT_CACHING_1H', 'DISABLE_PROMPT_CACHING', 'CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY', 'HTTPS_PROXY', 'https_proxy', 'ALL_PROXY']
         .filter((n) => process.env[n] !== undefined)
         .map((n) => (/TOKEN|KEY/.test(n) ? `${n}=(已设置)` : /PROXY/.test(n) ? `${n}=(已设置)` : `${n}=${process.env[n]}`));
@@ -227,10 +246,12 @@ export function buildReport({ usageCount = 20, exchangeCount = 12, logCount = 12
     return out.join('\n');
 }
 
+// 审: GET /diag/report 的处理函数，返回文字报告（routes.js 注册）。
 export function handleDiagReport(_req, res) {
     res.type('text/plain; charset=utf-8').send(buildReport());
 }
 
+// 审: GET /diag/full 的处理函数（routes.js 注册，面板「导出诊断文件」用）。
 /** Everything, including the captured request bodies — these contain the chat. */
 export function handleDiagFull(_req, res) {
     res.json({

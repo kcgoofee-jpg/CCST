@@ -19,16 +19,20 @@ import { randomUUID } from 'node:crypto';
 
 import { repliesBefore } from './turn-capture.js';
 
+// 审: 日志前缀，diag-log 靠它收集本代理的日志行。
 const PLUGIN_TAG = '[claude-subscription]';
 
+// 审: 只认 base64 图片 data URL，其他图片来源会被丢弃（见 imageBlocksFromParts）。
 // Constrain to the legal base64 alphabet so the regex fails fast on garbage
 // instead of backtracking across multi-KB inputs.
 const DATA_URL_RE = /^data:(image\/[^;]+);base64,([A-Za-z0-9+/]+=*)$/;
 
+// 审: 生成伪造的 msg_/req_ id 后缀。
 function shortHex() {
     return randomUUID().replace(/-/g, '').slice(0, 24);
 }
 
+// 审: OpenAI image_url 部分转 Anthropic image 块；非 base64 data URL 丢弃并警告。
 function imageBlocksFromParts(parts) {
     const blocks = [];
     for (const p of parts) {
@@ -44,6 +48,7 @@ function imageBlocksFromParts(parts) {
     return blocks;
 }
 
+// 审: 取消息内容里的纯文本（字符串或 text 部分拼接）。
 function textFromContent(content) {
     if (typeof content === 'string') return content;
     if (Array.isArray(content)) {
@@ -56,6 +61,7 @@ function textFromContent(content) {
 }
 
 /** OpenAI user/tool message content → Anthropic user content (string or blocks). */
+// 审: 把消息内容转成 Anthropic user 内容；tool 消息转 tool_result。
 function userContentFromMessage(message) {
     const text = textFromContent(message.content);
 
@@ -76,7 +82,8 @@ function userContentFromMessage(message) {
     return text;
 }
 
-export function buildUserEntry({ message, parentUuid, meta }) {
+// 审: 构造一条合成的 user JSONL 记录；只在本文件内用。
+function buildUserEntry({ message, parentUuid, meta }) {
     return {
         parentUuid,
         isSidechain: false,
@@ -95,6 +102,7 @@ export function buildUserEntry({ message, parentUuid, meta }) {
     };
 }
 
+// 审: 构造一条合成的 assistant JSONL 记录（chat.js 也用它补占位回复）。
 export function buildAssistantEntry({ message, parentUuid, meta, model }) {
     const text = textFromContent(message.content);
     const toolCalls = Array.isArray(message.tool_calls) ? message.tool_calls : [];
@@ -140,6 +148,7 @@ export function buildAssistantEntry({ message, parentUuid, meta, model }) {
     };
 }
 
+// 审: 过滤空消息，避免空 content 块让后续每次 resume 都被 API 拒绝。
 /** A message with nothing renderable would replay as an empty content
  *  block, which the Messages API rejects ("text content blocks must be
  *  non-empty") — poisoning every subsequent resume of the chat. */
@@ -151,6 +160,7 @@ function hasRenderableContent(m) {
     return false;
 }
 
+// 审: 把历史拼成 SDK resume 重放的 JSONL 记录链，含逐轮还原与 CLI 上下文固定（chat.js、turn-capture 用）。
 /**
  * Build the parent-uuid-chained entry list the SDK's resume path replays.
  * System messages are excluded — they ride the SDK's `systemPrompt` option.
@@ -208,8 +218,10 @@ export function assembleEntries(history, meta, model, { replay = null, pinned = 
 // History split: prior turns → JSONL, trailing turn → SDK prompt
 // ──────────────────────────────────────────────
 
+// 审: 空历史（连接测试）时发给 SDK 的合成首条消息。
 const SYNTHETIC_START = '[Start]';
 
+// 审: chat.js 在以 user 结尾的记录后补这句占位回复，字节与 CLI 自己的一致。
 /** What the CLI puts between a transcript that ends on a user message and the next user message
  *  (its own placeholder reply, CLI 2.1.285 — seen in the requests it sends). */
 export const NO_RESPONSE_FILLER = 'No response requested.';
@@ -222,7 +234,8 @@ export const NO_RESPONSE_FILLER = 'No response requested.';
  * prefill is escaped to prevent tag breakout (prompt-injection hardening
  * from Marinara).
  */
-export function buildAssistantPrefillContinuationPrompt(prefill) {
+// 审: 助手预填的"续写"指令，仅 splitHistoryForResume 用，所以去掉 export。
+function buildAssistantPrefillContinuationPrompt(prefill) {
     const normalized = String(prefill ?? '').trimEnd();
     if (!normalized.trim()) {
         return "Continue the assistant's reply.";
@@ -239,6 +252,7 @@ export function buildAssistantPrefillContinuationPrompt(prefill) {
     ].join('\n');
 }
 
+// 审: 把消息拆成 历史(→JSONL) + 当前轮(→SDK prompt)，chat.js 用。
 /**
  * Split OpenAI messages into (history → JSONL) + (current → SDK prompt).
  *  - Trailing user/tool: history = rest; current = trailing.
@@ -274,6 +288,7 @@ export function splitHistoryForResume(messages) {
     };
 }
 
+// 审: 当前轮转 SDK 用户消息（带图片块必须走 AsyncIterable），chat.js 用。
 /**
  * Convert the current turn into the SDKUserMessage shape accepted when
  * `prompt` is an AsyncIterable (required to carry image blocks; a plain
@@ -287,6 +302,7 @@ export function currentToSdkUserMessage(message) {
     };
 }
 
+// 审: 把单条消息包成 SDK 流式输入需要的 AsyncIterable，chat.js 用。
 /** Single-element AsyncIterable wrapper for the SDK's streaming-input mode. */
 export async function* singleMessageStream(sdkUserMessage) {
     yield sdkUserMessage;

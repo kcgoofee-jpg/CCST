@@ -31,11 +31,15 @@ import { dirname, join } from 'node:path';
 import { DATA_DIR } from '../paths.js';
 import { SDK_VERSION } from './sdk-version.js';
 
+// 审: 控制台日志统一前缀（多个文件各自重复定义了一份，跨分区未合并）。
 const PLUGIN_TAG = '[claude-subscription]';
 
+// 审: 内存里最多记 400 轮，超出删最旧。
 const MAX_TURNS = 400;
+// 审: 已捕获的每轮 user 条目及附件，仅内存、不落盘。
 const captures = new Map(); // key → { entries: user entry + its attachments, contextPinned }
 
+// 审: 识别 CLI 记录的系统提示快照条目，回放/pin 时必须丢掉（测试直接使用）。
 /** The CLI's record of the system prompt (CLI 2.1.28x, rolled out per account): on a
  *  resume the CLI sends the recorded prompt instead of the one it was given. A record
  *  from an earlier turn — or, through the pin, from another chat — must never be
@@ -44,21 +48,25 @@ export function isRecordedPrompt(e) {
     return e?.type === 'attachment' && e?.attachment?.type === 'prompt_snapshot';
 }
 
+// 审: 消息文本 + 它所回复的上一条回复 → 记忆键；lore-tail.js 也用。
 /** Memory key of a player message: its text plus the reply it answers (see above). */
 export function turnKey(text, context = '') {
     return createHash('sha1').update(`${context ?? ''}\u0000${text}`).digest('hex');
 }
 
+// 审(存疑): 与 system-prompt.js 的 contentToText 近似（这里不校验 text 为字符串），行为不完全一致故未合并。
 function contentText(c) {
     if (typeof c === 'string') return c;
     if (Array.isArray(c)) return c.filter((b) => b?.type === 'text').map((b) => b.text).join('\n');
     return '';
 }
 
+// 审: 取转录条目里 user 消息的文本。
 function entryText(entry) {
     return contentText(entry?.message?.content);
 }
 
+// 审: 某位置之前最近的非空 assistant 回复，作为键的一部分（chat.js、测试使用）。
 /**
  * The reply a message at `index` answers: the text of the last non-blank
  * assistant message before it ('' if none). The proxy never changes
@@ -76,6 +84,7 @@ export function replyBefore(list, index) {
     return '';
 }
 
+// 审: replyBefore 对整个列表一次算完（chat.js、jsonl-entries 使用）。
 /** replyBefore for every index of `list`, in one pass. */
 export function repliesBefore(list) {
     const out = [];
@@ -90,6 +99,7 @@ export function repliesBefore(list) {
     return out;
 }
 
+// 审: 每次请求一个，从 SessionStore.append 里截取本轮 user 条目+附件并记下，下轮按原样回放以命中缓存。
 /**
  * Per-request collector for SessionStore.append(). Picks the user entry
  * whose text is the current prompt and the attachment entries that follow
@@ -140,8 +150,10 @@ export function createTurnCollector(currentText, keyText = currentText, model = 
     };
 }
 
+// 审: 环境变量 CLAUDE_SUBSCRIPTION_DEBUG_CAPTURE 开关捕获调试日志（没有文档，仅开发排查）。
 const debugCapture = () => /^(1|on|true)$/i.test(process.env.CLAUDE_SUBSCRIPTION_DEBUG_CAPTURE ?? '');
 
+// 审: 把一轮捕获深拷贝进 captures，超出上限删最旧。
 function remember(text, context, entries, contextPinned) {
     const key = turnKey(text, context);
     if (debugCapture()) console.log(`[claude-subscription] capture: 记下 ${key.slice(0, 8)}（${String(text).slice(0, 20)}… / 回复前文 ${String(context).length} 字）`);
@@ -150,6 +162,7 @@ function remember(text, context, entries, contextPinned) {
     while (captures.size > MAX_TURNS) captures.delete(captures.keys().next().value);
 }
 
+// 审: 把捕获条目重新挂到新转录里（新 uuid、新 parent/session/cwd），避免 uuid 重复导致 CLI 走错分支。
 /**
  * Copies of `entries` re-chained after `parentUuid`, with sessionId and cwd
  * of the new transcript.
@@ -194,6 +207,7 @@ function rechain(entries, parentUuid, meta) {
  * date again to every new message and the previous one would change.
  * `context`: the reply this message answers (replyBefore).
  */
+// 审: 预设只给最新玩家消息加包装时，允许的包装最大长度。
 // Presets that wrap only the newest player message (Kemini: a prompt-only
 // regex, maxDepth 1, puts it in <interactive_input>) send it wrapped on its
 // turn and bare the turn after, so the exact key never matched again and the
@@ -201,6 +215,7 @@ function rechain(entries, parentUuid, meta) {
 // When no exact key matches, a capture with the same reply context whose
 // text is this text plus a short wrapper is the same turn.
 const MAX_WRAPPER_CHARS = 200;
+// 审: 先精确找，找不到再容忍「原文加短包装」的同一轮；保证历史字节和当时发出的一致。
 function findCapture(text, context) {
     const exact = captures.get(turnKey(text, context));
     if (exact) return exact;
@@ -216,6 +231,7 @@ function findCapture(text, context) {
     return best;
 }
 
+// 审: 取出过往 user 轮的捕获并重新挂链（historyReplay 内部与测试使用）。
 export function replayTurn(text, parentUuid, meta, { pinOn = false, context = '' } = {}) {
     const found = findCapture(text, context);
     if (debugCapture()) console.log(`[claude-subscription] capture: 查 ${turnKey(text, context).slice(0, 8)}（${String(text).slice(0, 20)}… / 回复前文 ${String(context).length} 字）→ ${found ? '有' : '没有'}；已存 ${captures.size} 条`);
@@ -224,6 +240,7 @@ export function replayTurn(text, parentUuid, meta, { pinOn = false, context = ''
     return rechain(list, parentUuid, meta);
 }
 
+// 审: 一次扫描把若干旧版本文本换成新文本，最长优先、不重复替换（lore-tail.js 也用）。
 /**
  * `text` with every copy of any of `from` (one text or several versions)
  * replaced by `to`, in one pass: where one version contains another the
@@ -238,6 +255,7 @@ export function swapVersions(text, from, to) {
     return text.replace(re, () => to);
 }
 
+// 审: 预设后置条目变化时，把已捕获的旧轮里对应文本同步改掉（chat.js 使用）。
 /**
  * Replace `from` (one text or several versions) with `to` in the text of every
  * captured user entry; returns how many entries changed. Used when the preset's
@@ -259,12 +277,14 @@ export function rewriteCaptured(from, to) {
     return n;
 }
 
+// 审: 过往 user 消息当时实际发出的文本，找不到返回 null（chat.js 使用）。
 /** The text a past user message was actually sent with (null if unknown). */
 export function sentTextFor(text, context = '') {
     const found = findCapture(text, context);
     return found ? entryText(found.entries[0]) : null;
 }
 
+// 审: 给 assembleEntries 的回放/pin 回调；chat.js 使用。
 /**
  * The replay/pin callbacks for assembleEntries. `pinKey` null = no pin.
  * @returns {{ replay: Function|null, pinned: Function|null, pinOn: boolean }}
@@ -292,16 +312,20 @@ export function historyReplay(pinKey, { replay = true } = {}) {
 // adds nothing at the end. Kept per model (the model attachment names it) in
 // data/ — account/environment details, no chat text.
 
+// 审: 模型 → CLI 上下文附件（环境、日期等）的 pin，保证每次请求结构一致。
 const pins = new Map(); // model → attachment entries
+// 审: pin 文件是否已读过，只读一次。
 let pinsLoaded = false;
 
+// 审: pin 文件路径；环境变量 CLAUDE_SUBSCRIPTION_CONTEXT_PIN_FILE 可改或设 off 只留内存（测试使用）。
 function pinFile() {
     const env = process.env.CLAUDE_SUBSCRIPTION_CONTEXT_PIN_FILE;
-    if (env) return /^off$/i.test(env) ? null : env; // 'off': memory only, like CACHE_MEMORY_FILE
+    if (env) return /^off$/i.test(env) ? null : env; // 'off': memory only
     if (process.env.NODE_TEST_CONTEXT) return null;
     return join(DATA_DIR, 'cli-context.json');
 }
 
+// 审: 首次使用时读 pin 文件；SDK 版本不同就丢弃重来，避免错字节导致每轮全量重写缓存。
 function loadPins() {
     if (pinsLoaded) return;
     pinsLoaded = true;
@@ -328,6 +352,7 @@ function loadPins() {
     console.log(`${PLUGIN_TAG} SDK 版本 ${from}→${SDK_VERSION}，已重置 CLI 上下文 pin，本轮缓存会全量重写一次`);
 }
 
+// 审: 先写临时文件再改名，防止中途被杀留下半个 JSON。
 function writePinFile(f) {
     try {
         mkdirSync(dirname(f), { recursive: true });
@@ -340,6 +365,7 @@ function writePinFile(f) {
     } catch { /* memory only */ }
 }
 
+// 审: 记下某模型的第一份上下文作为 pin（已有则保留不改）。
 export function pinContext(model, entries) {
     loadPins();
     if (pins.has(model)) return; // keep the first one: changing it would change every request (later changes ride on their turn, see replayTurn)
@@ -348,11 +374,13 @@ export function pinContext(model, entries) {
     if (f) writePinFile(f);
 }
 
+// 审: 该模型是否已有 pin。
 export function hasPinnedContext(model) {
     loadPins();
     return pins.has(model);
 }
 
+// 审: 返回重新挂链后的 pin 条目，没有返回 null。
 /** The pinned context for this model, re-chained after `parentUuid`; null if none yet. */
 export function pinnedContext(model, parentUuid, meta) {
     loadPins();
@@ -366,6 +394,7 @@ export function pinnedContext(model, parentUuid, meta) {
     });
 }
 
+// 审: CLI 行为变了，清空捕获和 pin 并删文件；usage-stats 与本文件使用。
 /** The CLI changed what it sends (update, or a replay that stopped matching): nothing
  *  captured or pinned still fits, so start over — the next turn rewrites the cache once. */
 export function resetReplayState(reason) {
@@ -378,9 +407,12 @@ export function resetReplayState(reason) {
     console.warn(`${PLUGIN_TAG} ${reason}`);
 }
 
+// 审: 连续几轮没捕获到就判定捕获坏了，重置。
 const REPLAY_RESET_AFTER_MISSES = 3;
+// 审: 连续没捕获的轮数。
 let replayMissStreak = 0;
 
+// 审: 每轮结束后检查捕获是否成功，连续失败则重置（chat.js 使用）。
 /** One resume turn, checked after the request ended: `captured` false means the CLI did not
  *  write the transcript entry we replay, so every turn from now on would re-write the whole
  *  history. After a few turns of that the capture is clearly broken — reset it (#26).
@@ -397,6 +429,7 @@ export function noteReplayHealth(captured) {
     return true;
 }
 
+// 审: 测试接缝，清空捕获和 pin。
 /** Test seam. */
 export function __resetTurnCaptures() {
     captures.clear();
@@ -405,6 +438,7 @@ export function __resetTurnCaptures() {
     replayMissStreak = 0;
 }
 
+// 审: 测试接缝，让下次使用重新读 pin 文件。
 /** Test seam — read the pin file again on next use. */
 export function __reloadPinsForTesting() {
     pins.clear();

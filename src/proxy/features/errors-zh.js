@@ -6,6 +6,7 @@
 // say what happened and what to do — in Chinese — while keeping the raw
 // upstream text for debugging. Order matters: first match wins.
 
+// 审: 错误文本 → 中文说明的规则表，按顺序第一条匹配的生效。
 const RULES = [
     {
         code: 'output_limit',
@@ -93,6 +94,7 @@ const RULES = [
     },
 ];
 
+// 审: 把上游错误文本归类成 {code, message, hint, raw}（chat.js、usage-stats 用）。
 /**
  * @param {string} raw upstream error text
  * @returns {{ code: string, message: string, hint: string, raw: string }}
@@ -112,6 +114,7 @@ export function explainError(raw) {
     };
 }
 
+// 审: 拼成发给酒馆的一行用户可见错误文本（chat.js 用）。
 /** One-line user-facing text: 中文说明 + 办法 + 原始错误. */
 export function formatErrorForUser(raw) {
     const e = explainError(raw);
