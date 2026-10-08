@@ -55,14 +55,14 @@ export function buildSettingsTab(pane, settings, save) {
         onChange: (v) => { settings.cacheTtl = v === '5m' ? '5m' : '1h'; save(); },
     }));
     cache.body.append(toggleRow({
-        id: 'claudeMaxLoreTail', title: '条目后移',
-        tip: '世界书挪到发言前；状态卡请关',
+        id: 'claudeMaxLoreTail', title: '世界书后移',
+        tip: '触发的世界书放到发言前，省缓存；卡里有状态栏的请关',
         checked: settings.loreTail, onChange: (v) => { settings.loreTail = v; save(); },
     }));
     pane.append(cache.root);
 
     const view = group('检查');
-    view.body.append(button('发送内容', () => F.debug.showDebugRequest(), { icon: 'fa-magnifying-glass', text: true, id: 'claude_max_debug_view' }));
+    view.body.append(button('查看发送内容', () => F.debug.showDebugRequest(), { icon: 'fa-magnifying-glass', text: true, id: 'claude_max_debug_view' }));
     pane.append(view.root);
 
     const again = el('button', 'cm-link-btn cm-guide-again', '重看引导');

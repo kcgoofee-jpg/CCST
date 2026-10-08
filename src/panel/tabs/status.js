@@ -20,10 +20,10 @@ export function statusAdvisories(status, endpoint) {
     const out = [];
     if (!status || status.phase !== 'online') return out;
     if (status.compat && status.compat.ok === false) {
-        out.push({ tone: 'error', text: `组件过旧：缓存会失效，照文档重装 SDK（缺 ${status.compat.missing?.join('、') || '功能'}）` });
+        out.push({ tone: 'error', text: `组件过旧：再运行一次安装那一行（缺 ${status.compat.missing?.join('、') || '功能'}）` });
     }
     if (typeof status.foldStreak === 'number' && status.foldStreak > 3) {
-        out.push({ tone: 'warn', text: `${status.foldStreak} 轮重写：多半是上一条的原因` });
+        out.push({ tone: 'warn', text: `连续 ${status.foldStreak} 轮整段重写：原因看「上一轮」` });
     }
     // 走酒馆同源路由时，答复的可能是端口上另一个代理实例（#36）。
     const actual = status.via === 'plugin' ? status.endpoint : null;
@@ -53,8 +53,8 @@ function checkInlineCot() {
     const tag = match[1];
     tip.hidden = false;
     tip.replaceChildren(
-        el('div', 'cm-note-title', '正文思考'),
-        el('small', 'cm-hint', `「推理→自动解析」填 <${tag}>`),
+        el('div', 'cm-note-title', '思考混进了正文'),
+        el('small', 'cm-hint', `「高级格式 → 推理」开自动解析，前缀填 <${tag}>`),
     );
 }
 
@@ -224,11 +224,11 @@ function usageTable(today, week) {
     const rows = [
         ['次数', (a) => String(a.requests)],
         ...(cols.some(([, a]) => a.failed) ? [['失败', (a) => String(a.failed ?? 0)]] : []),
-        ['写回复', (a) => fmtK(a.outputTokens)],
+        ['输出', (a) => fmtK(a.outputTokens)],
         ['平均用时', (a) => fmtSec(a.avgDurationMs)],
         ['等首字', (a) => fmtSec(a.avgTtftMs)],
         ['缓存正常', (a) => fmtPct(a.cacheOkRate)],
-        ['花在', (a) => quotaShares(a.quota).slice(0, 2).map((p) => `${p.label}${p.pct}%`).join(' ') || '–'],
+        ['额度大头', (a) => { const [top] = quotaShares(a.quota); return top ? `${top.label} ${top.pct}%` : '–'; }],
     ];
     for (const [label, fn] of rows) {
         const tr = el('tr');
@@ -238,7 +238,8 @@ function usageTable(today, week) {
     return table;
 }
 
-const QUOTA_LABELS = { output: '写回复', write: '写缓存', read: '读缓存' };
+// 和 DeepSeek 后台一样只用三个词：命中（读缓存）、未命中（写缓存 + 没走缓存的输入）、输出
+const QUOTA_LABELS = { output: '输出', write: '未命中', read: '命中' };
 
 /** The proxy's subscription-weighted parts (cache-diag.js quotaParts) as shares, biggest first; parts under 1% dropped. */
 export function quotaShares(quota) {
@@ -249,34 +250,6 @@ export function quotaShares(quota) {
         .map((key) => ({ key, label: QUOTA_LABELS[key], pct: Math.round((100 * (quota[key] || 0)) / total) }))
         .filter((p) => p.pct >= 1)
         .sort((x, y) => y.pct - x.pct);
-}
-
-/** A labelled bar: title and a value on top, coloured parts, a legend under it. parts: [key, share 0..1, legend text]. */
-function meter(title, value, parts) {
-    const box = el('div', 'cm-meter');
-    const top = el('div', 'cm-meter-top');
-    top.append(el('span', null, title), el('span', null, value));
-    const bar = el('div', 'cm-meter-bar');
-    const legend = el('div', 'cm-meter-legend');
-    for (const [key, share, text] of parts) {
-        if (share > 0) {
-            const seg = el('span', `cm-seg-${key}`);
-            seg.style.width = `${Math.max(2, share * 100)}%`;
-            bar.append(seg);
-        }
-        const item = el('span');
-        item.append(el('i', `cm-seg-${key}`), text);
-        legend.append(item);
-    }
-    box.append(top, bar, legend);
-    return box;
-}
-
-/** Output tokens per second while writing (after the first token), like claude-hud's speed; null when too short to mean anything. */
-export function outputSpeed(e) {
-    const ms = (e?.durationMs ?? 0) - (e?.ttftMs ?? 0);
-    if (!e?.outputTokens || ms < 500) return null;
-    return Math.round(e.outputTokens / (ms / 1000));
 }
 
 // Models with a 1M context of their own (no [1m] suffix needed).
@@ -302,30 +275,37 @@ function lastTurnCard(data) {
     head.append(el('span', 'cm-cache-dot'), el('b', null, c.title));
     if (last?.durationMs) head.append(el('span', 'cm-cache-meta', fmtSec(last.durationMs)));
     card.append(head, el('small', 'cm-cache-sub', c.reasons[0] ?? ''));
-    const fresh = c.wrote + (last?.inputTokens ?? 0);
-    const sent = c.read + fresh;
-    if (sent) {
-        card.append(meter('这轮发出的内容', fmtK(sent), [
-            ['read', c.read / sent, `读缓存 ${fmtK(c.read)}`],
-            ['write', fresh / sent, `新写入 ${fmtK(fresh)}`],
-        ]));
+    const miss = c.wrote + (last?.inputTokens ?? 0);
+    if (c.read + miss) {
+        // 三块：数字居中放大，名称缩在左下角
+        const tiles = el('div', 'cm-tiles');
+        for (const [key, label, n] of [['read', '命中', c.read], ['write', '未命中', miss], ['output', '输出', last?.outputTokens ?? 0]]) {
+            const t = el('div', `cm-tile cm-tile-${key}`);
+            t.append(el('b', null, fmtK(n)), el('small', null, label));
+            tiles.append(t);
+        }
+        card.append(tiles);
     }
     const shares = quotaShares(c.quota);
     if (shares.length) {
-        const pct = Object.fromEntries(shares.map((p) => [p.key, p.pct]));
-        card.append(meter('额度花在', `大头：${shares[0].label}`, ['output', 'write', 'read'].map((key) => [key, (pct[key] ?? 0) / 100, `${QUOTA_LABELS[key]} ${pct[key] ?? 0}%`])));
-        if (shares[0].key === 'output') card.append(el('small', 'cm-cache-tip', '思维链和正文越长越费'));
+        const top = shares[0];
+        const box = el('div', 'cm-meter');
+        const head = el('div', 'cm-meter-top');
+        head.append(el('span', null, '额度'), el('span', null, `${top.pct}% 花在${top.label}${top.key === 'output' ? '：回复和思考越长越费' : ''}`));
+        const bar = el('div', 'cm-meter-bar');
+        for (const p of shares) { const seg = el('span', `cm-seg-${p.key}`); seg.style.width = `${Math.max(2, p.pct)}%`; seg.title = `${p.label} ${p.pct}%`; bar.append(seg); }
+        box.append(head, bar);
+        card.append(box);
     }
     const more = el('details', 'cm-mini');
     more.append(el('summary', null, '详情'));
     if (last) {
-        const speed = outputSpeed(last);
-        more.append(el('small', 'cm-hint', `用时 ${fmtSec(last.durationMs)}${speed ? ` · 每秒 ${speed}` : ''}`));
-        const ctx = contextUse(last);
-        if (ctx) more.append(el('small', `cm-hint cm-ctx ${ctx.level}`, `上下文 ${ctx.pct}%（${fmtK(ctx.tokens)} / ${fmtK(ctx.size)}）${ctx.level === 'critical' ? '：快满了，早期内容会丢' : ''}`));
         const ph = last.phases;
         const sec = (v) => (v / 1000).toFixed(1);
-        if (ph?.init && ph.firstDelta) more.append(el('small', 'cm-hint', `等首字 ${sec(ph.firstDelta)} 秒：本机 ${sec(ph.init)}，Claude ${sec(ph.firstDelta - ph.init)}`));
+        const wait = last.ttftMs ? `，等第一个字 ${sec(last.ttftMs)} 秒${ph?.init ? `（CCST 准备占 ${sec(ph.init)} 秒）` : ''}` : '';
+        more.append(el('small', 'cm-hint', `用时 ${fmtSec(last.durationMs)}${wait}`));
+        const ctx = contextUse(last);
+        if (ctx) more.append(el('small', `cm-hint cm-ctx ${ctx.level}`, `上下文用了 ${ctx.pct}%（${fmtK(ctx.tokens)} / ${fmtK(ctx.size)}）`));
     }
     for (const r of c.reasons.slice(1)) more.append(el('small', 'cm-hint', r));
     card.append(more);
@@ -356,7 +336,7 @@ function renderStats(stats) {
     if (stats.phase !== 'ok') return;
     const data = stats.data;
     lastBox?.replaceChildren(data.lastCache ? lastTurnCard(data)
-        : stateLine('empty', data.lastRequest ? '上一轮失败，原因在「用量」' : '还没有回复'));
+        : stateLine('empty', data.lastRequest ? '上一轮失败，原因见下面「用量」' : '还没有回复'));
     box.replaceChildren();
     const sum = document.getElementById('claude_max_usage_sum');
     if (sum) sum.textContent = data.week?.requests ? `7 天 ${data.week.requests} 次` : '7 天没用过';
@@ -492,7 +472,7 @@ function buildDiagGroup() {
     const g = group('反馈');
     // One file with everything: the readable report first, then the raw data (captured requests, last full
     // request). Users send the file instead of pasting a wall of text into a chat box.
-    const save = button('导出日志', async () => {
+    const save = button('导出诊断', async () => {
         save.disabled = true;
         try {
             const [report, full] = await Promise.all([
@@ -513,7 +493,7 @@ function buildDiagGroup() {
             save.disabled = false;
         }
     }, { icon: 'fa-download', primary: true });
-    save.title = '出问题时私发给作者';
+    save.title = '出问题时导出，私发给作者';
     g.body.append(save);
     return g.root;
 }

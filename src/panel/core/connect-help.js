@@ -66,7 +66,7 @@ export function connectHelp({ host = 'desktop' } = {}) {
     if (host === 'tauri' || host === 'elsewhere') {
         return {
             ...base,
-            sub: '到那台电脑上运行 npm start',
+            sub: '到运行酒馆的电脑上运行 npm start',
             downloads: [remoteItem('docs', '安装说明', DOCS_URL)],
             hint: '',
         };
@@ -86,7 +86,7 @@ export function connectHelp({ host = 'desktop' } = {}) {
  */
 export function installHelp({ host = 'desktop' } = {}) {
     if (host === 'tauri' || host === 'elsewhere') {
-        return { sub: '在那台电脑上装好 CCST', mac: null, win: null, docs: DOCS_URL };
+        return { sub: '在运行酒馆的电脑上装好 CCST', mac: null, win: null, docs: DOCS_URL };
     }
     const [win] = desktopDownloads().filter((d) => d.key === 'win');
     return {
@@ -100,7 +100,7 @@ export function installHelp({ host = 'desktop' } = {}) {
 /** 首次引导第 2 步「登录」：要运行的那一条命令和它在哪儿运行。 */
 export function loginHelp({ host = 'desktop' } = {}) {
     return {
-        where: host === 'desktop' ? '在酒馆文件夹的 plugins/CCST 里运行：' : '在运行代理那台电脑的 CCST 文件夹里运行：',
+        where: host === 'desktop' ? '在酒馆文件夹的 plugins/CCST 里运行：' : '在运行酒馆的电脑上，进 CCST 文件夹运行：',
         cmd: 'npm run login',
     };
 }
@@ -120,7 +120,7 @@ export function mismatchHelp({ side, proxyVersion, panelVersion, runtime = null,
     const REFRESH_STEP = isTT ? '完全退出 TauriTavern 再打开。' : REFRESH;
         if (side === 'panel') {
         return {
-            sub: `面板 v${panelVersion} 比服务 v${proxyVersion} 旧，请更新：`,
+            sub: `面板 v${panelVersion} 比代理 v${proxyVersion} 旧，请更新：`,
             steps: [
                 { text: '「扩展 → 管理扩展」里更新 CCST。' },
                 { text: REFRESH_STEP },
@@ -128,7 +128,7 @@ export function mismatchHelp({ side, proxyVersion, panelVersion, runtime = null,
             downloads: [], hint: '',
         };
     }
-    const sub = `服务 v${proxyVersion} 比面板 v${panelVersion} 旧，请更新：`;
+    const sub = `代理 v${proxyVersion} 比面板 v${panelVersion} 旧，请更新：`;
     const standaloneSteps = [
         { text: '在 CCST 文件夹运行：', cmd: 'git pull && npm install' },
         { text: '关掉运行 npm start 的窗口，再运行一次。' },
@@ -137,7 +137,7 @@ export function mismatchHelp({ side, proxyVersion, panelVersion, runtime = null,
         // No plugin installer on these hosts: the proxy is the standalone one on another machine.
         return {
             sub,
-            steps: [...(host === 'elsewhere' ? [{ text: '到运行酒馆的那台电脑上操作。' }] : []), ...standaloneSteps, { text: REFRESH_STEP }],
+            steps: [...(host === 'elsewhere' ? [{ text: '到运行酒馆的电脑上操作。' }] : []), ...standaloneSteps, { text: REFRESH_STEP }],
             downloads: isTT ? [] : [remoteItem('docs', '使用指南', DOCS_URL)],
             hint: '',
         };

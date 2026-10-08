@@ -52,7 +52,7 @@ const cred = credentialSummary();
 if (cred.present) {
     console.log(`${TAG} 已找到订阅凭据（来源: ${cred.source}，类型: ${cred.subscriptionType}${cred.expired ? '，access token 已过期，下次对话时 CLI 会自动刷新' : ''}）`);
 } else {
-    console.warn(`${TAG} 未找到订阅凭据 — 请先在扩展目录运行 npm run login 登录订阅账号（或设置 CLAUDE_CODE_OAUTH_TOKEN）`);
+    console.warn(`${TAG} 未找到订阅凭据 — 在酒馆的 plugins/CCST 里运行 npm run login 登录`);
 }
 console.log(`${TAG} 在酒馆里把 Custom (OpenAI-compatible) 端点设为 http://127.0.0.1:${port}/v1，或使用 CCST 面板一键连接。Ctrl+C 退出。`);
 

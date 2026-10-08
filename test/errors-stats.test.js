@@ -142,7 +142,7 @@ test('user-facing failure texts: no preset names, no English sentences, plugin-f
     assert.match(login.hint, /plugins\/CCST.*npm run login/);
     assert.doesNotMatch(login.hint, /酒馆工具/, '6.1 removed the SillyTavern tools menu');
     assert.equal(explainError('???').message, '失败了');
-    assert.match(explainError('???').hint, /导出日志/);
+    assert.match(explainError('???').hint, /导出诊断/);
 });
 
 test('the last-turn card compares with the previous successful request, and a resend after a failure is no reroll', async () => {

@@ -66,7 +66,7 @@ test('状态: no 缓存建议; the last-turn line leaves the model to the header
     assert.ok(!status.includes('世界书缓存') && !status.includes('记录原始请求'));
     // One export button (report + raw data in one file).
     assert.ok(!status.includes("button('复制诊断报告'") && !status.includes("button('下载完整请求'"));
-    assert.ok(status.indexOf("button('导出日志'") > 0);
+    assert.ok(status.indexOf("button('导出诊断'") > 0);
     assert.equal(status.split("button('导出").length, 2, 'exactly one export button');
 });
 

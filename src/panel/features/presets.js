@@ -38,7 +38,7 @@ export function adoptUnrecordedReco() {
 // A preset can ship `extensions.claude_max = { loreTail, cacheTtl }`; switching to it applies those
 // values (and switching away restores them). Fields of older versions (effort, thinking, …) are ignored.
 const PRESET_FIELDS = {
-    loreTail: { label: '条目后移', valid: (v) => typeof v === 'boolean' },
+    loreTail: { label: '世界书后移', valid: (v) => typeof v === 'boolean' },
     cacheTtl: { label: '缓存时长', valid: (v) => v === '1h' || v === '5m' },
 };
 
@@ -74,7 +74,7 @@ export async function applyModelProfile() {
             if (changed) { pm.render(); pm.saveServiceSettings(); }
         }
     }
-    if (done.length) notify('info', '随模型调', `${shortModel(model)}：${done.join('；')}`, { ms: 5000 });
+    if (done.length) notify('info', '按模型调', `${shortModel(model)}：${done.join('；')}`, { ms: 5000 });
 }
 
 function applyPresetRecoCore() {

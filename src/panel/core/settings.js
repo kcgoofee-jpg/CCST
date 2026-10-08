@@ -19,6 +19,7 @@ export const defaultSettings = {
     presetRecoRecord: null,  // 上一个预设的推荐改了什么（切走时恢复）
     loreTail: true,          // 关键词触发的世界书移到本轮消息（省缓存，见 README「世界书移到本轮消息」）
     skipVersion: '',         // 「这一版不再提醒」点过的版本号
+    hideConnectFor: '',      // 在用别的连接时点过「关掉」：记下那个连接，换成别的连接再提示
     cacheTtl: '1h',          // 缓存有效期：'1h'（默认，写入 2 倍价）| '5m'（写入 1.25 倍，停 5 分钟以上就整段重写）
     onboarded: false,        // 首次引导：走完、跳过、或打开时已经连上了
     guideSource: '',         // 引导：'' 没开始；非空 = 进行中（'on'；旧版的 'choose' / 'proxy' 同样算进行中）

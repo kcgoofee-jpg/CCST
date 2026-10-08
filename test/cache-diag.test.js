@@ -54,9 +54,9 @@ test('explainCache: system change, history rewrite, effort switch', () => {
     assert.match(c.reasons[0], /设定在 <world_info> 变了/);
     assert.doesNotMatch(c.reasons.join('\n'), /单独缓存/, 'the CLI sends the system prompt as one block: no split claim');
     assert.match(c.reasons.join('\n'), /第 6 楼起变了/);
-    assert.match(c.reasons.join('\n'), /改常驻/);
+    assert.match(c.reasons.join('\n'), /世界书后移/);
     const sw = explainCache(e({ cacheReadTokens: 0, cacheDiag: { firstTurn: false, systemChanged: false, historyDiffAt: null } }), e({ effort: 'medium' }));
-    assert.match(sw.reasons.join(), /思考深度/);
+    assert.match(sw.reasons.join(), /推理强度/);
     const first = explainCache(e({ cacheDiag: { firstTurn: true } }));
     assert.equal(first.state, 'first');
     assert.equal(first.title, '第一轮');
@@ -168,7 +168,7 @@ test('prompt changed with the SillyTavern setup unchanged: scripts named as a ma
     const prev = { ok: true, model: 'm', chatKey: 'k', st: { ...st } };
     const blamed = (entry, p = prev) => explainCache(entry, p).reasons.some((x) => /设置没动/.test(x));
     const r = explainCache(e, prev).reasons;
-    assert.match(r[0], /设置没动却变了.*查脚本.*泉此方悬浮窗/);
+    assert.match(r[0], /没改设置却变了.*可能是脚本.*泉此方悬浮窗/);
     assert.ok(!blamed(e, { ...prev, st: { ...st, preset: '衡' } }), 'a preset switch is a setting change');
     assert.ok(!blamed({ ...e, st: { ...st, mut: [] } }), 'no script running: no claim');
     assert.ok(!blamed({ ...e, cacheDiag: { ...d, loreMoved: ['Lore'] } }), 'lore moved explains it');
@@ -221,10 +221,10 @@ test('a reroll that read nothing does not claim it read everything', async () =>
     const { explainCache } = await import('../src/proxy/features/cache-diag.js');
     const base = { ok: true, model: 'claude-opus-5-5', inputTokens: 2, outputTokens: 2600, cacheTtl: '1h' };
     const missed = explainCache({ ...base, cacheReadTokens: 0, cacheCreationTokens: 39878, cacheDiag: { chat: 'p1', firstTurn: false, reroll: true, systemChanged: true, systemDiffAt: 5609, systemDiffLabel: '<story_setting>', historyDiffAt: null, historyLen: 2 } });
-    assert.match(missed.reasons[0], /^重新生成，但整段重写了/);
+    assert.match(missed.reasons[0], /^重新生成，但没命中/);
     assert.match(missed.reasons.join('\n'), /设定在 <story_setting> 变了/);
     const hit = explainCache({ ...base, cacheReadTokens: 65385, cacheCreationTokens: 0, cacheDiag: { chat: 'p1', firstTurn: false, reroll: true, systemChanged: false, historyDiffAt: null, historyLen: 6 } });
-    assert.match(hit.reasons[0], /几乎全读缓存/);
+    assert.match(hit.reasons[0], /全部命中/);
 });
 
 // ── 果实V6.3: depth regexes cut older replies every turn, and the preset ends on an assistant prefill ──

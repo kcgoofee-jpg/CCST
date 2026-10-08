@@ -40,7 +40,7 @@ export async function noticeLastTurn() {
             notify('info', '没用上 1M', '暂时不可用，约 1 小时后再试', { ms: 12000 });
         }
         if (notices.includes('replay-reset')) {
-            notify('warn', '已修复', '这轮重写缓存，下轮恢复', { ms: 15000 });
+            notify('warn', '缓存接不上', '已重置：这轮多写一次，下轮恢复', { ms: 15000 });
         }
     } catch { /* proxy unreachable: the status block already says so */ }
 }

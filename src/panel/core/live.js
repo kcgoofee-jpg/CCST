@@ -41,8 +41,8 @@ export function versionMismatch(proxyVersion, panelV = panelVersion) {
     const side = mismatchSide(proxyVersion, panelV);
     if (!side) return null;
     return side === 'proxy'
-        ? `CCST 服务 v${proxyVersion} 比面板 v${panelV} 旧，请更新`
-        : `面板 v${panelV} 比服务 v${proxyVersion} 旧，请更新`;
+        ? `代理 v${proxyVersion} 比面板 v${panelV} 旧，请更新`
+        : `面板 v${panelV} 比代理 v${proxyVersion} 旧，请更新`;
 }
 
 const glancePatch = (partial) => store.merge('glance', partial);
@@ -71,7 +71,7 @@ export async function refreshStatus() {
             const key = `${panelVersion}|${data.version}`;
             if (warnedVersions !== key) {
                 warnedVersions = key;
-                notify('warn', '版本不配', '更新后重启酒馆', { ms: 15000 });
+                notify('warn', '版本对不上', '按状态页的步骤更新', { ms: 15000 });
             }
         }
         store.set({
@@ -102,7 +102,7 @@ export const HEARTBEAT_MS = 20000;
 let heartbeatDown = false;
 
 export async function heartbeat() {
-    if (!getSettings().enabled || document.hidden) return;
+    if (document.hidden) return;
     let up = false;
     let status = 0;
     try {
@@ -121,7 +121,7 @@ export async function heartbeat() {
         if (status === 401 || status === 403) {
             notify('bad', '本机专用', '只给装它的那台电脑用', { ms: 0, replace: 'proxy' });
         } else {
-            notify('bad', '重连中', '看看那台电脑是否开着', { ms: 0, replace: 'proxy' });
+            notify('bad', '重连中', '看看酒馆的终端窗口还开着吗', { ms: 0, replace: 'proxy' });
         }
         refreshStatus();
     } else if (up && heartbeatDown) {

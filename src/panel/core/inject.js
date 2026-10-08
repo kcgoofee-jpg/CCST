@@ -42,7 +42,7 @@ function preflightCheck(data) {
         ? `「${asked[0].slice(0, 40)}」：`
         : `「${preset}」：`;
     notify('warn', '可能被拦',
-        `${where}5.x 不许写出思考：关掉或换 4.6`,
+        `${where}要模型写出思考，5.x 不允许；关掉或换 4.6`,
         { ms: 20000 });
 }
 

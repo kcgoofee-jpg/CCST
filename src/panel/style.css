@@ -816,13 +816,19 @@
 .claude-max .cm-meter-top { display: flex; justify-content: space-between; gap: 8px; opacity: 0.65; font-variant-numeric: tabular-nums; }
 .claude-max .cm-meter-bar { display: flex; gap: 2px; height: 7px; border-radius: 4px; overflow: hidden; background: var(--cm-soft); }
 .claude-max .cm-meter-bar span { display: block; height: 100%; }
-.claude-max .cm-meter-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; opacity: 0.85; font-variant-numeric: tabular-nums; }
-.claude-max .cm-meter-legend span { display: inline-flex; align-items: center; gap: 5px; }
-.claude-max .cm-meter-legend i { width: 8px; height: 8px; border-radius: 2px; }
+.claude-max .cm-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.claude-max .cm-tile { position: relative; height: 58px; border-radius: 8px; display: grid; place-items: center; }
+.claude-max .cm-tile b { font-size: 20px; font-weight: 650; line-height: 1; margin-top: -8px; font-variant-numeric: tabular-nums; }
+.claude-max .cm-tile small { position: absolute; left: 8px; bottom: 6px; font-size: var(--cm-fs-caption); opacity: 0.8; }
+.claude-max .cm-tile-read { background: color-mix(in srgb, var(--cm-c-read) 16%, transparent); }
+.claude-max .cm-tile-read b { color: var(--cm-c-read); }
+.claude-max .cm-tile-write { background: color-mix(in srgb, var(--cm-c-write) 16%, transparent); }
+.claude-max .cm-tile-write b { color: var(--cm-c-write); }
+.claude-max .cm-tile-output { background: color-mix(in srgb, var(--cm-c-out) 16%, transparent); }
+.claude-max .cm-tile-output b { color: var(--cm-c-out); }
 .claude-max .cm-seg-read { background: var(--cm-c-read); }
 .claude-max .cm-seg-write { background: var(--cm-c-write); }
 .claude-max .cm-seg-output { background: var(--cm-c-out); }
-.claude-max .cm-cache-tip { padding: 6px 9px; border-radius: 6px; background: var(--cm-soft); }
 .claude-max .cm-cache .cm-mini > summary { opacity: 0.65; }
 
 /* 额度：照现在的速度会不会在重置前用完；上一轮：上下文快满 */

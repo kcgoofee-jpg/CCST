@@ -15,7 +15,7 @@ test('a SDK the proxy cannot work with gets the top banner (#30)', () => {
     assert.equal(lines[0].tone, 'error');
     assert.match(lines[0].text, /^组件过旧/);
     assert.match(lines[0].text, /SYSTEM_PROMPT_DYNAMIC_BOUNDARY/);
-    assert.match(lines[0].text, /重装 SDK/, 'says how to fix it');
+    assert.match(lines[0].text, /安装那一行/, 'says how to fix it');
 });
 
 test('a compatible SDK says nothing, a long fold streak says one line (#30)', () => {
@@ -23,7 +23,7 @@ test('a compatible SDK says nothing, a long fold streak says one line (#30)', ()
     assert.deepEqual(statusAdvisories(online({ compat: { ok: true }, foldStreak: 3 }), 'http://127.0.0.1:8901/v1'), [], '3 is still normal');
     const [line] = statusAdvisories(online({ compat: { ok: true }, foldStreak: 7 }), 'http://127.0.0.1:8901/v1');
     assert.equal(line.tone, 'warn');
-    assert.match(line.text, /^7 轮重写/);
+    assert.match(line.text, /^连续 7 轮整段重写/);
 });
 
 test('the proxy answering over SillyTavern\'s route is checked against the set endpoint (#36)', () => {
@@ -55,7 +55,7 @@ test('quota shares: an 87% hit can still be mostly writes and output', async () 
     const { quotaShares } = await import('../src/panel/tabs/status.js');
     const { quotaParts } = await import('../src/proxy/features/cache-diag.js');
     const shares = quotaShares(quotaParts({ inputTokens: 3, cacheReadTokens: 60238, cacheCreationTokens: 9127, outputTokens: 2798, cacheTtl: '1h' }));
-    assert.deepEqual(shares.map((p) => `${p.label} ${p.pct}%`), ['写回复 51%', '写缓存 42%', '读缓存 8%']);
+    assert.deepEqual(shares.map((p) => `${p.label} ${p.pct}%`), ['输出 51%', '未命中 42%', '命中 8%']);
     assert.deepEqual(quotaShares(quotaParts({ cacheReadTokens: 1000, cacheCreationTokens: 1000 })).map((p) => p.pct), [97, 3]);
     assert.deepEqual(quotaShares(null), []);
     assert.deepEqual(quotaShares({ write: 0, output: 0, read: 0 }), []);
@@ -77,12 +77,10 @@ test('usage pace: projected to the reset; quiet under 10% or without a reset', a
 });
 
 test('context use and output speed for the last turn', async () => {
-    const { contextUse, outputSpeed } = await import('../src/panel/tabs/status.js');
+    const { contextUse } = await import('../src/panel/tabs/status.js');
     assert.deepEqual(contextUse({ model: 'claude-opus-4-6', inputTokens: 3, cacheReadTokens: 150_000, cacheCreationTokens: 20_000 }), { tokens: 170_003, size: 200_000, pct: 85, level: 'critical' });
     assert.equal(contextUse({ model: 'claude-opus-4-6[1m]', cacheReadTokens: 170_000 }).level, '');
     assert.equal(contextUse({}), null);
-    assert.equal(outputSpeed({ outputTokens: 4000, durationMs: 102_000, ttftMs: 2_000 }), 40);
-    assert.equal(outputSpeed({ outputTokens: 10, durationMs: 300 }), null);
 });
 
 test('cost parts follow the model price row; API value in USD', async () => {

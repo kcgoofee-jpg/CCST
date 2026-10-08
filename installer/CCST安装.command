@@ -108,7 +108,7 @@ else
     fi
 fi
 ok "酒馆在：$ST"
-has_ext "$ST" || warn "这个酒馆里还没装 CCST 面板。先在酒馆里 扩展 → 安装扩展，粘贴 https://github.com/kcgoofee-jpg/CCST ；不装也能继续，只是面板不会出现。"
+has_ext "$ST" || warn "酒馆里还没有 CCST 面板：下次启动酒馆时会自动装上，不用管。"
 
 # 已经是最新版（插件和面板都没有新提交、依赖在）：酒馆开着也不用关
 up_to_date() { # $1=git 文件夹

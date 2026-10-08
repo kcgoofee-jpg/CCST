@@ -18,12 +18,12 @@ const RULES = [
         // "oauth.{0,20}token has expired": the CLI says 「OAuth access token has expired」.
         test: /not logged in|please run \/login|oauth.{0,20}token has expired|token_expired|invalid_token|authentication_failed|authentication expired/i,
         message: '没登录',
-        hint: '在 plugins/CCST 运行 npm run login',
+        hint: '在酒馆的 plugins/CCST 里运行 npm run login',
     },
     {
         code: 'reasoning_extraction',
         test: /reasoning_extraction/i,
-        message: '要写思考',
+        message: '5.x 不许写出思考',
         // Measured 2026-10-08 (图灵预设 × Opus 5.5): 10 of 14 blocked; a reroll of the same request sometimes
         // passed; every block still wrote ~40k cache twice (the CLI asks once more); Opus 4.6 passed.
         hint: '关掉思维链条目，或换 4.6',
@@ -83,7 +83,7 @@ const RULES = [
         code: 'sdk_unavailable',
         test: /failed to load @anthropic-ai\/claude-agent-sdk|没能加载 Claude SDK|native cli binary/i,
         message: '缺少组件',
-        hint: '在 plugins/CCST 运行 npm install，再重启',
+        hint: '再运行一次安装那一行',
     },
     {
         code: 'refusal',
@@ -107,7 +107,7 @@ export function explainError(raw) {
     return {
         code: 'unknown',
         message: '失败了',
-        hint: '先重试；不行就导出日志',
+        hint: '先重试；不行就导出诊断',
         raw: text,
     };
 }

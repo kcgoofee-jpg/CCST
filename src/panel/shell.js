@@ -22,7 +22,7 @@ import { buildSettingsTab } from './tabs/settings.js';
 import { TABS, resolveTab } from './core/tabs.js';
 import { buildGuideCard, renderGuide } from './guide.js';
 import { glanceLinked } from './core/guide.js';
-import { chooseConnectModel, ensureProfile, profileNotice, connectAdvice, describeCurrentConnection } from './core/connection-profile.js';
+import { chooseConnectModel, ensureProfile, profileNotice, connectAdvice, describeCurrentConnection, sourceLabel } from './core/connection-profile.js';
 
 // ── One-click connect (same selector path as ST's /api-url command) ──
 
@@ -34,6 +34,18 @@ function currentConnectionText() {
     const model = connectionInfo().model || '';
     const profile = $('#connection_profiles option:selected').text?.() || '';
     return describeCurrentConnection({ profile, source: src, url, model });
+}
+
+/** The connection SillyTavern is on when it is not CCST, as the user named it: the profile name, else
+ *  the source and model; '' when nothing is set up yet (a fresh SillyTavern). */
+function otherConnectionName() {
+    const profile = String($('#connection_profiles option:selected').text?.() || '').trim();
+    if (profile && !/^<none>$|^无$|^未选择$/i.test(profile)) return profile;
+    // No profile: only when SillyTavern is actually connected somewhere (a fresh install sits on OpenAI, unconnected).
+    const online = SillyTavern.getContext().onlineStatus;
+    if (!online || online === 'no_connection') return '';
+    const src = $('#main_api').val() === 'openai' ? $('#chat_completion_source').val() : $('#main_api').val();
+    return src ? sourceLabel(src) : '';
 }
 
 /** Point SillyTavern's live connection fields at the proxy. */
@@ -79,7 +91,7 @@ export async function connect(settings) {
             if (!ok) return;
         }
         applyConnection(settings);
-        notify('info', '保存中…', '在等模型列表，约 10 秒', { ms: 0, replace: 'connect-profile' });
+        notify('info', '连接中…', '在读模型列表，约 10 秒', { ms: 0, replace: 'connect-profile' });
         await connectProfile(settings, keepModel);
         setTimeout(refreshAll, 800);
     } catch (err) {
@@ -133,11 +145,11 @@ async function connectProfile(settings, keepModel = '') {
                 notify('warn', '提示', a.text, { ms: 12000, replace: a.key });
             }
         }
-        else if (res.reason === 'no-connection-manager') notify('warn', '没存配置', '能聊天；连接管理器没开', { ms: 10000, replace: 'connect-profile' });
-        else notify('warn', '没存配置', '能聊天；配置没存上', { ms: 10000, replace: 'connect-profile' });
+        else if (res.reason === 'no-connection-manager') notify('warn', '没存成配置', '能聊天；酒馆的连接管理器没开', { ms: 10000, replace: 'connect-profile' });
+        else notify('warn', '没存成配置', '能聊天；酒馆没让保存', { ms: 10000, replace: 'connect-profile' });
     } catch (err) {
         console.error('[claude-max] connection profile failed', err);
-        notify('warn', '没存配置', `能聊天；保存出错（${String(err?.message ?? err)}）`, { ms: 10000, replace: 'connect-profile' });
+        notify('warn', '没存成配置', `能聊天；保存出错（${String(err?.message ?? err)}）`, { ms: 10000, replace: 'connect-profile' });
     }
 }
 
@@ -153,7 +165,7 @@ export const SOURCE_LABELS = { keychain: '钥匙串', file: '登录文件', env:
  *  dot · model · where/billing · 5h quota. Clicking the bar opens 状态. */
 export function renderGlance() {
     const { glance, gen } = store.get();
-    const { connected, model, billing } = connectionInfo();
+    const { connected, model } = connectionInfo();
     const linked = glanceLinked({ connected }, store.get().status.phase);
     // Thinking is SillyTavern's own 「推理强度」: named here when it isn't Auto.
     const effort = stEffort();
@@ -178,7 +190,6 @@ export function renderGlance() {
             barBtn?.removeAttribute('data-gen');
             bar.replaceChildren(el('b', 'cm-bar-model', linked ? (model ? shortModel(model) : '未选模型') : '未连接'));
             // Only the local proxy is left: 「本机代理」 says nothing; the billing (订阅) does.
-            if (linked && billing) bar.append(el('span', 'cm-bar-src', billing));
             if (q != null) {
                 const quota = el('span', 'cm-bar-quota', `5h ${q}%`);
                 // The worse of how much is used and how fast (pace, see tabs/status.js usagePace); ▲ = on track to run out.
@@ -216,7 +227,7 @@ let flashUntil = 0;      // the success card shows until then
 /** 版本不一致：情况 → 影响 → 编号步骤（内容见 connect-help.js 的 mismatchHelp）。 */
 function mismatchCard(base, status) {
     const help = mismatchHelp({ side: status.mismatchSide, proxyVersion: status.version, panelVersion: status.panelVersion, runtime: status.runtime, tauri: IS_TAURI, host: hostNow() });
-    return { ...base, tone: 'warn', dot: 'warning', key: `mismatch-${status.mismatchSide}-${status.runtime ?? 'unknown'}`, title: '版本不配',
+    return { ...base, tone: 'warn', dot: 'warning', key: `mismatch-${status.mismatchSide}-${status.runtime ?? 'unknown'}`, title: '版本对不上',
         sub: help.sub, steps: help.steps, showSteps: true, downloads: help.downloads, hint: help.hint };
 }
 
@@ -240,7 +251,7 @@ function describeCard() {
     const phase = status.phase;
 
     if (phase === 'denied') {
-        return { ...base, tone: 'error', dot: 'offline', key: 'denied', title: '被拒绝', sub: status.message };
+        return { ...base, tone: 'error', dot: 'offline', key: 'denied', title: '只能本机用', sub: status.message || '只给装 CCST 的那台电脑用' };
     }
     if (phase === 'offline') {
         const help = connectHelp({ host: hostNow() });
@@ -266,7 +277,16 @@ function describeCard() {
             }
             return mismatch ? mismatchCard(base, status) : updateCard(base, status);
         }
-        // Proxy is fine, SillyTavern isn't on it (yet).
+        // Proxy is fine, SillyTavern isn't on it (yet). Using another connection on purpose (a Gemini
+        // profile…): say which, and let the card be closed until the connection changes.
+        const using = otherConnectionName();
+        if (using && !mismatch) {
+            if (getSettings().hideConnectFor === using) return null;
+            return { ...base, setup: false, tone: 'info', dot: 'online', key: `other-${using}`, title: `现在用的是「${using}」`,
+                sub: '要用 Claude 订阅就点连接；暂时不用可以关掉该扩展',
+                action: { label: '连接', icon: 'fa-plug', primary: true, run: () => connect(getSettings()) },
+                action2: { label: '不再提示', run: () => { getSettings().hideConnectFor = using; saveSettingsDebounced(); renderConnect(); } } };
+        }
         const sub = '点一下，自动选好模型';
         return { ...base, tone: 'info', dot: mismatch ? 'warning' : 'online', key: 'connect', title: '差一步',
             sub: mismatch ? `${sub}\n${mismatch}` : sub, action: { label: '连接', icon: 'fa-plug', primary: true, run: () => connect(getSettings()) } };
@@ -312,6 +332,9 @@ export function renderConnect() {
         const dlHint = card.querySelector('#claude_max_downloads_hint');
         dlHint.textContent = view.hint ?? '';
         dlHint.hidden = dl.hidden || !view.hint;
+        const btn2 = card.querySelector('#claude_max_status_action2');
+        btn2.hidden = !view.action2;
+        if (view.action2) { btn2.textContent = view.action2.label; btn2.onclick = () => view.action2.run(); }
         const btn = card.querySelector('#claude_max_status_action');
         btn.hidden = !view.action;
         if (view.action) {
@@ -368,7 +391,11 @@ function buildStatusBar(showTab) {
     const action = el('button', 'menu_button cm-btn cm-primary');
     action.type = 'button';
     action.id = 'claude_max_status_action';
-    row.append(action);
+    const action2 = el('button', 'menu_button cm-btn');
+    action2.type = 'button';
+    action2.id = 'claude_max_status_action2';
+    action2.hidden = true;
+    row.append(action, action2);
     card.append(head, sub, steps, downloads, dlHint, row);
 
     const cloud = note('info', '连不上');
