@@ -1,12 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { priceFor, BACKENDS } from '../src/shared/backends.js';
+import { priceFor } from '../src/shared/backends.js';
 import { buildSubprocessEnv } from '../src/proxy/core/env.js';
-
-test('the proxy runs on the subscription only', () => {
-    assert.deepEqual(BACKENDS, ['subscription']);
-});
 
 test('buildSubprocessEnv: a stray shell provider switch or API key never reaches the CLI; the login token stays', () => {
     const saved = { ...process.env };

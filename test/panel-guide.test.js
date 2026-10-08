@@ -2,8 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-    GUIDE_STEPS, STEP_TITLES, DONE_STEP, guideFacts, shouldAutoOnboard, guideStep, pollsProxy,
-    startGuide, finishGuide, gateConnection, proxyUnknown, glanceLinked,
+    GUIDE_STEPS, DONE_STEP, guideFacts, shouldAutoOnboard, guideStep, pollsProxy,
+    startGuide, finishGuide, proxyUnknown, glanceLinked,
 } from '../src/panel/core/guide.js';
 
 const none = { kind: 'other', connected: false };
@@ -13,7 +13,7 @@ const boot = (over = {}) => ({ onboarded: false, guideSource: '', settingsExiste
 
 test('three steps, named 安装 / 登录 / 连接, then 完成', () => {
     assert.deepEqual(GUIDE_STEPS.map((s) => s.key), ['install', 'login', 'connect']);
-    assert.deepEqual(STEP_TITLES, { 1: '安装', 2: '登录', 3: '连接' });
+    assert.deepEqual(GUIDE_STEPS.map((s) => s.title), ['安装', '登录', '连接']);
     assert.equal(DONE_STEP, 4);
 });
 
@@ -76,10 +76,7 @@ test('fresh install whose ST already points at an offline proxy still gets the g
     assert.equal(shouldAutoOnboard(boot(), facts(ours, 'offline')), false);
 });
 
-test('gateConnection / proxyUnknown / glanceLinked', () => {
-    for (const phase of ['offline', 'denied', 'pending', 'idle']) assert.equal(gateConnection(ours, phase).connected, false);
-    for (const phase of ['online', 'nologin']) assert.equal(gateConnection(ours, phase).connected, true);
-    assert.equal(gateConnection(none, 'offline'), none);
+test('proxyUnknown / glanceLinked', () => {
     assert.equal(proxyUnknown('pending'), true);
     assert.equal(proxyUnknown('idle'), true);
     assert.equal(proxyUnknown('online'), false);

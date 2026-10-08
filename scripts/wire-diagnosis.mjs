@@ -23,14 +23,20 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// 审: 仓库根目录，用来在这里启动临时代理。
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+// 审: 诊断输出目录（系统临时目录），不碰用户 data/。
 const OUT = join(tmpdir(), 'ccst-wire-diagnosis');
+// 审: 控制台输出前缀。
 const TAG = '[wire-diagnosis]';
+// 审: 诊断用模型，可用环境变量 MODEL 覆盖。
 const MODEL = process.env.MODEL ?? 'claude-opus-4-6';
+// 审: 轮间等待。
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 mkdirSync(OUT, { recursive: true });
 
+// 审: 从上游回复（流式或非流式）取 usage，读出缓存读写数。
 /** 回复里的 usage：流式取 message_start（缓存读写都在这里），非流式取顶层。 */
 function usageOf(text) {
     try { return JSON.parse(text).usage ?? null; } catch { /* 流式 */ }
@@ -45,7 +51,9 @@ function usageOf(text) {
 }
 
 // ── 1. tap：记录请求与回复，原样转发 ──
+// 审: 抓到的所有 /v1/messages 请求与对应 usage。
 const records = []; // { body, usage }
+// 审: 本地 tap：逐字节记录 CLI 发往 Anthropic 的请求并原样转发。
 const tap = createServer((req, res) => {
     // 按 Buffer 收齐再解码：逐块拼字符串会把跨块的汉字切坏，转发出去的就不是原请求了
     const chunks = [];
@@ -83,7 +91,9 @@ await new Promise((resolve) => tap.listen(0, '127.0.0.1', resolve));
 const tapPort = tap.address().port;
 
 // ── 2. 临时代理（复用本仓库代码，指到 tap）──
+// 审: 临时代理的随机测试端口。
 const proxyPort = 18970 + Math.floor(Math.random() * 100);
+// 审: 起临时代理子进程，指向 tap；env 里的开关均为 src 里仍存在的变量。
 const proxy = spawn(process.execPath, ['server.js'], {
     cwd: ROOT,
     env: {
@@ -93,13 +103,14 @@ const proxy = spawn(process.execPath, ['server.js'], {
         CLAUDE_SUBSCRIPTION_DEV_BASE_URL: `http://127.0.0.1:${tapPort}`,
         CLAUDE_SUBSCRIPTION_NO_UI_INSTALL: '1',
         CLAUDE_SUBSCRIPTION_STATS_FILE: join(OUT, 'usage.jsonl'),
-        CLAUDE_SUBSCRIPTION_CACHE_MEMORY_FILE: 'off',
     },
     stdio: ['ignore', 'ignore', 'ignore'],
 });
 // 每次运行换一个开头，避开上一次运行留下的缓存
+// 审: 每次运行唯一的开头，避开上次运行留下的缓存。
 const nonce = Date.now().toString(36);
 const system = `【诊断 ${nonce}】你在做一次缓存诊断，只按要求简短回答。\n${'【规则】保持角色，不要出戏，回答尽量简短。'.repeat(1200)}`;
+// 审: 向临时代理发一轮聊天请求（带面板参数，才会走逐轮还原）。
 const chat = async (turns) => {
     const res = await fetch(`http://127.0.0.1:${proxyPort}/v1/chat/completions`, {
         method: 'POST',
@@ -126,6 +137,7 @@ proxy.kill();
 tap.close();
 
 // ── 3. 分析 ──
+// 审: 只留主聊天模型的请求用于分析。
 const turns = records.filter((r) => Array.isArray(r.body?.messages) && r.body.model?.startsWith(MODEL));
 writeFileSync(join(OUT, 'requests.json'), JSON.stringify(records, null, 2));
 if (turns.length < 2) {
@@ -133,9 +145,13 @@ if (turns.length < 2) {
     process.exit(1);
 }
 
+// 审: token 数简写（1.2k）。
 const k = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n ?? 0));
+// 审: 请求体里所有 cache_control 的 ttl 值。
 const ttlsOf = (body) => [...JSON.stringify(body).matchAll(/"ttl":"(\w+)"/g)].map((m) => m[1]);
+// 审: 取内容块的文本。
 const text = (b) => (typeof b === 'string' ? b : (b?.text ?? JSON.stringify(b)));
+// 审: 提取比较用的指纹（系统提示词去掉计费头 + 各条消息的块文本）。
 const fingerprint = (body) => {
     const sys = body.system ?? [];
     const parts = (Array.isArray(sys) ? sys : [sys]).map((p) => p?.text ?? String(p));
@@ -148,6 +164,7 @@ const fingerprint = (body) => {
 };
 
 console.log(`\n抓到 ${turns.length} 轮请求：\n`);
+// 审: 是否发现 CLI 按 5 分钟写缓存。
 let saw5m = false;
 turns.forEach((t, i) => {
     const ttls = [...new Set(ttlsOf(t.body))];
@@ -158,6 +175,7 @@ turns.forEach((t, i) => {
 });
 console.log('');
 
+// 审: 逐对相邻轮次比较前缀并给出结论。
 const verdicts = [];
 for (let i = 1; i < turns.length; i++) {
     const a = fingerprint(turns[i - 1].body);
@@ -189,6 +207,7 @@ for (let i = 1; i < turns.length; i++) {
 }
 for (const v of verdicts) console.log(`  ${v}`);
 
+// 审: 最后一轮 usage，用来下总结论。
 const last = turns[turns.length - 1].usage ?? {};
 console.log('\n结论：');
 if (saw5m) {

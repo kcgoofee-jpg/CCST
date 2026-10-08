@@ -7,12 +7,15 @@ import { el } from './dom.js';
 import { notify } from './notify.js';
 import { openExternal, copyText } from './external.js';
 
+// 审: 复制按钮的「已复制」反馈按文本记住；卡片每次 store 变化都重画，不记的话反馈会被冲掉。
 // The cards are redrawn whenever the store changes, which would wipe a button's "已复制" before it is seen:
 // the feedback is kept per text and re-applied to the fresh button, and a toast says it too.
 const copyFeedback = new Map(); // text -> { label, until }
+// 审: 复制反馈保留时长。
 const COPY_FEEDBACK_MS = 2000;
 
-export function copyButton(idle, text) {
+// 审: 复制按钮，点击后把反馈重新应用到重画后的新按钮，同时弹 toast。
+function copyButton(idle, text) {
     const btn = el('button', 'cm-link-btn', idle);
     btn.type = 'button';
     const apply = () => {
@@ -30,6 +33,7 @@ export function copyButton(idle, text) {
     return btn;
 }
 
+// 审: 命令框 + 复制按钮，引导和卡片里要用户运行的命令都用它。
 /** A command in a box with a copy button. */
 export function cmdRow(cmd, label = '复制') {
     const row = el('div', 'cm-cmd');
@@ -37,14 +41,16 @@ export function cmdRow(cmd, label = '复制') {
     return row;
 }
 
+// 审: 一个编号步骤：文字，有命令的话带命令框。
 /** One step: text, and a command (if any) in a box with a copy button. */
 export function stepItem(step) {
-    const { text, cmd } = typeof step === 'string' ? { text: step } : step;
+    const { text, cmd } = step;
     const li = el('li', null, text);
     if (cmd) li.append(cmdRow(cmd));
     return li;
 }
 
+// 审: 链接按钮：扩展自带文件在浏览器里真下载，其他链接走系统浏览器（TauriTavern 的 <a> 不会自己打开）。
 /** A button that works where the panel runs: a real download for the extension's own file in a browser,
  *  the system browser for other links (through TauriTavern's opener). */
 export function linkButton(d) {
@@ -59,6 +65,7 @@ export function linkButton(d) {
     return a;
 }
 
+// 审: 一个下载/链接条目：按钮 + 可复制的 URL，按钮没反应时用户仍有办法。
 /**
  * One download / link: the button, plus the URL as text and a copy button, so there is always something
  * to do when the button does nothing.

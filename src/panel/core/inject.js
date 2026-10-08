@@ -11,18 +11,22 @@ import { notify } from './notify.js';
 import { F } from './registry.js';
 import { chatKeyOf } from './chat-key.js';
 
+// 审: 预检用的「思维链标签」名单；5.x 模型会拦截让它把思考写进回复的提示词，发出前先预警。
 // Opus 5.5's safeguards refuse prompts that make the model write its
 // reasoning into the reply (category reasoning_extraction). Presets that
 // prescribe a <thinking>/<cot> block in the output trip it every time.
 // The instruction can also sit in a character card's lorebook (seen live: a constant entry
 // 「<think> 已被禁止，请立即用全英文输出 <draft_notes>」), so user messages are read too.
 const COT_TAGS = 'thinking|think|cot|draft_notes|draft|scratchpad|reasoning|analysis|思考|思维链';
+// 审: 识别「要求模型输出/写出 <思考标签>」的几种常见写法（含角色卡世界书里的）。
 const COT_ASK = new RegExp(
     `(?:输出|写出|写下|先写|先在|用全英文|放进|output|write)[^\\n]{0,40}<(?:${COT_TAGS})>` +
     `|<(?:${COT_TAGS})>[^\\n]{0,40}(?:中思考|里思考|内思考|中分析|里分析)` +
     // 「写正文前在思考中逐步完成以下步骤，每一步都要写出具体结论」(图灵预设的思维链条目，实测 Opus 5.5 十四次拦了十次)
     '|(?:在|于)思考(?:中|里|时)[^\\n]{0,20}(?:逐步|按步骤|步骤|写出|完成以下)', 'i');
+// 审: 每个「预设+角色」只预警一次，别刷屏。
 const warnedPresets = new Set();
+// 审: 发往 Opus 5.x 前检查提示词是否让模型写出思考，是则弹一次「可能被拦」；纯提示，不改请求。
 function preflightCheck(data) {
     // Verified live: Opus 5 refuses these too, not only Opus 5.5 (the docs say 5.5 only).
     if (!/opus-5/i.test(String(data.model ?? ''))) return;
@@ -46,6 +50,7 @@ function preflightCheck(data) {
         { ms: 20000 });
 }
 
+// 审: 酒馆「提示词后处理」各模式的中文名，仅用于下面的提示文案。
 // ST's Custom-endpoint "prompt post-processing" (merge / semi / strict)
 // merges the preset into user messages before the proxy sees it: the
 // system prompt shrinks to the first entry, the preset loses system
@@ -55,7 +60,9 @@ const POST_PROCESSING_LABELS = {
     merge: '合并连续角色', semi: '半严格', strict: '严格', single: '单条用户消息',
     merge_tools: '合并连续角色（工具）', semi_tools: '半严格（工具）', strict_tools: '严格（工具）',
 };
+// 审: 后处理预警整个会话只弹一次。
 let warnedPostProcessing = false;
+// 审: 酒馆自定义来源开着「提示词后处理」会把预设并进用户消息、破坏缓存，发现就提示改成无。
 function postProcessingCheck(data) {
     const mode = String(data.custom_prompt_post_processing ?? '');
     if (!mode || warnedPostProcessing) return;
@@ -65,26 +72,34 @@ function postProcessingCheck(data) {
         { ms: 20000 });
 }
 
+// 审: 对一段文字做酒馆宏展开（{{char}} 等），酒馆没有该能力或出错则原样返回；三处共用。
+// ST's macro expansion ({{char}} etc.) of a piece of text; unchanged when ST can't.
+const substitute = (ctx, t) => { try { return ctx.substituteParams ? ctx.substituteParams(t) : t; } catch { return t; } };
+
+// 审: 本轮触发的世界书条目名（给代理的 st_fp.wi，用来解释缓存为何变化）；每轮开始清空。
 // What SillyTavern injects INTO the chat this request, and how it was set up. Early in a chat ST
 // puts a depth-N injection above every message, where the proxy could not tell it from the preset;
 // the opening text of each one lets the proxy keep it with the current turn (system-placement.js).
 let activatedLore = [];
+// 审: 本轮关键词触发、位置在角色前后的条目全文，代理据此把它们精确挪到本轮消息（lore_text）。
 // Keyword-triggered entries placed before / after the character (inside the system prompt): their text,
 // so the proxy can lift exactly them out when they change from turn to turn (lore-tail.js cutExactLore).
 let triggeredLore = [];
+// 审: 上面全文总长上限，防止请求体过大。
 const MAX_TRIGGERED_CHARS = 200_000;
+// 审: GENERATION_STARTED 时清空上一轮的世界书记录。
 export function resetActivatedLore() { activatedLore = []; triggeredLore = []; }
+// 审: WORLD_INFO_ACTIVATED 时记下触发条目名与可挪动条目的全文（常驻和非前后位置的不记）。
 export function noteActivatedLore(entries) {
     try {
         const ctx = SillyTavern.getContext();
-        const sub = (t) => { try { return ctx.substituteParams ? ctx.substituteParams(t) : t; } catch { return t; } };
         const list = Array.isArray(entries) ? entries : [...(entries?.values?.() ?? [])];
         activatedLore = list.map((e) => String(e?.comment || e?.uid || '').slice(0, 40)).filter(Boolean).slice(0, 80);
         let total = 0;
         triggeredLore = [];
         for (const e of list) {
             if (e?.constant || (e?.position !== 0 && e?.position !== 1) || typeof e?.content !== 'string') continue;
-            const t = sub(e.content).trim();
+            const t = substitute(ctx, e.content).trim();
             if (t.length < 20 || total + t.length > MAX_TRIGGERED_CHARS) continue;
             total += t.length;
             triggeredLore.push(t);
@@ -92,14 +107,14 @@ export function noteActivatedLore(entries) {
     } catch { activatedLore = []; triggeredLore = []; }
 }
 
+// 审: 提示里聊天记录的首尾几条开头文字，代理靠它定位「聊天从哪开始/到哪结束」，否则会把预设里的 user 条目当成聊天起点。
 /** Opening text of the first and last chat messages in this prompt: where the chat history starts
  *  and ends. Presets put user / assistant entries before the history (Kemini, Izumi) and after it;
  *  without these the proxy took the first user message for the start of the chat. Thinking written
  *  into a reply is skipped (a prompt regex strips it, 灰烬之桥). A short last message (「继续」) is
  *  sent whole in `exact`: the proxy matches it as the whole message, so it can't hit an old turn. */
 export function historyMarks(ctx = SillyTavern.getContext()) {
-    const sub = (t) => { try { return ctx.substituteParams ? ctx.substituteParams(t) : t; } catch { return t; } };
-    const body = (m) => sub(String(m?.mes ?? '')).replace(/^(?:\s*<(thinking|think)(?:\s[^<>]*)?>[\s\S]*?<\/\1\s*>)+/i, '').trim();
+    const body = (m) => substitute(ctx, String(m?.mes ?? '')).replace(/^(?:\s*<(thinking|think)(?:\s[^<>]*)?>[\s\S]*?<\/\1\s*>)+/i, '').trim();
     const snip = (m) => body(m).slice(0, 40);
     const shown = (ctx.chat ?? []).filter((m) => !m?.is_system);
     const ok = (s) => s.length >= 8;
@@ -111,26 +126,28 @@ export function historyMarks(ctx = SillyTavern.getContext()) {
     };
 }
 
+// 审: 预设里当前启用的条目 id 集合，injectedOpenings 过滤用。
 function enabledPromptIds(oai) {
     const ids = new Set();
     for (const o of oai.prompt_order ?? []) for (const p of o?.order ?? []) if (p?.enabled) ids.add(p.identifier);
     return ids;
 }
 
-export function injectedOpenings(ctx = SillyTavern.getContext()) {
-    const sub = (t) => { try { return ctx.substituteParams ? ctx.substituteParams(t) : t; } catch { return t; } };
+// 审: 酒馆本轮在聊天里插入的深度注入的开头文字，代理据此把它们留在本轮而不是当成预设。
+function injectedOpenings(ctx = SillyTavern.getContext()) {
     const pieces = [];
     for (const p of Object.values(ctx.extensionPrompts ?? {})) {
-        if (p?.position === 1 && typeof p.value === 'string') pieces.push(sub(p.value));
+        if (p?.position === 1 && typeof p.value === 'string') pieces.push(substitute(ctx, p.value));
     }
     const oai = ctx.chatCompletionSettings ?? {};
     const on = enabledPromptIds(oai);
     for (const pr of oai.prompts ?? []) {
-        if (pr?.injection_position === 1 && on.has(pr.identifier) && typeof pr.content === 'string') pieces.push(sub(pr.content));
+        if (pr?.injection_position === 1 && on.has(pr.identifier) && typeof pr.content === 'string') pieces.push(substitute(ctx, pr.content));
     }
     return [...new Set(pieces.map((t) => t.trim()).filter((t) => t.length >= 8).map((t) => t.slice(0, 48)))].slice(0, 64);
 }
 
+// 审: 32 位 FNV 算预设条目指纹；不和 chat-key.js 的 64 位合并，合并会让升级后第一轮误报缓存变化。
 // FNV-1a: enough to tell "the preset's entries changed" apart, no crypto needed.
 function fnv(text) {
     let h = 0x811c9dc5;
@@ -138,6 +155,7 @@ function fnv(text) {
     return h.toString(16).padStart(8, '0');
 }
 
+// 审: 会在发送时悄悄改写提示词的东西（酒馆助手脚本、按深度生效的提示词正则）；状态页解释缓存变化时点名它们。
 /** What could rewrite the prompt on its own at send time: 酒馆助手 scripts that actually run (global ones
  *  while global scripts are on; the preset's / card's only when allowed for that preset / card; a folder's
  *  enabled scripts when the folder is on), and prompt-only regexes that act by depth (preset / card ones
@@ -147,6 +165,7 @@ export function promptMutators(ctx = SillyTavern.getContext()) {
     return promptScan(ctx).mut;
 }
 
+// 审: 实际扫描脚本/正则，返回 mut（名单）和 rx（深度正则及最小深度）；任何形状异常都跳过不抛错。
 /** promptMutators, plus the depth regexes among them as [name, minDepth] (minDepth ≥ 2): the proxy
  *  names the one that cut an old reply short (cache-diag.js depthRegexAt). */
 function promptScan(ctx) {
@@ -164,6 +183,7 @@ function promptScan(ctx) {
     const avatar = typeof card.avatar === 'string' ? card.avatar : null;
     const cardExt = obj(card.data?.extensions);
 
+    // 审: 酒馆助手脚本：全局/预设/角色卡三处，仅收实际会运行的；插件被禁用则整段跳过。
     safe(() => {
         if (off.some((x) => /JS-Slash-Runner|tavern.?helper/i.test(x))) return;
         const th = obj(obj(ext.tavern_helper).script);
@@ -185,6 +205,7 @@ function promptScan(ctx) {
         for (const list of lists) safe(() => add(list, false));
     });
 
+    // 审: 提示词专用且按深度（≥2）生效的正则：预设/角色卡的需被允许才算；会随消息变老改写旧回复。
     safe(() => {
         if (off.includes('regex')) return;
         const deep = (v) => v !== null && v !== '' && Number.isFinite(Number(v)) && Number(v) >= 2;
@@ -203,11 +224,13 @@ function promptScan(ctx) {
     return { mut: [...new Set(out)].slice(0, 12), rx: rx.slice(0, 12) };
 }
 
+// 审: 把 promptScan 的结果整理成指纹里的字段，没有深度正则就不带 rx。
 function scanFields(ctx) {
     const { mut, rx } = promptScan(ctx);
     return rx.length ? { mut, rx } : { mut };
 }
 
+// 审: 酒馆侧「什么变了」的指纹（预设名、后处理、条目哈希、触发的世界书、脚本/正则），代理拿它解释缓存为何失效。
 export function stFingerprint(data, ctx = SillyTavern.getContext()) {
     const oai = ctx.chatCompletionSettings ?? {};
     const prompts = (oai.prompts ?? []).map((p) => [p.identifier, p.content, p.injection_position, p.injection_depth, p.role]);
@@ -222,6 +245,7 @@ export function stFingerprint(data, ctx = SillyTavern.getContext()) {
     };
 }
 
+// 审: 读酒馆自己的「推理强度」（从设置读，因为请求里的会被酒馆降级/丢弃）；认不出当 auto。
 // SillyTavern's own 「推理强度」 (Reasoning Effort, saved with the preset) decides thinking. Read from the
 // settings, not the request: ST downgrades 「Maximum」 to high client-side and drops the field for Claude
 // model ids server-side. 'auto' = the model's default; 'min' = no thinking (a model that always thinks
@@ -231,6 +255,7 @@ export function stEffort(cs = SillyTavern.getContext().chatCompletionSettings) {
     return ['min', 'low', 'medium', 'high', 'max'].includes(v) ? v : 'auto';
 }
 
+// 审: 拼出 custom_include_body 里 claude_subscription 那段 YAML（思考、显示思维、世界书后移、缓存、回复槽位、聊天键）。
 export function buildIncludeBodyYaml(settings, quiet = false, slot = null) {
     const lines = ['claude_subscription:'];
     const cs = SillyTavern.getContext().chatCompletionSettings;
@@ -257,6 +282,7 @@ export function buildIncludeBodyYaml(settings, quiet = false, slot = null) {
     return lines.join('\n');
 }
 
+// 审: CHAT_COMPLETION_SETTINGS_READY 的处理：仅对发往本代理的请求注入设置并做发前预检，出错只记日志不拦请求。
 export function onSettingsReady(data) {
     try {
         const settings = getSettings();
@@ -265,15 +291,18 @@ export function onSettingsReady(data) {
         if (!ours) return;
 
         const existing = typeof data.custom_include_body === 'string' ? data.custom_include_body : '';
+        // 审: 去掉请求里已有的 claude_subscription 段（重复触发时避免叠加），保留用户自己的 include body。
         const cleaned = existing
             .replace(/^claude_subscription:[\s\S]*?(?=^\S|\s*$(?![\s\S]))/m, '')
             .replace(/\n{3,}/g, '\n\n')
             .trim();
+        // 审: 回复保管发放本次回复的槽位（quiet/impersonate/continue 返回 null）。
         // The reply keeper hands out the reply's slot (null for quiet / impersonate / continue).
         const slot = F.keeper.openSlot(data) ?? null;
 
         const quiet = data.type === 'quiet';
         let yaml = buildIncludeBodyYaml(settings, quiet, slot);
+        // 审: 只有正式聊天请求才带这些诊断字段；后台调用（摘要/生图标签等）不带。
         // JSON is valid YAML: the snippets carry quotes, colons and newlines safely.
         if (!quiet) {
             yaml += `\n  late: ${JSON.stringify(injectedOpenings())}\n  st_fp: ${JSON.stringify(stFingerprint(data))}`;

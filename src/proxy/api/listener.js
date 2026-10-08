@@ -21,10 +21,13 @@ import express from 'express';
 import { guardHost, guardRemote, handleRouteError } from './guards.js';
 import { registerRoutes } from './routes.js';
 
+// 审: 当前在听的 HTTP 服务器，null = 没在听；防重复启动、localEndpoint 和停止都读它。
 let serverInstance = null;
 
+// 审: 视为本机的监听地址，localEndpoint 判断用。
 const LOOPBACK = new Set(['127.0.0.1', '::1', 'localhost']);
 
+// 审: 这个进程在本机上实际可访问的地址，/status 的 endpoint 字段让面板核对设置里的端点。
 /** Where this process can be reached from the machine it runs on: the port the
  *  listener actually got, on a loopback address. Null when it is bound to one
  *  specific non-loopback interface (nothing to promise) or is not listening. */
@@ -35,6 +38,7 @@ export function localEndpoint() {
     return LOOPBACK.has(addr.address) ? `http://${addr.address}:${addr.port}/v1` : null;
 }
 
+// 审: 启动独立监听（酒馆 CSRF 之外的端口），插件和单独运行都用；已在听则复用。
 export function startStandaloneListener({ port, host }) {
     if (serverInstance) return Promise.resolve(serverInstance);
 
@@ -50,6 +54,7 @@ export function startStandaloneListener({ port, host }) {
     return new Promise((resolve, reject) => {
         const server = app.listen(port, host, () => {
             serverInstance = server;
+            // 审: 绑 0.0.0.0 也只服务本机（guards 会拒别的设备），这条警告说明这一点。
             if (host === '0.0.0.0' || host === '::') {
                 console.warn('[claude-subscription] listening on every network interface, but requests from other machines are refused: the proxy is for this computer only.');
             }
@@ -71,12 +76,14 @@ export function startStandaloneListener({ port, host }) {
     });
 }
 
+// 审: 端口被占时的提示文案；server.js 和 plugin.js 用。
 export function portInUseMessage(port) {
     return `[claude-subscription] port ${port} is already in use. Set ` +
         'CLAUDE_SUBSCRIPTION_PORT to a free port and restart — then update ' +
         '"Endpoint (advanced)" in the CCST panel to match.';
 }
 
+// 审: 探测 host:port 上是不是我们自己的代理（用 /status 的 plugin 字段）；启动前判断共用 / 退出。
 /** Is the process on host:port our own proxy? (standalone `npm start`) */
 export async function probeExistingProxy({ port, host }) {
     try {
@@ -88,6 +95,7 @@ export async function probeExistingProxy({ port, host }) {
     }
 }
 
+// 审: 关闭监听并立刻断开 keep-alive 连接，退出和插件 exit 用。
 export function stopStandaloneListener() {
     if (!serverInstance) return Promise.resolve();
     const server = serverInstance;

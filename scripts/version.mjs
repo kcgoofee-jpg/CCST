@@ -6,15 +6,20 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// 审: 仓库根目录。
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+// 审: 版本号格式 x.y.z[-预发布]；--check 和改版本都用它校验。
 const SEMVER = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
+// 审: 读 JSON 文件（相对仓库根）。
 const read = (f) => JSON.parse(readFileSync(join(ROOT, f), 'utf8'));
+// 审: 只改 version 字段而不重写整个 JSON，保留原有缩进与字段顺序。
 // 只替换 "version" 这一行，保留文件原来的缩进和字段顺序
 const setVersion = (f, v) => {
     const text = readFileSync(join(ROOT, f), 'utf8');
     writeFileSync(join(ROOT, f), text.replace(/("version"\s*:\s*)"[^"]*"/, `$1"${v}"`));
 };
 
+// 审: 命令行入口：--check（门控用）或新版本号。
 const arg = process.argv[2];
 if (arg === '--check') {
     const p = read('package.json').version;

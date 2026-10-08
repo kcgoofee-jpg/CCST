@@ -16,10 +16,11 @@
 //      "/model … [1m]" picker entries resolve, and how Meridian serves 1M.
 //
 // 1M context requires Extra Usage on some plans; failures are handled by the
-// caller via stripExtendedContext + the 1-hour cooldown below (probe pattern
+// caller via the 1-hour cooldown below (probe pattern
 // copied from Meridian: one failed [1m] request arms the cooldown, base model
 // serves in the meantime, a single probe retries after the hour).
 
+// 审: 模型档位 → CLI 里钉版本用的环境变量名；parseModelRequest 生成 envPins 用。
 const TIER_ENV = {
     fable: 'ANTHROPIC_DEFAULT_FABLE_MODEL',
     opus: 'ANTHROPIC_DEFAULT_OPUS_MODEL',
@@ -27,6 +28,7 @@ const TIER_ENV = {
     haiku: 'ANTHROPIC_DEFAULT_HAIKU_MODEL',
 };
 
+// 审: 各档位的默认版本，先全部钉住，防止 CLI 内置的旧默认值悄悄决定没指定的档位；测试用到。
 // Canonical tier defaults — pinned under the request-specific pin so the
 // CLI's bundled (possibly stale) defaults never decide a tier we didn't pin
 // explicitly (Meridian issue #419 class of bug).
@@ -37,6 +39,7 @@ export const CANONICAL_TIER_MODELS = {
     haiku: 'claude-haiku-4-5',
 };
 
+// 审: 模型目录（id / 档位 / 能不能 1M / 思考能力 / 上下文），选择器列表、思考参数、请求解析的唯一数据源。
 // `adaptiveOnly` = always-thinking model families; sampling params are
 // rejected and `thinking: { type: 'enabled' | 'disabled' }` is invalid — only
 // adaptive applies (Opus 5.5, Sonnet 5.5, Fable, Mythos). Measured live (5.1): `thinking: disabled` is accepted
@@ -60,14 +63,17 @@ export const CLAUDE_SUBSCRIPTION_MODELS = [
     { id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5', tier: 'haiku', oneM: false, adaptiveOnly: false, context: 200000 },
 ];
 
+// 审: 1M 上下文变体的后缀。
 const ONE_M_SUFFIX = '[1m]';
 
+// 审: 按 id 查目录（容忍大小写和小数点写法），不在目录里返回 null。
 function catalogEntry(baseId) {
     const raw = String(baseId).toLowerCase();
     const normalized = raw.replace(/\./g, '-');
     return CLAUDE_SUBSCRIPTION_MODELS.find((m) => m.id === raw || m.id === normalized) || null;
 }
 
+// 审: 目录外的新模型 id 靠名字猜档位，向前兼容。
 /** Tier guess for model IDs not in the catalog (forward compatibility). */
 function guessTier(id) {
     const s = String(id).toLowerCase();
@@ -77,6 +83,7 @@ function guessTier(id) {
     return 'sonnet';
 }
 
+// 审: 是不是「总在思考」的模型（目录优先，未知 id 用正则）；parseModelRequest 用，测试直接用。
 /** Always-thinking family detection, catalog first, regex for unknown IDs. */
 export function isAdaptiveOnlyModel(id) {
     const s = String(id).toLowerCase();
@@ -90,6 +97,7 @@ export function isAdaptiveOnlyModel(id) {
     );
 }
 
+// 审: 是不是不接受 budget_tokens 但能关思考的模型；parseModelRequest 用，测试直接用。
 /** Models that reject `budget_tokens` but still allow thinking off. */
 export function isNoBudgetModel(id) {
     const s = String(id).toLowerCase();
@@ -98,6 +106,7 @@ export function isNoBudgetModel(id) {
     return /claude-sonnet-(?:[5-9]|\d{2,})/.test(s) && !isAdaptiveOnlyModel(s);
 }
 
+// 审: 按模型能力降级推理强度（4.5 代没有、4.6 没有 xhigh），免得靠 CLI 重试；chat.js 构造选项时用。
 /**
  * Effort the model can take. The CLI's own model table (read from its binary) lists no effort at all for the
  * 4.5 generation and no xhigh for 4.6; it quietly drops or lowers those, so do the same here instead of
@@ -111,6 +120,7 @@ export function effortForModel(id, effort) {
     return effort;
 }
 
+// 审: 把请求里的模型串解析成 SDK 调用需要的全部信息（基础 id / 档位 / 1M / 环境钉）；chat.js 入口。
 /**
  * Parse the model string from the request into everything the SDK call needs.
  *
@@ -157,26 +167,26 @@ export function parseModelRequest(requested) {
 // Extra Usage / 1M cooldown (Meridian's probe pattern)
 // ──────────────────────────────────────────────
 
+// 审: 1M 额外用量失败后的冷却时长（1 小时）。
 const EXTRA_USAGE_RETRY_MS = 60 * 60 * 1000; // 1 hour
+// 审: 上次 1M 因额外用量失败的时间戳，0 = 没失败过。
 let extraUsageUnavailableAt = 0;
 
+// 审: 记下一次 1M 失败，开始冷却；chat.js 的重试阶梯用。
 export function recordExtendedContextUnavailable() {
     extraUsageUnavailableAt = Date.now();
 }
 
+// 审: 冷却中则本次直接用基础模型；chat.js 用。
 export function isExtendedContextKnownUnavailable() {
     return extraUsageUnavailableAt > 0 && Date.now() - extraUsageUnavailableAt < EXTRA_USAGE_RETRY_MS;
-}
-
-/** Test seam. */
-export function resetExtendedContextUnavailable() {
-    extraUsageUnavailableAt = 0;
 }
 
 // ──────────────────────────────────────────────
 // /v1/models handler
 // ──────────────────────────────────────────────
 
+// 审: GET /v1/models：列出目录里的模型和 1M 变体，酒馆的模型列表靠它。
 export function listModelsHandler(_req, res) {
     const data = [];
     for (const m of CLAUDE_SUBSCRIPTION_MODELS) {

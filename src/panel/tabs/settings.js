@@ -5,7 +5,8 @@
 // ──────────────────────────────────────────────
 
 import { store } from '../core/store.js';
-import { DEFAULT_ENDPOINT, getSettings } from '../core/settings.js';
+import { getSettings } from '../core/settings.js';
+import { DEFAULT_ENDPOINT } from '../core/capabilities.js';
 import { normalizeEndpoint } from '../core/capabilities.js';
 import { el, segmented, toggleRow, group, button } from '../core/dom.js';
 import { notify } from '../core/notify.js';
@@ -14,8 +15,9 @@ import { refreshStatus } from '../core/live.js';
 import { connect, SOURCE_LABELS } from '../shell.js';
 import { restartGuide } from '../guide.js';
 
+// 审: 连接分区那一行状态（代理版本 · 凭证来源 / 未登录 / 没连上），随 status 订阅更新。
 /** 设置 → 连接's one status line. Plan and model are in the header: not repeated here. */
-export function proxyInfoLine(status) {
+function proxyInfoLine(status) {
     if (status?.phase === 'online') {
         const cred = status.cred ?? {};
         const where = cred.present ? SOURCE_LABELS[cred.source] ?? cred.source : '';
@@ -26,6 +28,7 @@ export function proxyInfoLine(status) {
     return '';
 }
 
+// 审: 设置页的 store 订阅，只刷新「连接」那行；boot.js 调用。
 export function init() {
     store.subscribe('status', ({ status }) => {
         const info = document.getElementById('claude_max_proxy_info');
@@ -35,6 +38,7 @@ export function init() {
     });
 }
 
+// 审: 建设置页：连接（地址 + 重新连接）、缓存（时长 + 条目后移）、检查（发送内容）、重看引导；shell.js 调用。
 /** Tab 设置: see the header comment. */
 export function buildSettingsTab(pane, settings, save) {
     const conn = group('连接');
@@ -72,18 +76,14 @@ export function buildSettingsTab(pane, settings, save) {
     pane.append(again);
 }
 
-/** Every address input shows the same setting: keep them in step. */
-function syncEndpointInputs(value) {
-    for (const input of document.querySelectorAll('.cm-endpoint-input')) input.value = value;
-}
-
+// 审: 代理地址输入框：改完存设置、提示「点重新连接生效」并立刻重测状态。
 /** The proxy address input. */
-export function endpointField(settings, save, { id = 'claude_max_endpoint' } = {}) {
+function endpointField(settings, save) {
     const field = el('div', 'cm-field');
     field.append(el('div', 'cm-field-label', '地址'));
     const input = el('input', 'text_pole cm-endpoint-input');
     input.type = 'text';
-    input.id = id;
+    input.id = 'claude_max_endpoint';
     input.value = settings.endpoint;
     input.placeholder = DEFAULT_ENDPOINT;
     // Committed on change (Enter / leaving the field), not per keystroke:
@@ -92,7 +92,7 @@ export function endpointField(settings, save, { id = 'claude_max_endpoint' } = {
         const next = normalizeEndpoint(input.value) || DEFAULT_ENDPOINT;
         if (normalizeEndpoint(settings.endpoint) === next) { input.value = settings.endpoint; return; }
         settings.endpoint = next;
-        syncEndpointInputs(settings.endpoint);
+        input.value = next; // 显示规范化后的地址
         save();
         // Requests are only tagged when ST's own Custom URL matches this address.
         notify('info', '地址已改', '点「重新连接」生效', { ms: 10000, replace: 'endpoint' });
@@ -102,6 +102,7 @@ export function endpointField(settings, save, { id = 'claude_max_endpoint' } = {
     return field;
 }
 
-export function reconnectButton() {
+// 审: 「重新连接」按钮，直接走 shell 的一键连接；地址改完或连接乱了用。
+function reconnectButton() {
     return button('重新连接', () => connect(getSettings()), { icon: 'fa-plug', text: true });
 }

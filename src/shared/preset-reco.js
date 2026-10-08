@@ -11,6 +11,7 @@
 // by hand — then applies the new preset's own recommendation.
 // Pure function; shared by the panel (index.js) and the tests.
 
+// 审: 切换预设时先撤销上个预设的推荐值（用户手改过的不动），再应用新预设的推荐；面板 presets 用。
 /**
  * @param {object} settings        current panel settings
  * @param {object|null} rec        new preset's extensions.claude_max (or null)
@@ -47,6 +48,7 @@ export function planPresetReco(settings, rec, record, fields) {
     };
 }
 
+// 审: 按预设名字猜它是给哪个模型家族写的；presetMismatchNote 的后备依据，测试也用。
 /** Which model family a preset NAME was made for: 'gemini' | 'gpt' | 'deepseek' | 'claude', or null when the name does not say. */
 export function presetFamily(name) {
     const n = String(name ?? '');
@@ -58,19 +60,23 @@ export function presetFamily(name) {
     return hits.length === 1 ? hits[0] : null;
 }
 
-export const FAMILY_NAMES = { gemini: 'Gemini', gpt: 'GPT', deepseek: 'DeepSeek' };
+// 审: 非 Claude 家族的显示名；提示文案和 presetFamilyFromEntries 的候选集都靠它，仅本文件内用。
+const FAMILY_NAMES = { gemini: 'Gemini', gpt: 'GPT', deepseek: 'DeepSeek' };
 
+// 审: 预设带的已启用正则脚本数；presetRegexNote 用，测试也用。
 /** Count of enabled regex scripts a preset carries (preset.extensions.regex_scripts, entries not `disabled`). */
 export function presetRegexCount(preset) {
     const list = preset?.extensions?.regex_scripts;
     return Array.isArray(list) ? list.filter((r) => r && !r.disabled).length : 0;
 }
 
+// 审: 预设带正则时给连接提示追加「点立即刷新」；面板 shell 用。
 /** Appended to the connect notice when the preset carries enabled regex scripts; '' otherwise. */
 export function presetRegexNote(preset) {
     return presetRegexCount(preset) ? '点酒馆的「立即刷新」让正则生效' : '';
 }
 
+// 审: 取预设里实际开启的提示词条目；presetFamilyFromEntries 用，测试也用。
 /** The prompt entries a preset has switched ON (prompt_order's longest list, entries with enabled: true). */
 export function presetEnabledPrompts(preset) {
     const orders = Array.isArray(preset?.prompt_order) ? preset.prompt_order : [];
@@ -79,6 +85,7 @@ export function presetEnabledPrompts(preset) {
     return (Array.isArray(preset?.prompts) ? preset.prompts : []).filter((p) => p && on.has(p.identifier));
 }
 
+// 审: 各家族在条目名/正文里的特征词；presetFamilyFromEntries 的识别规则。
 const ENTRY_WORDS = {
     claude: /claude|opus|sonnet|haiku|克劳德/i,
     gemini: /gemini|谷歌|google/i,
@@ -86,6 +93,7 @@ const ENTRY_WORDS = {
     deepseek: /deepseek|\bR1\b/i,
 };
 
+// 审: 按已启用条目判断预设是给哪个家族写的（不看名字）；presetMismatchNote 优先用它。
 /**
  * Which model family the ENABLED entries of a preset were written for, ignoring its name (a preset can be renamed,
  * and a name can say nothing). 'claude' as soon as any enabled entry mentions Claude; another family only when its
@@ -109,6 +117,7 @@ export function presetFamilyFromEntries(preset) {
     return others.length === 1 ? others[0] : null;
 }
 
+// 审: 预设像是给其他家族写的就返回一句提示，否则空串；面板 shell 用。
 /**
  * Note for the connect notice when the active preset looks made for another family; '' when unsure or fine.
  * The preset's enabled entries decide when they give a verdict; the name is the fallback (and the only
@@ -118,67 +127,4 @@ export function presetMismatchNote(name, preset = null) {
     const fam = presetFamilyFromEntries(preset) ?? presetFamily(name);
     if (!fam || fam === 'claude') return '';
     return `「${name}」是给 ${FAMILY_NAMES[fam]} 的预设`;
-}
-
-// Presets CCST has looked at closely, recognised by what they contain (entry / script / regex names,
-// marker text), never by the preset's name — those get renamed and re-versioned all the time.
-const MARKERS = {
-    // 果实 (V6.x): 「果实之心」 scripts, 「MoM必选」 regexes around <meow_FM>, the 💡 theatre entries, 果农.
-    guoshi: [
-        (p, t) => t.scripts.some((n) => /果实之心/.test(n)),
-        (p) => !!p?.extensions?.fruitHeartSections,
-        (p, t) => t.regexNames.some((n) => /^MoM必选/.test(n)),
-        (p) => (p?.extensions?.regex_scripts ?? []).some((r) => /<meow_FM>/.test(String(r?.findRegex ?? ''))),
-        (p, t) => t.entryNames.some((n) => /果农/.test(n)),
-        (p, t) => t.entryNames.filter((n) => /^💡/.test(n)).length >= 5,
-    ],
-    // 灰烬之桥 (Ashen Bridge, Claude v4.x).
-    ashen: [
-        (p, t) => t.entryNames.some((n) => /🌈思考开始/.test(n)),
-        (p, t) => t.entryNames.some((n) => /✨思维链锁/.test(n)),
-        (p, t) => t.entryNames.some((n) => /⭐️注解残篇开始|🐕收尾标记/.test(n)),
-        (p) => (p?.prompts ?? []).some((x) => String(x?.content ?? '').includes('灰烬里仍有余温')),
-        (p, t) => t.regexNames.some((n) => /保留\d+层正文/.test(n)),
-    ],
-};
-
-function scriptNames(list, out = []) {
-    for (const s of Array.isArray(list) ? list : []) {
-        if (!s || typeof s !== 'object' || s.enabled === false) continue;
-        if (s.type === 'folder') scriptNames(s.scripts, out);
-        else if (s.name) out.push(String(s.name));
-    }
-    return out;
-}
-
-/**
- * What a preset does that matters for the cache (pure; preset = SillyTavern's chat-completion preset object):
- * - family: 'guoshi' | 'ashen' | null — three or more of that preset's markers;
- * - prefill: an enabled assistant-role entry after the chat history (the reply is continued from it);
- * - depthRegexes: enabled prompt-only regexes that act from depth 2 on, { name, minDepth } — they cut
- *   older messages as they age, so the history changes there every turn.
- */
-export function presetTraits(preset) {
-    const orders = Array.isArray(preset?.prompt_order) ? preset.prompt_order : [];
-    const order = orders.reduce((best, o) => ((o?.order?.length ?? 0) > (best?.order?.length ?? 0) ? o : best), null)?.order ?? [];
-    const byId = new Map((Array.isArray(preset?.prompts) ? preset.prompts : []).filter(Boolean).map((p) => [p.identifier, p]));
-    const hist = order.findIndex((it) => it?.identifier === 'chatHistory');
-    const prefill = hist >= 0 && order.slice(hist + 1).some((it) => {
-        const p = byId.get(it?.identifier);
-        return it?.enabled && p?.role === 'assistant' && !p.injection_position && String(p.content ?? '').trim();
-    });
-    const regexes = (Array.isArray(preset?.extensions?.regex_scripts) ? preset.extensions.regex_scripts : []).filter((r) => r && !r.disabled);
-    const depthRegexes = regexes
-        .filter((r) => r.promptOnly && Number.isFinite(Number(r.minDepth)) && r.minDepth !== null && r.minDepth !== '' && Number(r.minDepth) >= 2)
-        .map((r) => ({ name: String(r.scriptName ?? ''), minDepth: Number(r.minDepth) }));
-    const t = {
-        scripts: scriptNames(preset?.extensions?.tavern_helper?.scripts),
-        regexNames: regexes.map((r) => String(r.scriptName ?? '')),
-        entryNames: [...byId.values()].map((p) => String(p.name ?? '')),
-    };
-    let family = null;
-    for (const [name, tests] of Object.entries(MARKERS)) {
-        if (tests.filter((f) => { try { return f(preset, t); } catch { return false; } }).length >= 3) family = name;
-    }
-    return { family, prefill, depthRegexes };
 }

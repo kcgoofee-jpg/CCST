@@ -3,8 +3,10 @@
 // never let a stuck socket or a second Ctrl+C leave the process hanging.
 // ──────────────────────────────────────────────
 
+// 审: 日志前缀。
 const TAG = '[claude-subscription]';
 
+// 审: 生成 SIGINT / SIGTERM 处理函数：先正常关闭，卡住或再按一次就强退；server.js 单独运行时用。
 /**
  * @param {{ close: () => Promise<void>, hardExitMs?: number, exit?: (code: number) => void }} opts
  * @returns {(signal: string) => void} install as the SIGINT / SIGTERM handler

@@ -243,7 +243,6 @@ test('CLAUDE_SUBSCRIPTION_CONTEXT_PIN_FILE=off keeps the pin in memory only', as
 const TMP = mkdtempSync(join(tmpdir(), 'cm-prefill-'));
 process.env.CLAUDE_SUBSCRIPTION_SCRATCH_CWD = join(TMP, 'scratch');
 process.env.CLAUDE_SUBSCRIPTION_CONTEXT_PIN_FILE = 'off';
-process.env.CLAUDE_SUBSCRIPTION_CACHE_MEMORY_FILE = 'off';
 
 const { handleChatCompletions } = await import('../src/proxy/core/chat.js');
 const { __setSdkForTesting } = await import('../src/proxy/core/sdk-loader.js');

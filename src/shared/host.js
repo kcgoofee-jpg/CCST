@@ -10,6 +10,7 @@
 // instead of the generic "can't reach the proxy".
 // Pure function; shared by the panel (index.js) and the tests.
 
+// 审: 判断 IPv4 是否私有/回环/链路本地/CGNAT 地址；isLocalHost 的子步骤（含 IPv4 映射的 IPv6）。
 /** 10/8, 172.16/12, 192.168/16, 127/8, 169.254/16 (link-local), 100.64/10 (CGNAT: Tailscale & co. on the user's own devices). */
 function privateV4(host) {
     const m = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
@@ -19,6 +20,7 @@ function privateV4(host) {
         || (a === 169 && b === 254) || (a === 100 && b >= 64 && b <= 127);
 }
 
+// 审: 页面是否从本机/局域网打开；cloudNeedsNote 和面板 shell/guide 用来判断是不是云端酒馆。
 /** True for loopback, LAN addresses and local names — the page is served from the user's own network. */
 export function isLocalHost(hostname) {
     const host = String(hostname ?? '').trim().toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
@@ -35,6 +37,7 @@ export function isLocalHost(hostname) {
     return false;
 }
 
+// 审: 端点是否指向本机（localhost/127.x/::1）；cloudNeedsNote 的子判断，测试也直接用。
 /** The endpoint points at the machine SillyTavern's server runs on (127.0.0.1 / localhost). */
 export function isLoopbackUrl(url) {
     let host;
@@ -42,6 +45,7 @@ export function isLoopbackUrl(url) {
     return host === 'localhost' || host === '::1' || /^127\./.test(host);
 }
 
+// 审: 云端酒馆 + 回环端点 = 连不上用户电脑上的代理；面板 capabilities 用它显示一次性说明。
 /**
  * A cloud-hosted SillyTavern pointed at a loopback proxy address: the proxy on
  * the user's computer is out of its reach.

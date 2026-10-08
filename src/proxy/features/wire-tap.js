@@ -22,21 +22,31 @@ import { createServer, request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import { connect as tlsConnect } from 'node:tls';
 
+// 审: 内存里最多留最近 30 次抓包。
 const MAX_EXCHANGES = 30;
+// 审: 响应只留开头 64KB（含 message_start 的缓存用量）。
 const HEAD_BYTES = 64 * 1024; // message_start (with the cache usage) is at the top
+// 审: 响应只留结尾 16KB（含 message_delta 的输出用量）。
 const TAIL_BYTES = 16 * 1024; // message_delta (output tokens) at the end
 
+// 审: 抓到的请求记录，仅内存。
 const exchanges = []; // { id, at, path, status, ms, request (parsed body), betas, ratelimit, usage, error }
+// 审: 本地转发服务实例，首次使用时启动。
 let server = null;
+// 审: 启动中的 Promise，防止并发请求重复启动。
 let starting = null;
+// 审: 抓包记录自增编号。
 let nextId = 1;
 
+// 审: DEV_BASE_URL 让开发时把请求转到别的上游，保留给排查。
 function upstreamBase() {
     return new URL(process.env.CLAUDE_SUBSCRIPTION_DEV_BASE_URL || 'https://api.anthropic.com');
 }
 
+// 审: 环境里可能出现的代理变量名。
 const PROXY_VARS = ['HTTPS_PROXY', 'https_proxy', 'ALL_PROXY', 'all_proxy', 'HTTP_PROXY', 'http_proxy'];
 
+// 审: 环境里有非 http 代理时必须跳过抓包，否则会绕过用户的代理（chat.js、测试使用）。
 /**
  * Why the CLI must NOT go through the forwarder, or null when it may. The forwarder only knows how to
  * reach Anthropic directly or through an http:// CONNECT proxy; with a socks5:// (or https://, or
@@ -54,6 +64,7 @@ export function tapSkipReason(env = process.env) {
     return null;
 }
 
+// 审: 取环境里的 http 代理，转发时用 CONNECT 走它。
 /** An http:// proxy from the environment (HTTPS_PROXY & co.), if any: the CLI would have used it. */
 function envProxy() {
     for (const k of PROXY_VARS) {
@@ -67,6 +78,7 @@ function envProxy() {
     return null;
 }
 
+// 审: 向上游发 HTTPS 请求，有 http 代理就先 CONNECT。
 /** HTTPS request to the upstream, through an http:// CONNECT proxy when one is set. */
 function openUpstream(target, options, onResponse, onError) {
     const proxy = target.protocol === 'https:' ? envProxy() : null;
@@ -96,6 +108,7 @@ function openUpstream(target, options, onResponse, onError) {
     });
 }
 
+// 审: 从响应文本（流式或非流式）里取 usage（测试使用）。
 /** Usage from a reply: message_start (stream) or the top-level usage (non-stream). */
 export function usageOf(text) {
     try {
@@ -114,17 +127,20 @@ export function usageOf(text) {
     return usage;
 }
 
+// 审: 取某前缀的响应头（额度头）。
 function pickHeaders(headers, prefix) {
     const out = {};
     for (const [k, v] of Object.entries(headers ?? {})) if (k.startsWith(prefix)) out[k] = v;
     return out;
 }
 
+// 审: 记一条抓包，超出上限删最旧。
 function record(entry) {
     exchanges.push(entry);
     while (exchanges.length > MAX_EXCHANGES) exchanges.shift();
 }
 
+// 审: 转发处理：原样转发给上游，同时对 /v1/messages 记录请求体、额度头和 usage。
 function handle(req, res) {
     const chunks = [];
     req.on('data', (c) => chunks.push(c));
@@ -176,6 +192,7 @@ function handle(req, res) {
     });
 }
 
+// 审: 返回本地转发地址，首次调用时启动（chat.js 给子进程设 ANTHROPIC_BASE_URL）。
 /** Loopback base URL of the forwarder (started on first use). */
 export async function tapBaseUrl() {
     if (server?.listening) return `http://127.0.0.1:${server.address().port}`;
@@ -188,15 +205,8 @@ export async function tapBaseUrl() {
     return `http://127.0.0.1:${server.address().port}`;
 }
 
+// 审: 取抓包记录副本，供诊断报告用。
 /** Captured exchanges, oldest first (copies of the records). */
 export function capturedExchanges() {
     return exchanges.slice();
-}
-
-/** Test seam. */
-export async function __resetWireTap() {
-    exchanges.length = 0;
-    nextId = 1;
-    if (server) await new Promise((r) => server.close(r));
-    server = null;
 }

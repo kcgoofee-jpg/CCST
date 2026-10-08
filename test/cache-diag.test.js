@@ -90,8 +90,9 @@ test('explainCache flags history that stopped caching although nothing changed',
     assert.doesNotMatch(healthy.reasons.join(), /内容没变却没读到/);
 });
 
-test('equivalentTokens uses list-price ratios', async () => {
-    const { equivalentTokens } = await import('../src/proxy/features/cache-diag.js');
+test('costParts uses list-price ratios', async () => {
+    const { costParts } = await import('../src/proxy/features/cache-diag.js');
+    const equivalentTokens = (e) => { const p = costParts(e); return Math.round(p.write + p.output + p.read + p.input); };
     // 1-hour writes (what CCST asks for) at 2×, 5-minute writes at 1.25×.
     assert.equal(equivalentTokens({ inputTokens: 2, cacheReadTokens: 50000, cacheCreationTokens: 2800, outputTokens: 5000 }), 2 + 5000 + 5600 + 25000);
     assert.equal(equivalentTokens({ inputTokens: 2, cacheReadTokens: 50000, cacheCreationTokens: 2800, outputTokens: 5000, cacheTtl: '5m' }), 2 + 5000 + 3500 + 25000);
@@ -210,7 +211,8 @@ test('a failed request is discarded: the resend is compared with the last reques
 
 test('cache writes of unknown TTL count as 1 hour in the equivalent tokens', async () => {
     const { cacheWriteMultiplier } = await import('../src/shared/backends.js');
-    const { equivalentTokens } = await import('../src/proxy/features/cache-diag.js');
+    const { costParts } = await import('../src/proxy/features/cache-diag.js');
+    const equivalentTokens = (e) => { const p = costParts(e); return Math.round(p.write + p.output + p.read + p.input); };
     assert.equal(cacheWriteMultiplier(null), 2);
     assert.equal(cacheWriteMultiplier('1h'), 2);
     assert.equal(cacheWriteMultiplier('5m'), 1.25);

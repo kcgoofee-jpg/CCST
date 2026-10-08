@@ -8,10 +8,13 @@
 import { ROOT } from '../paths.js';
 import { getPluginVersion } from './status.js';
 
+// 审: 共用期间多久检查一次对方还在不在。
 const CHECK_MS = 10_000;
 
+// 审: 共用状态，null = 没在共用。
 let shared = null; // { base, timer } while another proxy owns the port
 
+// 审: 正在共用时返回对方地址，否则 null；routes.js 判断要不要转发。
 export function sharingWith() {
     return shared ? shared.base : null;
 }
@@ -33,6 +36,7 @@ export function startSharing({ port, host, alive, takeOver, checkMs = CHECK_MS }
     shared = { base, timer };
 }
 
+// 审: 结束共用（接管成功 / 插件退出 / 重新开始共用时）。
 export function stopSharing() {
     if (shared) clearInterval(shared.timer);
     shared = null;

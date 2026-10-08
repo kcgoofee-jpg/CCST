@@ -7,28 +7,30 @@
 import { store } from './core/store.js';
 import { getSettings, saveSettingsDebounced } from './core/settings.js';
 import { connectionInfo, shortModel } from './core/connection.js';
-import { APP_NAME, IS_TAURI, COARSE } from './core/capabilities.js';
-import { libs } from './core/libs.js';
+import { APP_NAME } from './core/capabilities.js';
 import { fetchProxy } from './core/proxy.js';
 import { refreshStatus } from './core/live.js';
 import { el, note, button } from './core/dom.js';
 import { cmdRow, linkButton } from './core/help-items.js';
-import { hostKind, installHelp, loginHelp } from './core/connect-help.js';
+import { installHelp, loginHelp } from './core/connect-help.js';
 import {
     GUIDE_STEPS, DONE_STEP, GUIDE_POLL_MS, guideFacts, guideStep, shouldAutoOnboard, pollsProxy,
     startGuide, finishGuide,
 } from './core/guide.js';
-import { connect } from './shell.js';
+import { connect, hostNow } from './shell.js';
 
+// 审: 让 shell 与各 tab 重画（它们订阅 pulse）；引导状态一变就要调。
 /** Re-draw everything that follows the connection (the shell listens to `pulse`). */
 const redraw = () => store.set({ pulse: store.get().pulse + 1 });
 
+// 审: 把引导状态补丁写进设置、保存并重画；跳过/完成/重新引导都经过它。
 function apply(patch) {
     Object.assign(getSettings(), patch);
     saveSettingsDebounced();
     redraw();
 }
 
+// 审: 「设置 → 重看引导」的入口（tabs/settings.js 引用）。
 /** 设置 → 重新引导. */
 export function restartGuide() {
     apply(startGuide());
@@ -36,6 +38,7 @@ export function restartGuide() {
     document.getElementById('claude_max_guide')?.scrollIntoView?.({ block: 'nearest' });
 }
 
+// 审: 建引导卡的空壳（默认隐藏），由 renderGuide 填；shell 的 buildStatusBar 调。
 export function buildGuideCard() {
     const card = note('info');
     card.id = 'claude_max_guide';
@@ -45,12 +48,7 @@ export function buildGuideCard() {
     return card;
 }
 
-/** Where this panel runs, from facts only (the same as the connect card). */
-function hostNow() {
-    const remote = libs.hostCheck?.isLocalHost ? !libs.hostCheck.isLocalHost(location.hostname) : false;
-    return hostKind({ tauri: IS_TAURI, elsewhere: COARSE || remote });
-}
-
+// 审: 顶部四步进度条（当前/已完成高亮）。
 function stepper(step) {
     const row = el('ol', 'cm-guide-steps');
     GUIDE_STEPS.forEach((s, i) => {
@@ -62,6 +60,7 @@ function stepper(step) {
     return row;
 }
 
+// 审: 「跳过」按钮，直接结束引导。
 function skipLink() {
     const b = el('button', 'cm-link-btn', '跳过');
     b.type = 'button';
@@ -69,9 +68,11 @@ function skipLink() {
     return b;
 }
 
+// 审: 步骤里「等待中」的灰色小字。
 const waiting = (text) => el('small', 'cm-hint cm-guide-wait', text);
 
 // Step 1 — 装代理. The only step that knows HOW the proxy is installed: another backend swaps this one.
+// 审: 步骤 1 画面：给出安装命令/下载链接；换后端只改这一步。
 function drawInstall(card) {
     const help = installHelp({ host: hostNow() });
     card.append(el('div', 'cm-note-title', '安装 CCST'));
@@ -90,6 +91,7 @@ function drawInstall(card) {
 }
 
 // Step 2 — 登录.
+// 审: 步骤 2 画面：显示登录命令。
 function drawLogin(card) {
     const help = loginHelp({ host: hostNow() });
     card.append(
@@ -101,6 +103,7 @@ function drawLogin(card) {
 }
 
 // Step 3 — 连接.
+// 审: 步骤 3 画面：一键连接按钮（含版本不配的警告）。
 function drawConnect(card) {
     const { status } = store.get();
     card.append(
@@ -113,6 +116,7 @@ function drawConnect(card) {
     card.append(row);
 }
 
+// 审: 完成画面：已连接，点「完成」收起引导。
 function drawDone(card) {
     const { model } = connectionInfo();
     card.append(
@@ -124,13 +128,16 @@ function drawDone(card) {
     card.append(row);
 }
 
+// 审: 步骤号 → 画面函数的分发表。
 const DRAW = { 1: drawInstall, 2: drawLogin, 3: drawConnect, [DONE_STEP]: drawDone };
 
 // ── Steps 1 and 2 wait for the proxy: ask it every few seconds, quietly (no 「正在检测」 flicker),
 // and run the full status check only when its answer moved on. ──
+// 审: 轮询定时器与重入锁，防止多个定时器/并发请求叠加。
 let pollTimer = null;
 let polling = false;
 
+// 审: 安静地问代理一次 /status，答案变了才触发完整刷新（避免「正在检测」闪烁）。
 async function pollOnce() {
     if (polling || document.hidden) return;
     polling = true;
@@ -147,6 +154,7 @@ async function pollOnce() {
     }
 }
 
+// 审: 开关轮询；卡片已不在页面时自动停（面板重建后的旧定时器）。
 function setPolling(on) {
     if (on && !pollTimer) pollTimer = setInterval(() => {
         if (!document.getElementById('claude_max_guide')?.isConnected) return setPolling(false);
@@ -155,21 +163,23 @@ function setPolling(on) {
     else if (!on && pollTimer) { clearInterval(pollTimer); pollTimer = null; }
 }
 
+// 审: 上次画的签名（步骤|模型|不配提示），没变就不重画，免得按钮被刷掉。
 let drawn = '';
 
+// 审: 引导卡的主流程：算出该在哪一步、画出来、告诉 shell 是否隐藏连接卡；每次 renderConnect 都调。
 /**
  * Draw (or hide) the guide card for the current settings and connection.
- * @returns {{ step: number, hideConnectCard: boolean }} the shell hides its own connect card while the guide shows.
+ * @returns {{ hideConnectCard: boolean }} the shell hides its own connect card while the guide shows.
  */
 export function renderGuide() {
     const card = document.getElementById('claude_max_guide');
-    const off = { step: 0, hideConnectCard: false };
+    const off = { hideConnectCard: false };
     if (!card) return off;
     const settings = getSettings();
     const phase = store.get().status.phase;
     const facts = guideFacts(connectionInfo(), phase);
     // Not known yet (first check at start-up): keep whatever is drawn; draw nothing before the first answer.
-    if (facts.checking) return drawn ? { step: Number(drawn.split('|')[0]), hideConnectCard: true } : off;
+    if (facts.checking) return drawn ? { hideConnectCard: true } : off;
     if (facts.connected && !settings.everConnected) {
         settings.everConnected = true;
         saveSettingsDebounced();
@@ -197,5 +207,5 @@ export function renderGuide() {
         if (step !== DONE_STEP) row.append(skipLink());
         if (row.childElementCount) card.append(row);
     }
-    return { step, hideConnectCard: true };
+    return { hideConnectCard: true };
 }

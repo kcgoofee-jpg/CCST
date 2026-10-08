@@ -6,6 +6,7 @@ import { fetchProxy } from '../core/proxy.js';
 import { el } from '../core/dom.js';
 import { notify } from '../core/notify.js';
 
+// 审: 设置 → 检查 →「发送内容」：从代理取最后一次请求（代理内存里）并以弹窗展示，让用户看到实际发给模型的内容。
 export async function showDebugRequest() {
     let data;
     try {

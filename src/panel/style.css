@@ -1,3 +1,4 @@
+/* 审: 整份样式只服务面板（.claude-max 作用域）与「发送内容」弹窗（.cm-debug-view）；已删除只服务聊天 tab/一次性加深/日志片段/配置折叠的死规则。 */
 /* CCST panel — built on SillyTavern theme variables so it follows
    whatever theme (and TauriTavern skin) is active, dark or light.
    Rules of thumb: every colour comes from the tokens below; three font
@@ -6,6 +7,7 @@
    a group; controls are 32px on a mouse and 40px on touch screens (pointer: coarse); tone text is mixed with the theme's text
    colour so warn/ok/error stay readable on a light background too. */
 
+/* 审: 全局设计令牌（颜色、字号、触控高度），其余规则都引用它们。 */
 .claude-max {
     --cm-text: var(--SmartThemeBodyColor, #ccc);
     --cm-accent: var(--SmartThemeQuoteColor, #e18a5b);
@@ -19,9 +21,6 @@
     --cm-fs-title: calc(var(--mainFontSize, 15px) * 0.95);
     --cm-fs-body: calc(var(--mainFontSize, 15px) * 0.85);
     --cm-fs-caption: calc(var(--mainFontSize, 15px) * 0.75);
-    
-    
-    
     --cm-tap: 32px;
     --cm-radius: 8px;
     /* Cards sit on top of the chat, so they must not be see-through: the theme's tint at full opacity
@@ -29,6 +28,7 @@
     --cm-solid: var(--SmartThemeBlurTintColor, var(--SmartThemeChatTintColor, #1b1b1b));
 }
 
+/* 审: 触屏放大点击目标。 */
 /* touch screens: bigger targets, same type */
 @media (pointer: coarse) {
     .claude-max { --cm-tap: 40px; }
@@ -36,6 +36,7 @@
     .claude-max .cm-fold > summary { min-height: 52px; }
 }
 
+/* 审: 新引擎把主题底色强制不透明；旧引擎沿用上面的回退值。 */
 @supports (color: rgb(from red r g b / 1)) {
     .claude-max {
         --cm-solid: rgb(from var(--SmartThemeBlurTintColor, var(--SmartThemeChatTintColor, #1b1b1b)) r g b / 1);
@@ -44,11 +45,13 @@
 
 /* The whole panel sits on top of the chat: give it one opaque floor so tab bar, section headers and
    tables are readable, not only the cards. Inner cards mix their tint into the same solid colour. */
+/* 审: 整个面板的不透明底，盖在聊天上。 */
 .claude-max .inline-drawer-content {
     background: var(--cm-solid);
     border-radius: var(--cm-radius);
 }
 
+/* 审: 面板主体纵向排布。 */
 .claude-max .cm-body {
     display: flex;
     flex-direction: column;
@@ -58,6 +61,7 @@
     line-height: 1.4;
 }
 
+/* 审: 抽屉标题行（圆点 + CCST + 摘要）。 */
 .claude-max .cm-heading {
     display: inline-flex;
     align-items: center;
@@ -79,6 +83,7 @@
 /* header summary is for the collapsed drawer; the status bar covers it when open */
 .claude-max:has(.inline-drawer-icon.up) .cm-head-sum { display: none; }
 
+/* 审: 灰色小字提示，全面板通用。 */
 .claude-max .cm-hint {
     display: block;
     opacity: 0.7;
@@ -87,12 +92,12 @@
     white-space: pre-line;
 }
 
-.claude-max .cm-lead { padding: 0 2px; }
-
+/* 审: 让 hidden 属性压过各处 display 设置，面板大量靠 hidden 显隐。 */
 .claude-max [hidden] { display: none !important; }
 
 /* ── status dot ── */
 
+/* 审: 状态小圆点，颜色由 data-state 切换（setDot）。 */
 .claude-max .cm-dot {
     width: 8px;
     height: 8px;
@@ -102,23 +107,25 @@
     transition: background 0.2s ease;
 }
 
-.claude-max .cm-bar .cm-dot,
-.claude-max .cm-setup-head .cm-dot { width: 10px; height: 10px; }
+.claude-max .cm-bar .cm-dot { width: 10px; height: 10px; }
 .claude-max .cm-dot[data-state="online"] { background: var(--cm-ok); box-shadow: 0 0 6px color-mix(in srgb, var(--cm-ok) 60%, transparent); }
 .claude-max .cm-dot[data-state="warning"] { background: var(--cm-warn); }
 .claude-max .cm-dot[data-state="offline"] { background: var(--cm-bad); }
 .claude-max .cm-dot[data-state="pending"] { animation: cm-pulse 1s ease-in-out infinite; }
 
+/* 审: 圆点与引导等待点共用的呼吸动画。 */
 @keyframes cm-pulse { 50% { opacity: 0.3; } }
 
 /* ── status bar: dot · model · where/billing · quota. One line; a tap opens 状态 ── */
 
+/* 审: 状态栏 + 引导卡 + 连接卡的外层。 */
 .claude-max .cm-status-block {
     display: flex;
     flex-direction: column;
     gap: 8px;
 }
 
+/* 审: 状态栏按钮：点一下进「状态」。 */
 .claude-max .cm-bar {
     display: flex;
     align-items: center;
@@ -138,6 +145,7 @@
 
 .claude-max .cm-bar:hover { background: color-mix(in srgb, var(--cm-text) 12%, var(--cm-solid)); }
 
+/* 审: 状态栏摘要：模型/计费/额度三段。 */
 .claude-max .cm-bar-sum {
     flex: 1;
     min-width: 0;
@@ -160,7 +168,6 @@
 }
 
 .claude-max .cm-bar-src,
-.claude-max .cm-bar-effort,
 .claude-max .cm-bar-quota {
     font-size: var(--cm-fs-caption);
     opacity: 0.75;
@@ -174,6 +181,7 @@
 
 /* ── notes: one tinted card, the tone picks the colour ── */
 
+/* 审: 统一的着色提示卡，data-tone 决定颜色（note()）。 */
 .claude-max .cm-note {
     --cm-tone: var(--cm-info);
     display: flex;
@@ -189,11 +197,13 @@
 .claude-max .cm-note[data-tone="warn"] { --cm-tone: var(--cm-warn); }
 .claude-max .cm-note[data-tone="error"] { --cm-tone: var(--cm-bad); }
 
+/* 审: 提示卡标题，warn 小字（版本不配）与原始报错文本样式。 */
 .claude-max .cm-note-title { font-weight: 700; }
 .claude-max small.cm-warn { color: color-mix(in srgb, var(--cm-warn) 75%, var(--cm-text)); opacity: 1; }
 .claude-max .cm-raw { word-break: break-all; opacity: 0.5; }
 
 /* the connect card: the only thing on screen until SillyTavern is on Claude */
+/* 审: 连接卡的布局与按钮。 */
 .claude-max .cm-setup { gap: 4px; padding: 12px; }
 .claude-max .cm-setup-head { display: flex; align-items: center; gap: 8px; }
 .claude-max .cm-setup-head .cm-note-title { font-size: var(--cm-fs-title); }
@@ -202,9 +212,9 @@
 .claude-max .cm-setup .cm-btn { flex: 1 1 auto; }
 
 /* first-run guide: 装代理 → 登录 → 连接 → 完成 */
+/* 审: 首次引导卡及其四步进度条（含计数前缀、完成/当前高亮、等待点、跳过链接）。 */
 .claude-max .cm-guide { gap: 4px; padding: 12px; }
 .claude-max .cm-guide .cm-note-title { font-size: var(--cm-fs-title); }
-.claude-max .cm-guide .cm-notes { margin: 0; }
 .claude-max .cm-guide .cm-btn-row { align-items: center; margin-top: 4px; }
 .claude-max .cm-guide .cm-btn { flex: 1 1 auto; }
 .claude-max .cm-guide-steps { display: flex; gap: 6px; margin: 0; padding: 0; list-style: none; font-size: var(--cm-fs-caption); }
@@ -220,14 +230,17 @@
 .claude-max .cm-guide-foot .cm-link-btn { min-height: 24px; font-size: var(--cm-fs-caption); opacity: 0.8; }
 
 /* 设置 → 重新引导: a small link at the bottom */
+/* 审: 设置底部「重看引导」小链接。 */
 .claude-max .cm-guide-again { align-self: flex-start; min-height: 24px; padding: 0; font-size: var(--cm-fs-caption); opacity: 0.8; }
 
 /* first run: tabs are reachable but out of the way until the user goes looking */
+/* 审: 首次设置阶段只显示连接卡，tab 内容收起。 */
 .claude-max .cm-body[data-stage="setup"]:not([data-explore]) .cm-pane { display: none; }
 .claude-max .cm-body[data-stage="setup"]:not([data-explore]) .cm-tabs { opacity: 0.55; }
 
 /* ── empty / loading / error lines (the same everywhere) ── */
 
+/* 审: 空/加载/出错行（stateLine），加载有转圈，出错变红。 */
 .claude-max .cm-state {
     display: flex;
     align-items: center;
@@ -251,10 +264,12 @@
 
 .claude-max .cm-state[data-kind="error"] .cm-hint { color: color-mix(in srgb, var(--cm-bad) 70%, var(--cm-text)); opacity: 1; }
 
+/* 审: 加载转圈动画。 */
 @keyframes cm-spin { to { transform: rotate(360deg); } }
 
 /* ── buttons ── */
 
+/* 审: 面板内按钮统一尺寸。 */
 .claude-max .menu_button {
     min-height: var(--cm-tap);
     display: inline-flex;
@@ -269,18 +284,18 @@
     font-size: var(--cm-fs-body);
 }
 
+/* 审: 分区里单独的按钮撑满一行。 */
 /* a lone action button fills the row */
-.claude-max .cm-group-body > .menu_button,
-.claude-max .cm-conn-fields > .menu_button,
-.claude-max .cm-fold-body > .menu_button,
-.claude-max .cm-field > .menu_button { display: flex; width: 100%; }
+.claude-max .cm-group-body > .menu_button { display: flex; width: 100%; }
 
+/* 审: 主要按钮高亮。 */
 .claude-max .menu_button.cm-primary {
     background: color-mix(in srgb, var(--cm-accent) 38%, transparent);
     border-color: var(--cm-accent);
     font-weight: 700;
 }
 
+/* 审: 图标按钮（刷新）。 */
 .claude-max .cm-icon-btn {
     min-width: var(--cm-tap);
     padding: 0 8px;
@@ -293,6 +308,7 @@
 
 .claude-max .cm-icon-btn:hover { opacity: 1; background: var(--cm-soft); }
 
+/* 审: 文字链接式按钮（跳过、重看引导、复制命令）。 */
 .claude-max .cm-link-btn {
     min-height: var(--cm-tap);
     padding: 0 8px;
@@ -307,13 +323,10 @@
 
 .claude-max .cm-link-btn:hover { text-decoration: underline; }
 
+/* 审: 次要文字按钮（设置里「重新连接」「发送内容」）。 */
 /* secondary action: a text button with an icon; full-width rows are for primary ones */
 .claude-max .menu_button.cm-btn-text,
-.claude-max .cm-group-body > .menu_button.cm-btn-text,
-.claude-max .cm-conn-fields > .menu_button.cm-btn-text,
-.claude-max .cm-fold-body > .menu_button.cm-btn-text,
-.claude-max .cm-field > .menu_button.cm-btn-text,
-.claude-max .cm-pane > .menu_button.cm-btn-text {
+.claude-max .cm-group-body > .menu_button.cm-btn-text {
     display: inline-flex;
     width: auto;
     align-self: flex-start;
@@ -325,11 +338,13 @@
 
 .claude-max .menu_button.cm-btn-text:hover { background: var(--cm-soft); }
 
+/* 审: 按钮行。 */
 .claude-max .cm-btn-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .claude-max .cm-btn-row .menu_button { flex: 1 1 auto; }
 
 /* ── panes, sections, fields ── */
 
+/* 审: tab 面板内容纵向排布。 */
 .claude-max .cm-pane {
     display: flex;
     flex-direction: column;
@@ -337,6 +352,7 @@
     padding-top: 4px;
 }
 
+/* 审: 分区（group()）容器与正文。 */
 .claude-max .cm-group {
     display: flex;
     flex-direction: column;
@@ -349,13 +365,13 @@
     gap: 8px;
 }
 
+/* 审: 分区标题行：左标题右工具。 */
 .claude-max .cm-section-head {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
     gap: 8px;
     min-height: var(--cm-tap);
-    align-items: center;
     padding-bottom: 2px;
     border-bottom: 1px solid var(--cm-line);
 }
@@ -369,6 +385,7 @@
     gap: 8px;
 }
 
+/* 审: 表单字段（label + 控件）。 */
 .claude-max .cm-field {
     display: flex;
     flex-direction: column;
@@ -376,14 +393,12 @@
 }
 
 .claude-max .cm-field-label { font-weight: 600; }
-.claude-max .cm-field-label.cm-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 
 .claude-max .cm-field .text_pole { min-height: var(--cm-tap); margin: 0; box-sizing: border-box; }
 
-.claude-max .cm-conn-fields { display: flex; flex-direction: column; gap: 8px; }
-
 /* ── segmented control ── */
 
+/* 审: 分段选择器（缓存时长）。 */
 .claude-max .cm-seg {
     display: flex;
     gap: 2px;
@@ -416,101 +431,17 @@
     font-weight: 700;
 }
 
+/* 审: 键盘聚焦轮廓。 */
 .claude-max .cm-seg-btn:focus-visible,
 .claude-max .cm-tab:focus-visible,
-.claude-max .cm-card:focus-visible,
-.claude-max .cm-bar:focus-visible,
-.claude-max .cm-mini-btn:focus-visible {
+.claude-max .cm-bar:focus-visible {
     outline: 2px solid var(--cm-accent);
     outline-offset: -2px;
 }
 
-/* ── radio rows: dot · name · short tag ── */
-
-.claude-max .cm-cards { display: flex; flex-direction: column; gap: 4px; }
-
-.claude-max .cm-card {
-    display: grid;
-    grid-template-columns: 20px minmax(0, 1fr) auto;
-    grid-template-areas: "dot title tag";
-    align-items: center;
-    column-gap: 8px;
-    min-height: var(--cm-tap);
-    padding: 4px 12px 4px 8px;
-    border: 1px solid var(--cm-line);
-    border-radius: var(--cm-radius);
-    background: transparent;
-    color: inherit;
-    font: inherit;
-    text-align: left;
-    cursor: pointer;
-    transition: background 0.15s ease, border-color 0.15s ease;
-}
-
-.claude-max .cm-card:hover { background: var(--cm-soft); }
-.claude-max .cm-card-dot {
-    grid-area: dot;
-    justify-self: center;
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    box-shadow: inset 0 0 0 2px var(--cm-line);
-}
-.claude-max .cm-card-title { grid-area: title; font-weight: 700; font-size: var(--cm-fs-body); white-space: nowrap; }
-.claude-max .cm-card-tag {
-    grid-area: tag;
-    padding: 1px 6px;
-    border-radius: 4px;
-    background: var(--cm-soft);
-    font-size: var(--cm-fs-caption);
-    opacity: 0.8;
-    white-space: nowrap;
-}
-
-.claude-max .cm-card.active {
-    border-color: var(--cm-accent);
-    background: color-mix(in srgb, var(--cm-accent) 13%, transparent);
-}
-
-.claude-max .cm-card.active .cm-card-dot { background: var(--cm-accent); box-shadow: none; }
-
-/* ── 仅下一轮加深: one compact row under the thinking control ── */
-
-.claude-max .cm-oneshot { padding-top: 4px; }
-
-.claude-max .cm-oneshot-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-}
-
-.claude-max .cm-oneshot-title { flex: 1; min-width: 0; opacity: 0.85; }
-
-.claude-max .cm-mini-seg { display: flex; gap: 8px; flex-shrink: 0; }
-
-.claude-max .cm-mini-btn {
-    min-width: 48px;
-    min-height: var(--cm-tap);
-    padding: 0 8px;
-    border: 1px solid var(--cm-line);
-    border-radius: var(--cm-radius);
-    background: transparent;
-    color: inherit;
-    font: inherit;
-    font-size: var(--cm-fs-body);
-    cursor: pointer;
-    white-space: nowrap;
-}
-
-.claude-max .cm-mini-btn.active {
-    border-color: var(--cm-accent);
-    background: color-mix(in srgb, var(--cm-accent) 30%, transparent);
-    font-weight: 700;
-}
-
 /* ── toggle rows ── */
 
+/* 审: 开关行（条目后移）及其滑块。 */
 .claude-max .cm-toggle {
     display: flex;
     align-items: center;
@@ -563,6 +494,7 @@
 
 /* ── tabs ── */
 
+/* 审: tab 栏，吸顶。 */
 .claude-max .cm-tabs {
     display: flex;
     gap: 2px;
@@ -604,17 +536,17 @@
 
 /* ── collapsible rows: title + one-line description + chevron; hairlines instead of boxes ── */
 
+/* 审: 折叠行（用量）与小折叠（详情/怎么办）的 summary 外观。 */
 .claude-max .cm-details > summary,
 .claude-max .cm-mini > summary { list-style: none; cursor: pointer; user-select: none; }
 .claude-max .cm-details > summary::-webkit-details-marker,
 .claude-max .cm-mini > summary::-webkit-details-marker { display: none; }
 
+/* 审: 折叠分区（collapsible）。 */
 .claude-max .cm-fold {
     position: relative;
     border-top: 1px solid var(--cm-line);
 }
-
-.claude-max .cm-pane > .cm-fold:last-child { border-bottom: 1px solid var(--cm-line); }
 
 .claude-max .cm-fold > summary {
     display: flex;
@@ -646,6 +578,7 @@
 .claude-max .cm-fold-desc { font-weight: 400; }
 .claude-max .cm-fold-body { display: flex; flex-direction: column; gap: 8px; padding: 0 0 12px; }
 
+/* 审: 小折叠（详情、怎么办）。 */
 .claude-max .cm-mini > summary {
     display: flex;
     align-items: center;
@@ -658,6 +591,7 @@
 .claude-max .cm-mini[open] > summary::before { transform: rotate(90deg); }
 .claude-max .cm-mini > .cm-hint { padding-left: 1em; }
 
+/* 审: 连接卡里的编号步骤。 */
 .claude-max .cm-notes {
     margin: 0;
     padding-left: 1.2em;
@@ -669,6 +603,7 @@
 .claude-max .cm-notes li { white-space: pre-line; }
 .claude-max .cm-notes li + li { margin-top: 8px; }
 
+/* 审: 步骤里可复制的命令与下载块。 */
 /* a copyable command inside a step */
 .claude-max .cm-cmd { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
 .claude-max .cm-cmd code {
@@ -682,6 +617,7 @@
 
 /* ── 状态: quota rows, usage table ── */
 
+/* 审: 额度/统计容器；cm-loading 时变淡。 */
 .claude-max .cm-quota,
 .claude-max .cm-stats {
     display: flex;
@@ -693,8 +629,7 @@
 .claude-max .cm-quota.cm-loading,
 .claude-max .cm-stats.cm-loading { opacity: 0.5; }
 
-.claude-max .cm-quota { gap: 8px; }
-
+/* 审: 额度进度条与填充（warning/critical 变色）。 */
 .claude-max .cm-quota-bar {
     height: 6px;
     border-radius: 3px;
@@ -712,6 +647,7 @@
 .claude-max .cm-quota-fill.warning { background: var(--cm-warn); }
 .claude-max .cm-quota-fill.critical { background: var(--cm-bad); }
 
+/* 审: 单个额度窗口：标签 + 百分比 + 进度条。 */
 .claude-max .cm-qline {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -726,6 +662,7 @@
 .claude-max .cm-qline-pct { grid-area: pct; text-align: right; font-variant-numeric: tabular-nums; }
 .claude-max .cm-qline .cm-quota-bar { grid-area: bar; }
 
+/* 审: 用量表。 */
 .claude-max .cm-usage {
     width: 100%;
     border-collapse: collapse;
@@ -754,6 +691,7 @@
 
 /* ── 查看发给模型的内容（弹窗，不在 .claude-max 里） ── */
 
+/* 审: 「发送内容」弹窗（挂在 body 下，不在 .claude-max 里）。 */
 .cm-debug-view { text-align: left; }
 
 .cm-debug-view .cm-note-title { font-weight: 700; }
@@ -772,21 +710,15 @@
 .cm-debug-view .cm-details { margin: 6px 0; }
 .cm-debug-view .cm-hint { display: block; opacity: 0.7; }
 
-/* 日志 / 配置片段 */
-.claude-max pre.cm-log { max-height: 40vh; overflow: auto; white-space: pre-wrap; word-break: break-all; font-size: var(--cm-fs-caption); line-height: 1.4; padding: 6px; border-radius: 6px; background: var(--cm-soft); }
-
+/* 审: 生成进度（gen-progress.js 设置 data-gen）。 */
 /* 生成进度占用状态栏那一行：思考中 / 写作中 / 完成 */
 .claude-max .cm-bar[data-gen="thinking"] .cm-bar-model,
 .claude-max .cm-bar[data-gen="writing"] .cm-bar-model { color: var(--cm-accent); font-variant-numeric: tabular-nums; }
 .claude-max .cm-bar[data-gen="done"] .cm-bar-model { color: color-mix(in srgb, var(--cm-ok) 75%, var(--cm-text)); font-variant-numeric: tabular-nums; }
 
-/* 连接卡片里的折叠说明 */
-.claude-max .cm-card-fold { margin-top: 8px; }
-.claude-max .cm-card-fold .cm-fold-body { display: flex; flex-direction: column; gap: 6px; }
-
+/* 审: 分段按钮被禁用时的样子（dom.js segmented 会禁用）。 */
 .claude-max .cm-seg-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
-/* 状态 → 上一轮「花在」：一条按花费比例分段的细条 */
 /* ── 上一轮: one word for the cache, one line why, two bars. Three fixed hues that differ in lightness
    (read / write / output), not the theme accent, so a theme change never recolours them. ── */
 .claude-max {
@@ -795,6 +727,7 @@
     --cm-c-out: #6874DC;
     --cm-c-full: #D6574C;
 }
+/* 审: 上一轮卡片、分段条（meter）与图例；cm-seg-read/write/output 由 status.js 拼出类名使用。 */
 .claude-max .cm-cache {
     display: flex;
     flex-direction: column;
@@ -832,6 +765,7 @@
 .claude-max .cm-cache .cm-mini > summary { opacity: 0.65; }
 
 /* 额度：照现在的速度会不会在重置前用完；上一轮：上下文快满 */
+/* 审: 额度节奏提示与上下文占用的 warning/critical 颜色。 */
 .claude-max .cm-pace { font-size: var(--cm-fs-caption); margin-top: -4px; }
 .claude-max .cm-pace.warning, .claude-max .cm-ctx.warning { color: var(--cm-warn); }
 .claude-max .cm-pace.critical, .claude-max .cm-ctx.critical { color: var(--cm-bad); }

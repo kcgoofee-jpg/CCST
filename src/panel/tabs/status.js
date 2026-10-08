@@ -4,9 +4,7 @@
 // ──────────────────────────────────────────────
 
 import { store } from '../core/store.js';
-import { libs } from '../core/libs.js';
 import { normalizeEndpoint } from '../core/capabilities.js';
-import { shortModel } from '../core/connection.js';
 import { fetchProxy, proxyErrorText } from '../core/proxy.js';
 import { el, note, iconButton, group, collapsible, stateLine, button } from '../core/dom.js';
 import { notify } from '../core/notify.js';
@@ -14,6 +12,7 @@ import { refreshAll, refreshQuota, refreshStats } from '../core/live.js';
 import { getSettings } from '../core/settings.js';
 import { promptMutators } from '../core/inject.js';
 
+// 审: 代理自检结果 → 面板提醒文案（纯函数，测试直接调）；没了 SDK 过旧/地址不对/双份 CCST 都无人提醒。
 /** What /status's self-checks say needs telling (#30, #36). Pure: the status
  *  block from the store plus the endpoint the panel is set to. */
 export function statusAdvisories(status, endpoint) {
@@ -37,6 +36,7 @@ export function statusAdvisories(status, endpoint) {
     return out;
 }
 
+// 审: 最新回复里带了正文思考标签却没进推理框时，提示用户去填「推理→自动解析」。
 // Presets that make the model write its chain of thought INTO the reply
 // (<thinking>…</thinking>) leave the native reasoning box empty, and ST's
 // auto-parse only catches it when its prefix/suffix match those tags.
@@ -58,6 +58,7 @@ function checkInlineCot() {
     );
 }
 
+// 审: 把 statusAdvisories 的结果画进状态页顶部的提醒框。
 function renderAdvice(status) {
     const box = document.getElementById('claude_max_advice');
     if (!box) return;
@@ -66,6 +67,7 @@ function renderAdvice(status) {
     box.hidden = !lines.length;
 }
 
+// 审: 状态页自己的 store 订阅（额度、统计、更新时间、提醒）；boot.js 调用。
 export function init() {
     store.subscribe('quota', ({ quota }) => renderQuota(quota));
     store.subscribe('stats', ({ stats }) => renderStats(stats));
@@ -79,12 +81,14 @@ export function init() {
 }
 
 // ── Quota meter ──
+// 审: 额度第一次读到之前显示的占位行（建 DOM 与 idle 阶段共用）。
 /** What the quota shows until the first answer. */
 function idleQuotaLine() {
     // Asked for on opening (live.js refreshAll); the group's own refresh icon forces it.
     return stateLine('empty', '读取中…');
 }
 
+// 审: 额度窗口类型 → 中文名；类型来自代理 oauth.js，未知的原样显示。
 const WINDOW_LABELS = {
     five_hour: '5 小时',
     seven_day: '7 天',
@@ -94,6 +98,7 @@ const WINDOW_LABELS = {
     seven_day_oauth_apps: '7 天 · 外部',
 };
 
+// 审: 把额度重置时间格式化成「HH:MM 重置」或「月/日 HH:MM 重置」。
 function formatReset(ts) {
     if (!ts) return '';
     const d = new Date(ts);
@@ -102,6 +107,7 @@ function formatReset(ts) {
     return sameDay ? `${time} 重置` : `${d.getMonth() + 1}/${d.getDate()} ${time} 重置`;
 }
 
+// 审: 各窗口时长（毫秒），用量节奏要拿它算；没列出的类型按 7 天算。
 /** The 5h / 7d windows: label + reset time on the left, percent on the right, the bar under them. */
 const WINDOW_MS = { five_hour: 5 * 3600_000 };
 const SEVEN_DAYS = 7 * 24 * 3600_000;
@@ -112,6 +118,7 @@ const SEVEN_DAYS = 7 * 24 * 3600_000;
  * under 10% used or too early in the window (a projection that early is noise). claude-hud's usage pace, plus the early-window guard.
  * @returns {{ level: 'normal'|'warning'|'critical', endPct: number, runOutMs: number|null } | null}
  */
+// 审: 用量节奏：按已用比例线性外推到重置时刻，判断会不会提前用完（tests 引用，状态栏的 ▲ 也靠它）。
 export function usagePace(pct, resetsAt, windowMs, now = Date.now()) {
     if (pct == null || !resetsAt) return null;
     const left = resetsAt - now;
@@ -125,6 +132,7 @@ export function usagePace(pct, resetsAt, windowMs, now = Date.now()) {
     return { level: endPct > 100 ? 'critical' : endPct >= 90 ? 'warning' : 'normal', endPct, runOutMs };
 }
 
+// 审: 把毫秒格式化成「N 分钟/N 天/N 小时 M 分」，只给「照这速度…后用完」用。
 const fmtDur = (ms) => {
     const m = Math.max(1, Math.round(ms / 60000));
     if (m < 60) return `${m} 分钟`;
@@ -132,6 +140,7 @@ const fmtDur = (ms) => {
     return h >= 24 ? `${Math.round(h / 24)} 天` : `${h} 小时${m % 60 ? ` ${m % 60} 分` : ''}`;
 };
 
+// 审: 画额度区（加载中/出错/限流倒计时/各窗口进度条/超额用量）。
 function renderQuota(quota) {
     const box = document.getElementById('claude_max_quota');
     if (!box) return;
@@ -147,7 +156,7 @@ function renderQuota(quota) {
         return;
     }
     if (quota.phase === 'error') {
-        box.replaceChildren(stateLine('error', proxyErrorText('额度', quota.error), () => refreshQuota({ force: true })));
+        box.replaceChildren(stateLine('error', proxyErrorText(quota.error), () => refreshQuota({ force: true })));
         return;
     }
     if (quota.phase !== 'ok') return;
@@ -204,6 +213,7 @@ function renderQuota(quota) {
 
 // ── Usage stats ──
 
+// 审: 用量表与卡片共用的小格式化器：token 数、秒数、百分比、时间点。
 const fmtK = (n) => (n >= 10000 ? `${Math.round(n / 1000)}k` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n ?? 0));
 const fmtSec = (ms) => (ms == null ? '–' : ms >= 60000 ? `${Math.floor(ms / 60000)}分${Math.round((ms % 60000) / 1000)}秒` : `${(ms / 1000).toFixed(1)}秒`);
 const fmtPct = (x) => (x == null ? '–' : `${Math.round(x * 100)}%`);
@@ -215,6 +225,7 @@ const fmtWhen = (ts) => {
 
 /** Today and the last 7 days side by side (one column when they are the same). Units live in the row
  *  labels so no cell needs more than a number: it reads at 375px without wrapping. */
+// 审: 今天/7 天并排的用量表；两列相同时合并成一列。
 function usageTable(today, week) {
     const cols = today.requests === week.requests ? [['今天 · 7 天', today]] : [['今天', today], ['7 天', week]];
     const table = el('table', 'cm-usage');
@@ -242,6 +253,7 @@ function usageTable(today, week) {
 const QUOTA_LABELS = { output: '输出', write: '未命中', read: '命中' };
 
 /** The proxy's subscription-weighted parts (cache-diag.js quotaParts) as shares, biggest first; parts under 1% dropped. */
+// 审: 把订阅加权额度拆成份额，最大的在前、不足 1% 的丢掉（tests 引用）。
 export function quotaShares(quota) {
     if (!quota) return [];
     const total = Object.values(quota).reduce((n, v) => n + (v || 0), 0);
@@ -253,10 +265,12 @@ export function quotaShares(quota) {
 }
 
 // Models with a 1M context of their own (no [1m] suffix needed).
+// 审: 自带 1M 上下文的模型（名字里没有 [1m]），算上下文占用时按 1M 计。
 const NATIVE_1M = /sonnet-5[-.]5/i;
 
 /** How full the model's context window was: everything sent (input + cache read + write) against
  *  1M for a 1M-context model, else 200k. Colours at 70% / 85% (claude-hud's thresholds). */
+// 审: 上一轮上下文占用百分比与警戒级别（tests 引用）。
 export function contextUse(e) {
     const tokens = (e?.inputTokens ?? 0) + (e?.cacheReadTokens ?? 0) + (e?.cacheCreationTokens ?? 0);
     if (!tokens) return null;
@@ -266,6 +280,7 @@ export function contextUse(e) {
 }
 
 /** The last turn: one word for the cache, one line why, what was sent, what it cost; the rest in 详情. */
+// 审: 「上一轮」卡片：缓存状态一个词、原因一行、发出内容与额度去向、详情折叠。
 function lastTurnCard(data) {
     const c = data.lastCache;
     const last = data.lastRequest;
@@ -316,6 +331,7 @@ function lastTurnCard(data) {
 }
 
 /** The last turn's card and the 7-day table. */
+// 审: 画「上一轮」卡与用量表（加载/出错/空/正常，含后台请求行和最近一天内的失败）。
 function renderStats(stats) {
     const box = document.getElementById('claude_max_stats');
     if (!box) return;
@@ -328,7 +344,7 @@ function renderStats(stats) {
     }
     box.classList.remove('cm-loading');
     if (stats.phase === 'error') {
-        const msg = proxyErrorText('用量统计', stats.error);
+        const msg = proxyErrorText(stats.error);
         box.replaceChildren(stateLine('error', msg, refreshStats));
         lastBox?.replaceChildren(stateLine('error', msg, refreshStats));
         return;
@@ -365,6 +381,7 @@ function renderStats(stats) {
 }
 
 /** Tab 状态: last turn first, then the latest reply's problems, quota, usage, diagnostics. */
+// 审: 建状态页各分区的空壳（提醒、正文思考、上一轮、回复问题、额度、用量、反馈），之后由订阅填内容；shell.js 调用。
 export function buildStatusTab(pane) {
     // 代理自检结果（SDK 兼容性、逐轮还原、实际地址）；没有问题时不显示。
     const adviceBox = el('div', 'cm-stats');
@@ -422,9 +439,10 @@ export function buildStatusTab(pane) {
 // plus what only the browser knows: SillyTavern's version, the connection's prompt post-processing,
 // the preset, the extensions that can change the prompt. The raw data holds chat text.
 
+// 审: 诊断报告里「酒馆」那段（浏览器才知道的事实），逐项尽力而为、失败就跳过。
 /** SillyTavern-side facts for the report (each one best-effort). */
-export async function clientSection(ctx = SillyTavern.getContext()) {
-    const lines = ['## 酒馆这边'];
+async function clientSection(ctx = SillyTavern.getContext()) {
+    const lines = ['## 酒馆'];
     const safe = async (label, fn) => {
         try { const v = await fn(); if (v !== undefined && v !== null && v !== '') lines.push(`${label}：${v}`); } catch { /* skip */ }
     };
@@ -462,12 +480,20 @@ export async function clientSection(ctx = SillyTavern.getContext()) {
     return lines.join('\n');
 }
 
+// 审: 请求代理文本接口，非 2xx 抛错（导出日志用）。
 async function proxyText(path, direct) {
     const r = await fetchProxy(path, direct);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     return r;
 }
 
+// 审: 诊断包文件名 CCST诊断-YYYYMMDD-HHMM-v<版本>.txt（全年份、带版本、无空格）；版本取已连上的代理版本，没连上则用 'unknown'。
+function diagFileName(d, version) {
+    const p2 = (n) => String(n).padStart(2, '0');
+    return `CCST诊断-${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}-v${version || 'unknown'}.txt`;
+}
+
+// 审: 「反馈」分区：唯一的「导出日志」按钮（报告 + 原始数据一个文件）。
 function buildDiagGroup() {
     const g = group('反馈');
     // One file with everything: the readable report first, then the raw data (captured requests, last full
@@ -483,12 +509,12 @@ function buildDiagGroup() {
             const text = `# CCST 诊断报告 ${stamp.toLocaleString()}\n\n${await clientSection()}\n\n${report}\n\n## 原始数据\n\n${JSON.stringify({ ...full, report: undefined }, null, 1)}\n`;
             const a = el('a');
             a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
-            a.download = `ccst-诊断-${stamp.getMonth() + 1}${String(stamp.getDate()).padStart(2, '0')}-${String(stamp.getHours()).padStart(2, '0')}${String(stamp.getMinutes()).padStart(2, '0')}.txt`;
+            a.download = diagFileName(stamp, store.get().status?.version ?? store.get().status?.panelVersion);
             a.click();
             setTimeout(() => URL.revokeObjectURL(a.href), 10000);
             notify('ok', '已下载', '含聊天原文，别公开发', { ms: 10000 });
         } catch (err) {
-            notify('warn', '导出失败', proxyErrorText('日志', err) ?? String(err?.message ?? err));
+            notify('warn', '导出失败', proxyErrorText(err) ?? String(err?.message ?? err));
         } finally {
             save.disabled = false;
         }

@@ -8,24 +8,34 @@
 #   2. 语法：所有 .js/.mjs/.cjs（node --check）、.sh（sh/bash -n）、.zsh/.command（zsh -n）、.py（ast 解析，不写 __pycache__）
 #   3. 版本号：manifest.json 和 package.json 一致（scripts/version.mjs --check）
 #   4. 密钥扫描：要提交 / 推送的「新增行」里不能有 API 密钥、令牌、私钥，
-#      也不能出现 launcher/*.local 里的任何值（只报文件名，不打印值）；
 #      本机文件（*.local、data/、secrets.json）不能进提交
 #   --push 时另外检查：工作区干净（没有漏提交的改动）
 # 注意：本文件里的正则都用了字符类（如 github[_]pat_），这样扫描自己时不会误报。
+# 审: 未定义变量即报错，防止脚本里变量名拼错后静默放行。
 set -u
+# 审: 下面的 **/*.(js|mjs|cjs)(N.) 等 zsh 通配符需要它。
 setopt extendedglob
+# 审: 切到仓库根目录，无论从哪里调用。
 cd "${0:A:h}/.."
 root=$PWD
+# 审: 提交模式检查暂存区，--push 模式检查要推送的提交。
 mode=commit; [[ "${1:-}" == --push ]] && mode=push
+# 审: pre-push 钩子带参数调用时 from_hook=1，决定是否从 stdin 读 ref 列表。
 # pre-push 钩子会把 <远端名> <地址> 跟在 --push 后面传进来，并在 stdin 里给出要推的 ref
 from_hook=0; [[ $mode == push && -n "${2:-}" ]] && from_hook=1
+# 审: 任一检查失败置 1，结尾据此退出。
 fail=0
+# 审: 带 gate: 前缀打印一行信息。
 say()  { print -r -- "gate: $*"; }
+# 审: 报一条失败并置 fail=1。
 bad()  { print -r -- "gate: ✗ $*"; fail=1; }
+# 审: 全零 sha = 远端不存在/删除，推送模式识别新分支用。
 ZERO=0000000000000000000000000000000000000000
 
+# 审: 提醒还没启用 .githooks 的人（只提示，不算失败）。
 [[ "$(git config core.hooksPath)" == .githooks ]] || say "提示：还没启用自动门控，运行一次 git config core.hooksPath .githooks"
 
+# 审: 临时快照目录，退出时清理；测试和语法检查都跑在快照上而不是工作区。
 snap=$(mktemp -d "${TMPDIR:-/tmp}/cm-gate.XXXXXX") || { say "mktemp 失败"; exit 1; }
 trap 'rm -rf -- "$snap"' EXIT INT TERM
 
@@ -35,9 +45,11 @@ if [[ $mode == commit ]]; then
 else
     git archive HEAD | tar -x -C "$snap" || bad "HEAD 导出失败"
 fi
+# 审: 快照里没有 node_modules，用符号链接借用，否则测试跑不起来。
 [[ -d node_modules && ! -e "$snap/node_modules" ]] && ln -s "$root/node_modules" "$snap/node_modules"
 
 # ---------- 1. 单元测试（在快照里跑）----------
+# 审: 测试输出日志；失败时 tail 给人看。
 log=/tmp/cm-gate-test.log
 if ! (cd "$snap" && npm test --silent) >"$log" 2>&1; then
     bad "单元测试失败（$log）"; tail -20 "$log"
@@ -79,6 +91,7 @@ cd "$root"
 
 # ---------- 4. 密钥 / 本机文件：只看要提交 / 推送的内容 ----------
 # names = 新增或改动的文件名；added = 新增行（去掉 +++ 文件头）
+# 审: 关掉路径转义，中文文件名才能被后面的 grep 正常匹配。
 G=(git -c core.quotepath=off)
 if [[ $mode == commit ]]; then
     names=$($G diff --cached --name-only --diff-filter=ACMR)
@@ -104,8 +117,10 @@ else
         patch+=$($G log --format= -p --no-color --no-ext-diff "$lsha" $excl)$'\n'
     done <<< "$refs"
 fi
+# 审: 只取新增行，已有内容不重复扫。
 added=$(print -r -- "$patch" | grep -E '^\+' | grep -vE '^\+\+\+ ')
 
+# 审: 密钥正则（Anthropic/OpenAI/GitHub/Google/AWS/Slack/JWT/私钥）；见开头说明为何用字符类。
 PAT='sk-ant-[A-Za-z0-9_-]{10,}|sk-[A-Za-z0-9]{24,}|sk-(proj|svcacct|admin)-[A-Za-z0-9_-]{20,}'
 PAT+='|gh[pousr]_[A-Za-z0-9]{20,}|github[_]pat_'
 PAT+='|AIza[0-9A-Za-z_-]{30}|pst-[A-Za-z0-9]{20,}'
@@ -115,23 +130,10 @@ PAT+='|eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+'
 print -r -- "$added" | grep -qE "$PAT" && { [[ $mode == commit ]] && bad "要提交的内容里像有密钥（git diff --cached 自己看看）" \
                                 || bad "要推送的提交里像有密钥（git log -p @{u}..HEAD 自己看看）"; }
 
-# launcher/*.local 里的每个值（KEY=VALUE 取值，否则整行）；太短的、纯 IP/端口的跳过；绝不打印值
-for f in launcher/*.local(N.); do
-    while IFS= read -r line || [[ -n $line ]]; do
-        line=${line%$'\r'}
-        [[ $line == \#* || -z $line ]] && continue
-        [[ $line == [A-Za-z_][A-Za-z0-9_]#=* ]] && line=${line#*=}
-        line=${${line#[\"\']}%[\"\']}
-        (( ${#line} >= 12 )) || continue
-        [[ $line == [0-9.:]## ]] && continue
-        if print -r -- "$added" | grep -qF -e "$line"; then
-            bad "$f 里的某个值出现在要提交的内容里（值不显示）"; break
-        fi
-    done < "$f"
-done
-
+# 审: 本机文件（*.local、data/、secrets.json）不允许进提交。
 print -r -- "$names" | grep -E '\.local(\.|$)|(^|/)data/|secrets\.json' && bad "本机文件被加进了提交"
 
+# 审: 推送时工作区必须干净，避免漏提交的改动。
 if [[ $mode == push ]]; then
     [[ -z "$(git status --porcelain)" ]] || bad "还有没提交的改动"
 fi

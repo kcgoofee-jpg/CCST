@@ -13,15 +13,20 @@ import { mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+// 审: 动态导入 SDK，缺依赖时在这里才报错。
 const { query } = await import('@anthropic-ai/claude-agent-sdk');
+// 审: 探测用的临时工作目录，不碰用户项目。
 const cwd = join(tmpdir(), 'claude-max-rp');
 mkdirSync(cwd, { recursive: true });
+// 审: 会话记录里出现过的条目/附件类型，用来找 prompt_snapshot。
 const seen = [];
 const sessionId = randomUUID();
+// 审: 内存里的假会话存储，只记类型不写文件。
 const store = {
     load: async () => null,
     append: async (_k, entries) => { for (const e of entries) seen.push(e?.attachment?.type ?? e?.type); },
 };
+// 审: 子进程环境：去掉外层 Claude Code 会话变量，并关掉非必要流量。
 const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(CLAUDE_CODE_SESSION|CLAUDE_CODE_ENTRYPOINT|CLAUDECODE)/.test(k)));
 Object.assign(env, { CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1', CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1', ENABLE_CLAUDEAI_MCP_SERVERS: 'false' });
 try {
@@ -31,6 +36,7 @@ try {
     console.error(`请求失败：${err?.message ?? err}（没登录或额度用完时测不了）`);
     process.exit(1);
 }
+// 审: 等会话记录异步写完再判断。
 await new Promise((r) => setTimeout(r, 1500));
 if (seen.includes('prompt_snapshot')) {
     console.log('✅ 这个账号已开启「记录系统提示词」。CCST 5.2.1 及更早版本会受影响（缓存 0%、沿用旧预设），请更新到 5.2.2 以上。');

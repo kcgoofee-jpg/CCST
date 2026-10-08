@@ -28,10 +28,11 @@
 //     the CLI from injecting the cwd project's auto-memory index into the
 //     context (verified with a probe prompt); this does.
 
+// 审: 要从子进程环境里清掉的变量清单（API key / 云厂商开关 / 改地址的变量），防止悄悄把计费从订阅切走；只在本文件用。
 // Every env var that could send the CLI somewhere else or bill something
 // other than the subscription. API-key users use SillyTavern's own Claude
 // source; the proxy only runs on the subscription.
-export const SCRUB_KEYS = [
+const SCRUB_KEYS = [
     'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL', 'ANTHROPIC_MODEL',
     'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CODE_USE_FOUNDRY', 'CLAUDE_CODE_USE_GATEWAY',
     'CLAUDE_CODE_USE_MANTLE', 'CLAUDE_CODE_USE_ANTHROPIC_AWS', 'CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD',
@@ -39,6 +40,7 @@ export const SCRUB_KEYS = [
     'CLAUDE_CODE_SKIP_BEDROCK_AUTH', 'CLAUDE_CODE_SKIP_VERTEX_AUTH', 'ANTHROPIC_CUSTOM_HEADERS',
 ];
 
+// 审: 组装 CLI 子进程的环境（清洗 + 模型版本钉 + 输出上限 + 缓存 TTL + 关闭隔离外的流量），聊天每次尝试 / oauth 刷新都用。
 /**
  * @param {object} args
  * @param {Record<string,string>} args.envPins ANTHROPIC_DEFAULT_* pins from parseModelRequest
@@ -51,6 +53,7 @@ export function buildSubprocessEnv({ envPins, maxTokens, cacheTtl = '1h' }) {
     // The proxy's own settings (file paths, switches, …) are none of
     // the CLI's business — it reads only ANTHROPIC_* / CLAUDE_CODE_* / CLAUDE_CONFIG_DIR.
     for (const key of Object.keys(env)) if (key.startsWith('CLAUDE_SUBSCRIPTION_')) delete env[key];
+    // 审: 开发用：把 CLI 指到本地抓包（scripts/wire-diagnosis.mjs 和 wire-tap.js 在用）；聊天里诊断抓包开启时会再覆盖它。
     // Dev only: route the CLI through a local request tap (scripts/api_tap) to see what it really sends.
     if (process.env.CLAUDE_SUBSCRIPTION_DEV_BASE_URL) env.ANTHROPIC_BASE_URL = process.env.CLAUDE_SUBSCRIPTION_DEV_BASE_URL;
 
@@ -58,6 +61,7 @@ export function buildSubprocessEnv({ envPins, maxTokens, cacheTtl = '1h' }) {
     // the request's meaning; a stale shell pin must not redirect it).
     Object.assign(env, envPins);
 
+    // 审: 下面三个开关见文件头注释：不让 claude.ai 连接器进上下文、不给每条消息生成标题、不注入自动记忆。
     env.ENABLE_CLAUDEAI_MCP_SERVERS = 'false';
     env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = '1';
     env.CLAUDE_CODE_DISABLE_AUTO_MEMORY = '1';
@@ -68,10 +72,12 @@ export function buildSubprocessEnv({ envPins, maxTokens, cacheTtl = '1h' }) {
     // unclosed HTML card swallowing the rest) and the reply silently comes
     // from a different model. Stop at the refusal instead; the proxy reports
     // it. CLAUDE_SUBSCRIPTION_REFUSAL_FALLBACK=on restores the CLI default.
+    // 审: 默认关掉 CLI 的拒答自动换模型（流式回复没法撤回，会拼成一条）；CLAUDE_SUBSCRIPTION_REFUSAL_FALLBACK=on 才恢复，文档和测试都有。
     if (!/^(1|true|on|yes)$/i.test(process.env.CLAUDE_SUBSCRIPTION_REFUSAL_FALLBACK ?? '')) {
         env.CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK = '1';
     }
 
+    // 审: 请求带了最大回复长度就传给 CLI，否则清掉继承来的值（见分支内注释）。
     if (maxTokens) {
         env.CLAUDE_CODE_MAX_OUTPUT_TOKENS = String(maxTokens);
     } else {
@@ -87,6 +93,7 @@ export function buildSubprocessEnv({ envPins, maxTokens, cacheTtl = '1h' }) {
     // reading it outlasts that, so every new turn would re-write everything while a quick
     // reroll still hits. The env var outranks that default; an explicit value still wins.
     // The panel can pick 5 minutes (cheaper writes for fast back-and-forth).
+    // 审: 提示缓存 TTL（面板可选 5 分钟 / 1 小时）；用户自己设的环境变量优先。
     env.CLAUDE_CODE_PROMPT_CACHE_TTL ??= cacheTtl;
 
     return env;

@@ -18,6 +18,7 @@ import { isReplyEvent, recovery } from '../core/replies.js';
 // the app died before saving it (the chat ends with the player's message).
 // A reply the player stopped, edited or deleted is final: never touched.
 
+// 审: 回复槽位：聊天键+楼层+swipe+上一条玩家消息的哈希，不含明文；代理按它保管完整回复。
 /** Slot of the reply at chat[floor] (swipe `swipeId`): chat, floor, swipe, the player's message before it. */
 function slotFor(ctx, floor, swipeId = 0) {
     const chat = ctx.chat ?? [];
@@ -28,6 +29,7 @@ function slotFor(ctx, floor, swipeId = 0) {
     return null;
 }
 
+// 审: 请求发出时调用（inject.js）：算出本次回复的槽位并登记在途回复；quiet/impersonate/continue 不保管。
 /** Called as a chat request goes out (core/inject.js): the slot the reply will be kept under, or null. */
 export function openSlot(data) {
     // A swipe rewrites the last floor under a new swipe id; everything else writes a new floor.
@@ -44,31 +46,37 @@ export function openSlot(data) {
     return slot;
 }
 
+// 审: 当前在途的聊天回复（槽位、楼层、是否已标记待定/已停止/已完成）。
 // The chat reply in flight (set when its request goes out).
 let inflight = null; // { slot, chatId, floor, marked, stopped, done }
 
+// 审: 该槽位是否被玩家定稿（停止/编辑/删除后）——定稿的回复永不补回。
 // Final slots live in the chat's metadata (saved with the chat).
 function isFinal(ctx, slot) {
     return (ctx.chatMetadata?.cm_final_slots ?? []).includes(slot);
 }
-function markFinal(slot, save = true) {
+// 审: 把槽位记为定稿，存在聊天元数据里，最多留 30 个。
+function markFinal(slot) {
     const ctx = SillyTavern.getContext();
     if (!slot || !ctx.chatMetadata) return;
     const list = (ctx.chatMetadata.cm_final_slots ?? []).filter((s) => s !== slot);
     list.push(slot);
     ctx.chatMetadata.cm_final_slots = list.slice(-30);
-    if (save) ctx.saveMetadataDebounced?.();
+    ctx.saveMetadataDebounced?.();
 }
+// 审: 新请求用同一槽位（重新生成）时取消定稿标记。
 function unmarkFinal(slot) {
     const meta = SillyTavern.getContext().chatMetadata;
     if (meta?.cm_final_slots?.includes(slot)) meta.cm_final_slots = meta.cm_final_slots.filter((s) => s !== slot);
 }
+// 审: 去掉楼层上的「待定」标记（回复已完整）。
 function clearPending(m) {
     if (m?.extra) delete m.extra.cm_pending;
     const info = Array.isArray(m?.swipe_info) ? m.swipe_info[m.swipe_id] : null;
     if (info?.extra) delete info.extra.cm_pending;
 }
 
+// 审: 第一个流式 token 到达、占位楼层出现时，给它打「待定」标记；流断了标记留着以便之后补回。
 // First streamed token: the placeholder floor exists — mark it pending.
 export function markPendingFloor() {
     if (!inflight || inflight.marked || inflight.done) return;
@@ -79,6 +87,7 @@ export function markPendingFloor() {
     inflight.marked = true;
 }
 
+// 审: 收到回复：流没断就清待定标记，断了保留标记；并标记在途回复已完成。
 // The reply arrived: it is complete unless the stream broke (then the
 // mark stays so the kept reply can fill it in later).
 export function onReplyReceived(id, type) {
@@ -89,6 +98,7 @@ export function onReplyReceived(id, type) {
     inflight.done = true;
 }
 
+// 审: 用户按了停止：该楼层定稿，并让代理取消并丢弃这条回复。
 // Stop pressed: the proxy aborts that reply and forgets it; the floor is final.
 export function onGenerationStopped() {
     if (!inflight || inflight.done || inflight.stopped) return;
@@ -97,6 +107,7 @@ export function onGenerationStopped() {
     fetchProxy(`/reply/${inflight.slot}/cancel`, `/v1/replies/${inflight.slot}/cancel`, { method: 'POST' }).catch(() => { /* proxy gone: nothing to cancel */ });
 }
 
+// 审: 玩家编辑了回复：视为定稿，不再补回。
 // The player edited a reply (trimmed it, rewrote it): final.
 export function onMessageEdited(id) {
     const ctx = SillyTavern.getContext();
@@ -106,6 +117,7 @@ export function onMessageEdited(id) {
     markFinal(slotFor(ctx, Number(id), m.swipe_id ?? 0));
 }
 
+// 审: 玩家删了回复、最后一条是自己的消息：视为定稿，别把它找回来。
 // The player deleted the reply and left their own message last: don't bring it back.
 export function onMessageDeleted() {
     const ctx = SillyTavern.getContext();
@@ -113,12 +125,14 @@ export function onMessageDeleted() {
     if (chat.at(-1)?.is_user) markFinal(slotFor(ctx, chat.length, 0));
 }
 
+// 审: GENERATION_ENDED 一秒后视为回复完成（MESSAGE_RECEIVED 没触发时的兜底）。
 /** GENERATION_ENDED: the reply is complete a second later, whether or not MESSAGE_RECEIVED said so. */
 export function onGenerationEnded() {
     const f = inflight;
     setTimeout(() => { if (f) f.done = true; }, 1000);
 }
 
+// 审: 补回回复后向其他扩展（MVU、酒馆助手等）按酒馆自己的顺序发事件；recovery 标志让我们自己的监听跳过。
 /** Tell other extensions (MVU, 酒馆助手…) about a recovered reply the way ST does after a reply; our own listeners skip it. */
 async function emitRecovered(id, render) {
     const { eventSource: es, eventTypes: et } = SillyTavern.getContext();
@@ -132,7 +146,9 @@ async function emitRecovered(id, render) {
     }
 }
 
+// 审: 补回流程的互斥锁。
 let recovering = false;
+// 审: 切回前台/切聊天/代理恢复时调用：若楼层空、「...」或带待定标记（流断了），或应用在保存前挂了（最后是玩家消息），就从代理取回完整回复补上。
 export async function recoverKeptReply() {
     if (recovering || generating() || !connectionInfo().connected) return;
     const ctx = SillyTavern.getContext();
@@ -141,6 +157,7 @@ export async function recoverKeptReply() {
     const last = chat[len - 1];
     if (!last || last.is_system) return;
     if (ctx.streamingProcessor && !ctx.streamingProcessor.isFinished) return; // still being written
+    // 审: 应用在存盘前死掉时最后一条是玩家消息，此时新增楼层（群聊不做，因为不知道哪个角色说的）。
     // The app died before ST saved the reply's floor: append it (not in group chats: which member spoke is unknown).
     const append = !!last.is_user;
     if (append ? !!ctx.groupId : len < 2) return;

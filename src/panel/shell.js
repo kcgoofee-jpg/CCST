@@ -26,6 +26,7 @@ import { chooseConnectModel, ensureProfile, profileNotice, connectAdvice, descri
 
 // ── One-click connect (same selector path as ST's /api-url command) ──
 
+// 审: 「连到 CCST？」确认框里的「现在：…」；没了用户看不到自己会被换掉什么连接。
 /** What ST is connected to right now, in words (for the confirm dialog). */
 function currentConnectionText() {
     const src = $('#chat_completion_source').val();
@@ -36,6 +37,7 @@ function currentConnectionText() {
     return describeCurrentConnection({ profile, source: src, url, model });
 }
 
+// 审: 酒馆在用别的连接时它叫什么（配置名，或已连上的接口名），连接卡片据此提示「现在用的是…」。
 /** The connection SillyTavern is on when it is not CCST, as the user named it: the profile name, else
  *  the source and model; '' when nothing is set up yet (a fresh SillyTavern). */
 function otherConnectionName() {
@@ -48,6 +50,7 @@ function otherConnectionName() {
     return src ? sourceLabel(src) : '';
 }
 
+// 审: 一键连接的核心：把酒馆当前连接字段改成指向本代理；connect 与 connectProfile 重试都用它。
 /** Point SillyTavern's live connection fields at the proxy. */
 function applyConnection(settings) {
     $('#main_api').val('openai').trigger('change');
@@ -66,12 +69,14 @@ function applyConnection(settings) {
     $('#api_button_openai').trigger('click');
 }
 
+// 审: 等酒馆异步重连稳定的延时 helper（仅 connectProfile 用）。
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // One-click connect rewrites SillyTavern's LIVE connection fields (source, URL, post-processing),
 // keeps a Claude model ST already has (else Opus 4.6), then saves that as the connection profile 「CCST」 (created, or
 // updated when it exists). Other profiles are never edited, but the live connection is replaced — so
 // it always asks first unless ST already points at this proxy.
+// 审: 一键连接入口（引导卡、连接卡、设置页「重新连接」都调它）：确认 → 改字段 → 存「CCST」配置。
 export async function connect(settings) {
     try {
         // Taken before anything is rewritten: a Claude model ST already has is kept.
@@ -100,6 +105,7 @@ export async function connect(settings) {
     }
 }
 
+// 审: 读当前预设数据，供预设提示用；读不到返回 null，不让连接流程因它失败。
 /** The selected chat-completion preset's data, or null when it cannot be read. */
 function activePreset(ctx) {
     try {
@@ -108,14 +114,17 @@ function activePreset(ctx) {
     } catch { return null; }
 }
 
+// 审: 连接后提示「预设带正则脚本」的文案来源，包一层可选链避免 libs 没加载时报错。
 /** 「预设带正则脚本…」 when the selected preset's data carries enabled regex scripts; '' when unknown. */
 function presetRegexNote(ctx) {
     return libs.presetReco?.presetRegexNote?.(activePreset(ctx)) ?? '';
 }
 
+// 审: 同一个预设的连接提示只说一次，没了重复点连接会重复弹。
 // 同一个预设的提示只说一次（重新连接、再点一键连接时不要又弹一遍）
 const advised = new Set();
 
+// 审: 连接后选模型并存/更新「CCST」配置，再给预设建议；失败只提示不影响已能聊天。
 /** After connecting: Opus 4.6, then the 「CCST」 profile (slash commands of ST's connection manager). */
 async function connectProfile(settings, keepModel = '') {
     try {
@@ -153,14 +162,17 @@ async function connectProfile(settings, keepModel = '') {
     }
 }
 
+// 审: 抽屉标题和状态栏的小圆点同步颜色（页面上有两个 .cm-dot）。
 function setDot(state) {
     for (const dot of document.querySelectorAll('.cm-dot')) {
         dot.dataset.state = state;
     }
 }
 
+// 审: 凭证来源的中文名，设置页「连接」那行用（tabs/settings.js 引用，不能去 export）。
 export const SOURCE_LABELS = { keychain: '钥匙串', file: '登录文件', env: '环境变量' };
 
+// 审: 折叠抽屉头与状态栏的一行摘要；事件、store 订阅、renderConnect 都调（events.js 引用，不能去 export）。
 /** The header summary of the collapsed drawer and the status bar say the same thing:
  *  dot · model · where/billing · 5h quota. Clicking the bar opens 状态. */
 export function renderGlance() {
@@ -208,22 +220,26 @@ export function renderGlance() {
 // card is all the panel shows (the tabs stay reachable, dimmed); afterwards it only appears for a
 // problem (proxy down, not logged in, wrong password) and is gone when everything is fine.
 
-const STEPS = {
-    // The proxy is the plugin in this SillyTavern, or the standalone one on a computer: one command either way.
-    login: (host) => { const h = loginHelp({ host }); return [{ text: h.where, cmd: h.cmd }]; },
-};
+// 审: 「还没登录」卡片的步骤（一条登录命令）；代理装成插件或独立版都是同一条命令。
+function loginSteps(host) {
+    const h = loginHelp({ host });
+    return [{ text: h.where, cmd: h.cmd }];
+}
 
+// 审: 判断面板跑在哪（Tauri/手机或远程/桌面浏览器），决定给哪套安装/启动文案；guide.js 共用（原先两处各抄一份）。
 /** Where this panel runs, from facts only: TauriTavern, a touch device / a page opened from beyond the home network, or a desktop browser. */
-function hostNow() {
+export function hostNow() {
     const remote = libs.hostCheck?.isLocalHost ? !libs.hostCheck.isLocalHost(location.hostname) : false;
     return hostKind({ tauri: IS_TAURI, elsewhere: COARSE || remote });
 }
 
+// 审: 以下四个是连接卡的渲染状态（步骤展开、所属情形、上次是否首次设置、成功卡截止时间），没了卡片会闪或不会自动收起。
 let stepsOpen = false;   // the steps under the card's button
 let stepsFor = '';       // which situation they belong to (a new situation closes them)
 let prevSetup = false;   // was the panel in the first-run state at the last render
 let flashUntil = 0;      // the success card shows until then
 
+// 审: 代理与面板版本不一致时的卡片描述。
 /** 版本不一致：情况 → 影响 → 编号步骤（内容见 connect-help.js 的 mismatchHelp）。 */
 function mismatchCard(base, status) {
     const help = mismatchHelp({ side: status.mismatchSide, proxyVersion: status.version, panelVersion: status.panelVersion, runtime: status.runtime, tauri: IS_TAURI, host: hostNow() });
@@ -231,6 +247,7 @@ function mismatchCard(base, status) {
         sub: help.sub, steps: help.steps, showSteps: true, downloads: help.downloads, hint: help.hint };
 }
 
+// 审: 有新版本时的下载卡片描述，null 表示不显示。
 /** 有新版本：一键安装那张下载卡片，加「这一版不再提醒」。只对装成酒馆插件的代理（一键安装更新的就是它）。 */
 function updateCard(base, status) {
     const latest = store.get().latestVersion;
@@ -242,10 +259,11 @@ function updateCard(base, status) {
         action: { label: '不再提醒', run: () => { getSettings().skipVersion = latest; saveSettingsDebounced(); renderConnect(); } } };
 }
 
+// 审: 把 store 里的代理状态翻译成连接卡该显示什么（纯数据），renderConnect 只管画。
 /** What the card should say right now: null = no card. */
 function describeCard() {
     const { connected, model } = connectionInfo();
-    const { proxyState, status } = store.get();
+    const { status } = store.get();
     const setup = !connected;
     const base = { setup };
     const phase = status.phase;
@@ -263,7 +281,7 @@ function describeCard() {
     }
     if (status.phase === 'nologin') {
         return { ...base, tone: 'warn', dot: 'warning', key: 'login', title: '还没登录',
-            sub: '登录一次，就用你的订阅', steps: STEPS.login(hostNow()),
+            sub: '登录一次，就用你的订阅', steps: loginSteps(hostNow()),
             action: { label: '怎么登录', again: '登好了', run: refreshAll } };
     }
     if (status.phase === 'pending' || status.phase === 'idle') {
@@ -294,6 +312,7 @@ function describeCard() {
     return null;
 }
 
+// 审: 画连接卡、定整个面板的阶段（首次设置/就绪）、状态栏显隐、云端提示；store 订阅与事件都调它。
 /** Draw the connect card and the stage of the whole panel from the store + SillyTavern's settings. */
 export function renderConnect() {
     const card = document.getElementById('claude_max_status_block');
@@ -340,7 +359,6 @@ export function renderConnect() {
         if (view.action) {
             const label = stepsOpen && view.action.again ? view.action.again : view.action.label;
             btn.replaceChildren(...(view.action.icon ? [el('i', `fa-solid ${view.action.icon}`), document.createTextNode(` ${label}`)] : [document.createTextNode(label)]));
-            btn.classList.toggle('cm-primary', true);
             btn.onclick = () => {
                 if (view.steps && view.action.again && !stepsOpen) { stepsOpen = true; renderConnect(); return; }
                 view.action.run();
@@ -360,6 +378,7 @@ export function renderConnect() {
     renderGlance();
 }
 
+// 审: 构建状态栏 + 引导卡 + 连接卡 + 云端提示的 DOM 骨架；内容由 renderConnect/renderGlance 按 id 填。
 /** Status bar + the connect card. Everything fine: just the bar. */
 function buildStatusBar(showTab) {
     const block = el('div', 'cm-status-block');
@@ -407,19 +426,24 @@ function buildStatusBar(showTab) {
     return block;
 }
 
+// 审: 记住上次所选 tab 的 localStorage 键（每台设备各自记）。
 const TAB_STORE = 'ccst.panelTab';
 
+// 审: 读上次选的 tab，旧版本的键经 resolveTab 迁移。
 /** The tab last picked on this device (localStorage: a phone and the Mac needn't agree). Old keys are migrated (core/tabs.js). */
-export function savedTab() {
+function savedTab() {
     let key = null;
     try { key = localStorage.getItem(TAB_STORE); } catch { /* storage blocked */ }
     return resolveTab(key);
 }
 
+// 审: showTab 的真身在抽屉建好后才赋值，之前调用是空操作。
 let showTabFn = () => {};
+// 审: 切换 tab 的统一入口（状态栏点击、tab 按钮都走它）。
 /** Select a tab (the picker built with the drawer; a no-op until it exists). */
-export const showTab = (...args) => showTabFn(...args);
+const showTab = (...args) => showTabFn(...args);
 
+// 审: 在酒馆扩展设置里建出整个面板（抽屉 + 状态栏 + tab）；boot.js 与 rebuildPanel 调用。
 /** Build the panel into ST's extension settings; false when that container isn't there yet. */
 export function addExtensionSettings(settings) {
     const container = document.getElementById('extensions_settings');
@@ -485,6 +509,7 @@ export function addExtensionSettings(settings) {
     return true;
 }
 
+// 审: 预设推荐应用后整体重建面板（features/presets.js 调用），保持原位置与展开状态。
 export function rebuildPanel() {
     const old = document.querySelector('.inline-drawer.claude-max');
     const wasOpen = old?.querySelector('.inline-drawer-content')?.offsetParent != null;
@@ -500,14 +525,10 @@ export function rebuildPanel() {
     refreshStatus();
 }
 
-/** Draw the proxy status: the connect card follows the store's `status` (see describeCard). */
-export function renderStatus() {
-    renderConnect();
-}
-
+// 审: 把 shell 自己的绘制挂到 store（只调一次，boot.js 调用）；没了面板不会随状态刷新。
 /** Subscribe the shell's own drawing to the store (once; the drawing looks its DOM up by id, so a rebuilt panel needs nothing). */
 export function initShell() {
-    store.subscribe('status', () => renderStatus());
+    store.subscribe('status', () => renderConnect());
     store.subscribe(['glance', 'gen'], () => renderGlance());
     // A full refresh: re-read what SillyTavern is connected to (the connect note; the tabs' own pulse
     // listeners draw the cache card, lore box, check-up and card check).

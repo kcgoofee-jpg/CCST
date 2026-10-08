@@ -5,11 +5,13 @@
 // through window.__TAURI__. Browser: a plain window.open / navigator.clipboard.
 // ──────────────────────────────────────────────
 
+// 审: 取 TauriTavern 暴露的 invoke，没有返回 null；TauriTavern 的网页视图不会自己打开链接/复制。
 const tauriInvoke = (win = globalThis.window) => {
     const fn = win?.__TAURI__?.core?.invoke;
     return typeof fn === 'function' ? fn : null;
 };
 
+// 审: 在系统浏览器打开链接（Tauri 走 opener 插件，浏览器走 window.open）；help-items 的链接按钮用。
 /** Open `url` in the system browser. Resolves true when something was asked to open it. */
 export async function openExternal(url, win = globalThis.window) {
     const invoke = tauriInvoke(win);
@@ -19,11 +21,13 @@ export async function openExternal(url, win = globalThis.window) {
     try { win.open(url, '_blank', 'noopener,noreferrer'); return true; } catch { return false; }
 }
 
+// 审: 给可能永远不返回的剪贴板 Promise 加超时（WKWebView 里 navigator.clipboard 会挂住）。
 const withTimeout = (promise, ms) => new Promise((resolve, reject) => {
     const t = setTimeout(() => reject(new Error('timeout')), ms);
     Promise.resolve(promise).then((v) => { clearTimeout(t); resolve(v); }, (e) => { clearTimeout(t); reject(e); });
 });
 
+// 审: 最后的复制退路：隐藏 textarea + execCommand，不需要权限和安全上下文。
 /** The classic fallback: a hidden textarea + execCommand('copy'). Needs no permission and no secure context. */
 function execCopy(text, win) {
     const doc = win?.document;
@@ -41,6 +45,7 @@ function execCopy(text, win) {
     } catch { return false; } finally { ta.remove(); }
 }
 
+// 审: 复制文本，依次试 Tauri 剪贴板插件 → navigator.clipboard（带超时）→ execCommand；成功返回 true。
 /**
  * Copy text; true on success. Order: TauriTavern's own clipboard plugin (what its copy buttons use; the web
  * clipboard can hang forever in its WKWebView), then navigator.clipboard (with a timeout: it may never settle),

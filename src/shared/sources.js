@@ -3,6 +3,7 @@
 // models always think. Pure functions; shared by the panel and the tests.
 // ──────────────────────────────────────────────
 
+// 审: 判断模型是否「永远在思考」（关思考无效）；面板用来禁用该选项，镜像代理 models.js 的 adaptiveOnly。
 /**
  * Models that always think (the 「不思考」 choice does nothing on them): Fable / Mythos, Opus 5.5 and newer,
  * Sonnet 5.5 and newer. Opus 4.7 / 4.8 / 5 accept thinking off (measured live). Mirrors the proxy catalog (src/proxy/core/models.js adaptiveOnly). False for non-Claude ids.
@@ -16,6 +17,7 @@ export function isAdaptiveOnly(id) {
         || /^claude-sonnet-(?:5-(?:[5-9]|\d{2,})|[6-9]|\d{2,})(?:-|$)/.test(c);
 }
 
+// 审: 把各来源的写法归一成 Anthropic 官方 id（claude-opus-4-6 这种）；面板连接/模型判断多处用。
 /**
  * The Anthropic API id behind any source's name: anthropic/claude-opus-4.6:thinking → claude-opus-4-6.
  * Drops vendor prefixes, [1m], :variants, -thinking, dates and -latest. Null when not a Claude id.

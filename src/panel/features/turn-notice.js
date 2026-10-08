@@ -9,10 +9,12 @@ import { F } from '../core/registry.js';
 import { libs } from '../core/libs.js';
 import { chatKeyOf } from '../core/chat-key.js';
 
+// 审: 已提示过的最近一次请求时间，保证每个请求只提示一次。
 // After a reply: tell the user when the proxy served something other
 // than what was asked for (base model instead of 1M, a reply cut off by a
 // safety stop, or redone by another model). Once per request.
 let lastNoticeAt = 0;
+// 审: 一轮回复后读代理对本聊天上一次请求的记录：补完成行的缓存/用时，并告知换了模型、被拦、写满、没用上 1M、重写缓存等。
 export async function noticeLastTurn() {
     try {
         // This chat's own reply only: never a background call, never another chat.
